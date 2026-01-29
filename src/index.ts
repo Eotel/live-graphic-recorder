@@ -14,6 +14,7 @@ import type {
   TranscriptSegment,
   AnalysisResult,
   CameraFrame,
+  GenerationPhase,
 } from "./types/messages";
 import {
   createSession,
@@ -171,6 +172,12 @@ async function handleSessionStart(ws: ServerWebSocket<WSContext>, ctx: WSContext
         send(ws, {
           type: "error",
           data: { message: error.message },
+        });
+      },
+      onPhaseChange(phase: GenerationPhase, retryAttempt?: number) {
+        send(ws, {
+          type: "generation:status",
+          data: { phase, retryAttempt },
         });
       },
     });

@@ -6,7 +6,7 @@
  */
 
 import { ANALYSIS_INTERVAL_MS } from "@/config/constants";
-import type { SessionState, AnalysisResult } from "@/types/messages";
+import type { SessionState, AnalysisResult, GenerationPhase } from "@/types/messages";
 import type { OpenAIService } from "./openai";
 import type { GeminiService, GeneratedImage } from "./gemini";
 import {
@@ -21,6 +21,7 @@ export interface AnalysisServiceEvents {
   onAnalysisComplete: (analysis: AnalysisResult) => void;
   onImageComplete: (image: GeneratedImage) => void;
   onError: (error: Error) => void;
+  onPhaseChange: (phase: GenerationPhase, retryAttempt?: number) => void;
 }
 
 export interface AnalysisService {
@@ -61,35 +62,50 @@ export function createAnalysisService(
     if (!shouldTriggerAnalysis(session, ANALYSIS_INTERVAL_MS)) return;
 
     analysisInProgress = true;
+    events.onPhaseChange("analyzing");
 
     try {
       const analysis = await runAnalysis(session);
       events.onAnalysisComplete(analysis);
 
-      // Generate image in parallel (don't block analysis delivery)
+      // Generate image (notify phase change)
+      events.onPhaseChange("generating");
       geminiService
-        .generateImage(analysis.imagePrompt)
-        .then((image) => events.onImageComplete(image))
-        .catch((error) =>
-          events.onError(error instanceof Error ? error : new Error(String(error))),
-        );
+        .generateImage(analysis.imagePrompt, {
+          onRetrying: (attempt) => events.onPhaseChange("retrying", attempt),
+        })
+        .then((image) => {
+          events.onImageComplete(image);
+          events.onPhaseChange("idle");
+        })
+        .catch((error) => {
+          events.onError(error instanceof Error ? error : new Error(String(error)));
+          events.onPhaseChange("idle");
+        });
     } catch (error) {
       events.onError(error instanceof Error ? error : new Error(String(error)));
+      events.onPhaseChange("idle");
     } finally {
       analysisInProgress = false;
     }
   }
 
   async function forceAnalysis(session: SessionState): Promise<AnalysisResult> {
+    events.onPhaseChange("analyzing");
     const analysis = await runAnalysis(session);
     events.onAnalysisComplete(analysis);
 
     // Generate image
+    events.onPhaseChange("generating");
     try {
-      const image = await geminiService.generateImage(analysis.imagePrompt);
+      const image = await geminiService.generateImage(analysis.imagePrompt, {
+        onRetrying: (attempt) => events.onPhaseChange("retrying", attempt),
+      });
       events.onImageComplete(image);
+      events.onPhaseChange("idle");
     } catch (error) {
       events.onError(error instanceof Error ? error : new Error(String(error)));
+      events.onPhaseChange("idle");
     }
 
     return analysis;

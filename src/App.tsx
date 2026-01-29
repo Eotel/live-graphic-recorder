@@ -23,7 +23,8 @@ import { useMediaStream } from "@/hooks/useMediaStream";
 import { useWebSocket } from "@/hooks/useWebSocket";
 import { useRecording } from "@/hooks/useRecording";
 import { useCameraCapture } from "@/hooks/useCameraCapture";
-import type { TranscriptSegment, CameraFrame } from "@/types/messages";
+import { useElapsedTime } from "@/hooks/useElapsedTime";
+import type { TranscriptSegment, CameraFrame, SummaryPage } from "@/types/messages";
 
 interface TranscriptData {
   text: string;
@@ -65,7 +66,7 @@ export function App() {
   // Accumulated data
   const [transcriptSegments, setTranscriptSegments] = useState<TranscriptSegment[]>([]);
   const [interimText, setInterimText] = useState<string | null>(null);
-  const [summary, setSummary] = useState<string[]>([]);
+  const [summaryPages, setSummaryPages] = useState<SummaryPage[]>([]);
   const [topics, setTopics] = useState<string[]>([]);
   const [tags, setTags] = useState<string[]>([]);
   const [flow, setFlow] = useState(50);
@@ -86,7 +87,7 @@ export function App() {
   }, []);
 
   const handleAnalysis = useCallback((data: AnalysisData) => {
-    setSummary(data.summary);
+    setSummaryPages((prev) => [...prev, { points: data.summary, timestamp: Date.now() }]);
     setTopics(data.topics);
     setTags(data.tags);
     setFlow(data.flow);
@@ -101,6 +102,7 @@ export function App() {
   const {
     isConnected,
     sessionStatus,
+    generationPhase,
     error: wsError,
     connect,
     sendMessage,
@@ -123,6 +125,9 @@ export function App() {
     onSessionStart: () => sendMessage({ type: "session:start" }),
     onSessionStop: () => sendMessage({ type: "session:stop" }),
   });
+
+  // Elapsed time tracking for recording
+  const { formattedTime: elapsedTime } = useElapsedTime({ enabled: isRecording });
 
   // Camera frame capture (sends to server for multimodal analysis)
   const handleCameraFrameCaptured = useCallback(
@@ -151,6 +156,10 @@ export function App() {
 
   // Combined error state
   const error = mediaError || wsError || recordingError;
+
+  // Derive generation states for components
+  const isAnalyzing = generationPhase === "analyzing";
+  const isGenerating = generationPhase === "generating" || generationPhase === "retrying";
 
   // Handlers
   const handleRequestPermission = async () => {
@@ -182,18 +191,19 @@ export function App() {
         </div>
       }
       leftPanel={
-        <div className="h-full flex flex-col">
+        <div className="h-full flex flex-col overflow-hidden">
           <SummaryPanel
-              summaryPoints={summary}
-              transcriptSegments={transcriptSegments}
-              interimText={interimText}
-              className="flex-1"
-            />
-          <TagList tags={tags} className="mt-4 pt-4 border-t border-border" />
+            summaryPages={summaryPages}
+            transcriptSegments={transcriptSegments}
+            interimText={interimText}
+            isAnalyzing={isAnalyzing}
+            className="flex-1 min-h-0"
+          />
+          <TagList tags={tags} className="flex-shrink-0 mt-3 pt-3 border-t border-border" />
         </div>
       }
       rightPanel={
-        <div className="space-y-6">
+        <div className="h-full flex flex-col space-y-3">
           {hasPermission && (
             <DeviceSelector
               audioDevices={audioDevices}
@@ -205,14 +215,22 @@ export function App() {
               disabled={isRecording}
               stream={stream}
               isRecording={isRecording}
+              className="flex-shrink-0"
             />
           )}
           <CameraPreview
             videoRef={videoRef}
             hasPermission={hasPermission}
             isRecording={isRecording}
+            elapsedTime={elapsedTime}
+            className="flex-shrink-0"
           />
-          <ImageCarousel images={images} />
+          <ImageCarousel
+            images={images}
+            isGenerating={isGenerating}
+            generationPhase={generationPhase}
+            className="flex-1 min-h-0"
+          />
         </div>
       }
       footer={

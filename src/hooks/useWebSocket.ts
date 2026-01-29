@@ -6,11 +6,12 @@
  */
 
 import { useState, useCallback, useRef, useEffect } from "react";
-import type { ServerMessage, ClientMessage, SessionStatus } from "@/types/messages";
+import type { ServerMessage, ClientMessage, SessionStatus, GenerationPhase } from "@/types/messages";
 
 export interface WebSocketState {
   isConnected: boolean;
   sessionStatus: SessionStatus;
+  generationPhase: GenerationPhase;
   error: string | null;
 }
 
@@ -39,6 +40,7 @@ export function useWebSocket(
 ): WebSocketState & WebSocketActions {
   const [isConnected, setIsConnected] = useState(false);
   const [sessionStatus, setSessionStatus] = useState<SessionStatus>("idle");
+  const [generationPhase, setGenerationPhase] = useState<GenerationPhase>("idle");
   const [error, setError] = useState<string | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
   const callbacksRef = useRef(callbacks);
@@ -65,6 +67,7 @@ export function useWebSocket(
     ws.onclose = () => {
       setIsConnected(false);
       setSessionStatus("idle");
+      setGenerationPhase("idle");
     };
 
     ws.onerror = () => {
@@ -94,6 +97,10 @@ export function useWebSocket(
               setError(message.data.error);
               callbacksRef.current.onError?.(message.data.error);
             }
+            break;
+
+          case "generation:status":
+            setGenerationPhase(message.data.phase);
             break;
 
           case "error":
@@ -140,6 +147,7 @@ export function useWebSocket(
   return {
     isConnected,
     sessionStatus,
+    generationPhase,
     error,
     connect,
     disconnect,

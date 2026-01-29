@@ -80,12 +80,28 @@ export interface ErrorMessage {
   };
 }
 
+
+// ============================================================================
+// Generation Phase Types (for progress indicators)
+// ============================================================================
+
+export type GenerationPhase = "idle" | "analyzing" | "generating" | "retrying";
+
+export interface GenerationStatusMessage {
+  type: "generation:status";
+  data: {
+    phase: GenerationPhase;
+    retryAttempt?: number;
+  };
+}
+
 export type ServerMessage =
   | TranscriptMessage
   | AnalysisMessage
   | ImageMessage
   | SessionStatusMessage
-  | ErrorMessage;
+  | ErrorMessage
+  | GenerationStatusMessage;
 
 // ============================================================================
 // Session State Types
@@ -95,6 +111,11 @@ export interface TranscriptSegment {
   text: string;
   timestamp: number;
   isFinal: boolean;
+}
+
+export interface SummaryPage {
+  points: string[];
+  timestamp: number;
 }
 
 export interface AnalysisResult {

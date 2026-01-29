@@ -15,8 +15,12 @@ export interface GeneratedImage {
   timestamp: number;
 }
 
+export interface GeminiServiceOptions {
+  onRetrying?: (attempt: number) => void;
+}
+
 export interface GeminiService {
-  generateImage: (prompt: string) => Promise<GeneratedImage>;
+  generateImage: (prompt: string, options?: GeminiServiceOptions) => Promise<GeneratedImage>;
 }
 
 const GRAPHIC_RECORDING_STYLE_PREFIX = `Create a professional graphic recording illustration with the following characteristics:
@@ -97,7 +101,10 @@ export function createGeminiService(): GeminiService {
     throw new Error("No image data in Gemini response");
   }
 
-  async function generateImage(prompt: string): Promise<GeneratedImage> {
+  async function generateImage(
+    prompt: string,
+    options?: GeminiServiceOptions,
+  ): Promise<GeneratedImage> {
     const fullPrompt = GRAPHIC_RECORDING_STYLE_PREFIX + prompt;
     const maxRetries = GEMINI_CONFIG.maxRetries;
     let lastError: Error | null = null;
@@ -122,6 +129,10 @@ export function createGeminiService(): GeminiService {
           console.log(
             `[Gemini] Rate limited, retrying in ${backoffMs / 1000}s (attempt ${attempt + 1}/${maxRetries})`,
           );
+
+          // Notify retry callback before sleeping
+          options?.onRetrying?.(attempt + 1);
+
           await sleep(backoffMs);
           continue;
         }

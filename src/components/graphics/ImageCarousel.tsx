@@ -2,13 +2,15 @@
  * Swipeable image gallery for graphic recordings.
  *
  * Design doc: plans/live-graphic-recorder-plan.md
- * Related: src/App.tsx
+ * Related: src/App.tsx, src/components/graphics/ImageSkeleton.tsx
  */
 
 import { useState } from "react";
 import { ChevronLeft, ChevronRight, ImageIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { ImageSkeleton } from "./ImageSkeleton";
+import type { GenerationPhase } from "@/types/messages";
 
 interface GraphicImage {
   base64: string;
@@ -18,14 +20,23 @@ interface GraphicImage {
 
 interface ImageCarouselProps {
   images: GraphicImage[];
+  isGenerating?: boolean;
+  generationPhase?: GenerationPhase;
   className?: string;
 }
 
-export function ImageCarousel({ images, className }: ImageCarouselProps) {
+export function ImageCarousel({
+  images,
+  isGenerating = false,
+  generationPhase = "idle",
+  className,
+}: ImageCarouselProps) {
   const [currentIndex, setCurrentIndex] = useState(0);
 
   const hasImages = images.length > 0;
   const currentImage = images[currentIndex];
+  const showSkeleton = isGenerating && !hasImages;
+  const isRetrying = generationPhase === "retrying";
 
   const goToPrevious = () => {
     setCurrentIndex((prev) => (prev > 0 ? prev - 1 : images.length - 1));
@@ -45,49 +56,53 @@ export function ImageCarousel({ images, className }: ImageCarouselProps) {
     <div className={cn("flex flex-col", className)}>
       <h3 className="text-sm font-semibold text-muted-foreground mb-2">Graphic Recordings</h3>
 
-      <div className="relative aspect-video bg-muted rounded-lg overflow-hidden">
-        {hasImages && currentImage ? (
-          <>
-            <img
-              src={`data:image/png;base64,${currentImage.base64}`}
-              alt={currentImage.prompt}
-              className="w-full h-full object-contain"
-            />
+      {showSkeleton ? (
+        <ImageSkeleton isRetrying={isRetrying} />
+      ) : (
+        <div className="relative aspect-video bg-muted rounded-lg overflow-hidden">
+          {hasImages && currentImage ? (
+            <>
+              <img
+                src={`data:image/png;base64,${currentImage.base64}`}
+                alt={currentImage.prompt}
+                className="w-full h-full object-contain"
+              />
 
-            {/* Navigation arrows */}
-            {images.length > 1 && (
-              <>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="absolute left-2 top-1/2 -translate-y-1/2 bg-black/30 hover:bg-black/50 text-white"
-                  onClick={goToPrevious}
-                >
-                  <ChevronLeft className="size-6" />
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="absolute right-2 top-1/2 -translate-y-1/2 bg-black/30 hover:bg-black/50 text-white"
-                  onClick={goToNext}
-                >
-                  <ChevronRight className="size-6" />
-                </Button>
-              </>
-            )}
+              {/* Navigation arrows */}
+              {images.length > 1 && (
+                <>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="absolute left-2 top-1/2 -translate-y-1/2 bg-black/30 hover:bg-black/50 text-white"
+                    onClick={goToPrevious}
+                  >
+                    <ChevronLeft className="size-6" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="absolute right-2 top-1/2 -translate-y-1/2 bg-black/30 hover:bg-black/50 text-white"
+                    onClick={goToNext}
+                  >
+                    <ChevronRight className="size-6" />
+                  </Button>
+                </>
+              )}
 
-            {/* Image counter */}
-            <div className="absolute bottom-2 left-1/2 -translate-x-1/2 bg-black/50 text-white text-xs px-2 py-1 rounded-full">
-              {currentIndex + 1} / {images.length}
+              {/* Image counter */}
+              <div className="absolute bottom-2 left-1/2 -translate-x-1/2 bg-black/50 text-white text-xs px-2 py-1 rounded-full">
+                {currentIndex + 1} / {images.length}
+              </div>
+            </>
+          ) : (
+            <div className="absolute inset-0 flex flex-col items-center justify-center text-muted-foreground">
+              <ImageIcon className="size-12 mb-2" />
+              <p className="text-sm">Graphic recordings will appear here</p>
             </div>
-          </>
-        ) : (
-          <div className="absolute inset-0 flex flex-col items-center justify-center text-muted-foreground">
-            <ImageIcon className="size-12 mb-2" />
-            <p className="text-sm">Graphic recordings will appear here</p>
-          </div>
-        )}
-      </div>
+          )}
+        </div>
+      )}
 
       {/* Thumbnail strip */}
       {images.length > 1 && (
