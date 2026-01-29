@@ -2,19 +2,26 @@
  * Auto-scrolling summary panel displaying transcript and analysis.
  *
  * Design doc: plans/live-graphic-recorder-plan.md
- * Related: src/hooks/useAutoScroll.ts
+ * Related: src/hooks/useAutoScroll.ts, src/types/messages.ts
  */
 
 import { useAutoScroll } from "@/hooks/useAutoScroll";
 import { cn } from "@/lib/utils";
+import type { TranscriptSegment } from "@/types/messages";
 
 interface SummaryPanelProps {
   summaryPoints: string[];
-  transcript: string;
+  transcriptSegments: TranscriptSegment[];
+  interimText: string | null;
   className?: string;
 }
 
-export function SummaryPanel({ summaryPoints, transcript, className }: SummaryPanelProps) {
+export function SummaryPanel({
+  summaryPoints,
+  transcriptSegments,
+  interimText,
+  className,
+}: SummaryPanelProps) {
   const { containerRef } = useAutoScroll({ enabled: true });
 
   return (
@@ -41,10 +48,27 @@ export function SummaryPanel({ summaryPoints, transcript, className }: SummaryPa
           ref={containerRef}
           className="h-full overflow-y-auto rounded-md bg-muted/30 p-3 text-sm leading-relaxed"
         >
-          {transcript || (
+          {transcriptSegments.length === 0 && !interimText ? (
             <span className="text-muted-foreground italic">
               Start recording to see the transcript...
             </span>
+          ) : (
+            <>
+              {/* Final segments - full opacity */}
+              {transcriptSegments.map((segment, index) => (
+                <span key={`final-${segment.timestamp}-${index}`}>
+                  {index > 0 && " "}
+                  {segment.text}
+                </span>
+              ))}
+              {/* Interim text - muted styling */}
+              {interimText && (
+                <span className="text-muted-foreground transition-colors duration-200">
+                  {transcriptSegments.length > 0 && " "}
+                  {interimText}
+                </span>
+              )}
+            </>
           )}
         </div>
       </div>

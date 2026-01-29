@@ -22,6 +22,7 @@ import { ImageCarousel } from "@/components/graphics/ImageCarousel";
 import { useMediaStream } from "@/hooks/useMediaStream";
 import { useWebSocket } from "@/hooks/useWebSocket";
 import { useRecording } from "@/hooks/useRecording";
+import type { TranscriptSegment } from "@/types/messages";
 
 interface TranscriptData {
   text: string;
@@ -61,7 +62,8 @@ export function App() {
   } = useMediaStream();
 
   // Accumulated data
-  const [transcript, setTranscript] = useState("");
+  const [transcriptSegments, setTranscriptSegments] = useState<TranscriptSegment[]>([]);
+  const [interimText, setInterimText] = useState<string | null>(null);
   const [summary, setSummary] = useState<string[]>([]);
   const [topics, setTopics] = useState<string[]>([]);
   const [tags, setTags] = useState<string[]>([]);
@@ -72,7 +74,13 @@ export function App() {
   // WebSocket callbacks
   const handleTranscript = useCallback((data: TranscriptData) => {
     if (data.isFinal) {
-      setTranscript((prev) => (prev ? `${prev} ${data.text}` : data.text));
+      setTranscriptSegments((prev) => [
+        ...prev,
+        { text: data.text, timestamp: data.timestamp, isFinal: true },
+      ]);
+      setInterimText(null);
+    } else {
+      setInterimText(data.text);
     }
   }, []);
 
@@ -160,7 +168,12 @@ export function App() {
       }
       leftPanel={
         <div className="h-full flex flex-col">
-          <SummaryPanel summaryPoints={summary} transcript={transcript} className="flex-1" />
+          <SummaryPanel
+              summaryPoints={summary}
+              transcriptSegments={transcriptSegments}
+              interimText={interimText}
+              className="flex-1"
+            />
           <TagList tags={tags} className="mt-4 pt-4 border-t border-border" />
         </div>
       }
