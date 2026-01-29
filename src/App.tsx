@@ -22,7 +22,8 @@ import { ImageCarousel } from "@/components/graphics/ImageCarousel";
 import { useMediaStream } from "@/hooks/useMediaStream";
 import { useWebSocket } from "@/hooks/useWebSocket";
 import { useRecording } from "@/hooks/useRecording";
-import type { TranscriptSegment } from "@/types/messages";
+import { useCameraCapture } from "@/hooks/useCameraCapture";
+import type { TranscriptSegment, CameraFrame } from "@/types/messages";
 
 interface TranscriptData {
   text: string;
@@ -121,6 +122,20 @@ export function App() {
     onAudioData: sendAudio,
     onSessionStart: () => sendMessage({ type: "session:start" }),
     onSessionStop: () => sendMessage({ type: "session:stop" }),
+  });
+
+  // Camera frame capture (sends to server for multimodal analysis)
+  const handleCameraFrameCaptured = useCallback(
+    (frame: CameraFrame) => {
+      sendMessage({ type: "camera:frame", data: frame });
+    },
+    [sendMessage],
+  );
+
+  useCameraCapture({
+    videoRef,
+    isRecording,
+    onFrameCaptured: handleCameraFrameCaptured,
   });
 
   // Track pending start request (waiting for WebSocket connection)

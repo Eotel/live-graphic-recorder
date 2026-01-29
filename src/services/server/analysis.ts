@@ -9,7 +9,13 @@ import { ANALYSIS_INTERVAL_MS } from "@/config/constants";
 import type { SessionState, AnalysisResult } from "@/types/messages";
 import type { OpenAIService } from "./openai";
 import type { GeminiService, GeneratedImage } from "./gemini";
-import { shouldTriggerAnalysis, getTranscriptSinceLastAnalysis, getLatestTopics } from "./session";
+import {
+  shouldTriggerAnalysis,
+  getTranscriptSinceLastAnalysis,
+  getLatestTopics,
+  getCameraFrames,
+  getLatestImage,
+} from "./session";
 
 export interface AnalysisServiceEvents {
   onAnalysisComplete: (analysis: AnalysisResult) => void;
@@ -37,7 +43,15 @@ export function createAnalysisService(
     }
 
     const previousTopics = getLatestTopics(session);
-    const analysis = await openaiService.analyzeTranscript(transcript, previousTopics);
+    const cameraFrames = getCameraFrames(session);
+    const latestImage = getLatestImage(session);
+
+    const analysis = await openaiService.analyzeTranscript({
+      transcript,
+      previousTopics,
+      cameraFrames,
+      previousImage: latestImage ? { base64: latestImage.base64 } : undefined,
+    });
 
     return analysis;
   }

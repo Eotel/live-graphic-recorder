@@ -17,7 +17,17 @@ export interface SessionStopMessage {
   type: "session:stop";
 }
 
-export type ClientMessage = SessionStartMessage | SessionStopMessage;
+export interface CameraFrame {
+  base64: string;
+  timestamp: number;
+}
+
+export interface CameraFrameMessage {
+  type: "camera:frame";
+  data: CameraFrame;
+}
+
+export type ClientMessage = SessionStartMessage | SessionStopMessage | CameraFrameMessage;
 
 // ============================================================================
 // Server → Client Messages
@@ -107,6 +117,7 @@ export interface SessionState {
     prompt: string;
     timestamp: number;
   }>;
+  cameraFrames: CameraFrame[];
   lastAnalysisAt: number;
   wordsSinceLastAnalysis: number;
 }

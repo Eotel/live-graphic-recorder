@@ -9,8 +9,11 @@ import {
   markAnalysisComplete,
   addImage,
   getLatestAnalysis,
+  addCameraFrame,
+  getCameraFrames,
+  getLatestImage,
 } from "./session";
-import type { SessionState, AnalysisResult } from "@/types/messages";
+import type { SessionState, AnalysisResult, CameraFrame } from "@/types/messages";
 
 describe("SessionService", () => {
   let session: SessionState;
@@ -107,12 +110,13 @@ describe("SessionService", () => {
       expect(shouldTriggerAnalysis(session, 1000)).toBe(false);
     });
 
-    test("should return true when enough time has passed", () => {
+    test("should return true when enough time has passed and has words", () => {
       let started = startSession(session);
-      // Simulate time passing
+      // Simulate time passing with some words spoken
       started = {
         ...started,
         lastAnalysisAt: Date.now() - 5000,
+        wordsSinceLastAnalysis: 10,
       };
 
       expect(shouldTriggerAnalysis(started, 3000)).toBe(true);
@@ -127,6 +131,18 @@ describe("SessionService", () => {
       };
 
       expect(shouldTriggerAnalysis(started, 999999999)).toBe(true);
+    });
+
+    test("should return false when enough time has passed but no words", () => {
+      let started = startSession(session);
+      // Simulate time passing but no words spoken
+      started = {
+        ...started,
+        lastAnalysisAt: Date.now() - 5000,
+        wordsSinceLastAnalysis: 0,
+      };
+
+      expect(shouldTriggerAnalysis(started, 3000)).toBe(false);
     });
   });
 
@@ -197,6 +213,69 @@ describe("SessionService", () => {
       updated = markAnalysisComplete(updated, analysis2);
 
       expect(getLatestAnalysis(updated)).toEqual(analysis2);
+    });
+  });
+
+  describe("addCameraFrame", () => {
+    test("should add camera frame to session", () => {
+      const frame: CameraFrame = {
+        base64: "frame1data",
+        timestamp: Date.now(),
+      };
+
+      const updated = addCameraFrame(session, frame);
+
+      expect(updated.cameraFrames).toHaveLength(1);
+      expect(updated.cameraFrames[0]).toEqual(frame);
+    });
+
+    test("should maintain max 5 frames (ring buffer)", () => {
+      let updated = session;
+      for (let i = 1; i <= 7; i++) {
+        updated = addCameraFrame(updated, {
+          base64: `frame${i}data`,
+          timestamp: i * 1000,
+        });
+      }
+
+      expect(updated.cameraFrames).toHaveLength(5);
+      // Should have frames 3-7 (oldest 2 removed)
+      expect(updated.cameraFrames[0]?.base64).toBe("frame3data");
+      expect(updated.cameraFrames[4]?.base64).toBe("frame7data");
+    });
+  });
+
+  describe("getCameraFrames", () => {
+    test("should return empty array when no frames", () => {
+      expect(getCameraFrames(session)).toEqual([]);
+    });
+
+    test("should return all camera frames", () => {
+      let updated = session;
+      updated = addCameraFrame(updated, { base64: "a", timestamp: 1 });
+      updated = addCameraFrame(updated, { base64: "b", timestamp: 2 });
+
+      const frames = getCameraFrames(updated);
+      expect(frames).toHaveLength(2);
+      expect(frames[0]?.base64).toBe("a");
+      expect(frames[1]?.base64).toBe("b");
+    });
+  });
+
+  describe("getLatestImage", () => {
+    test("should return undefined when no images", () => {
+      expect(getLatestImage(session)).toBeUndefined();
+    });
+
+    test("should return the most recent generated image", () => {
+      const image1 = { base64: "img1", prompt: "p1", timestamp: 1 };
+      const image2 = { base64: "img2", prompt: "p2", timestamp: 2 };
+
+      let updated = addImage(session, image1);
+      updated = addImage(updated, image2);
+
+      const latest = getLatestImage(updated);
+      expect(latest).toEqual(image2);
     });
   });
 });

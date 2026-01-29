@@ -10,8 +10,9 @@ import type {
   TranscriptSegment,
   AnalysisResult,
   SessionStatus,
+  CameraFrame,
 } from "@/types/messages";
-import { ANALYSIS_WORD_THRESHOLD } from "@/config/constants";
+import { ANALYSIS_WORD_THRESHOLD, CAMERA_FRAME_BUFFER_SIZE } from "@/config/constants";
 
 export function createSession(id: string): SessionState {
   return {
@@ -21,6 +22,7 @@ export function createSession(id: string): SessionState {
     transcript: [],
     analyses: [],
     images: [],
+    cameraFrames: [],
     lastAnalysisAt: 0,
     wordsSinceLastAnalysis: 0,
   };
@@ -77,6 +79,9 @@ export function getTranscriptSinceLastAnalysis(session: SessionState): string {
 export function shouldTriggerAnalysis(session: SessionState, intervalMs: number): boolean {
   if (session.status !== "recording") return false;
 
+  // Must have at least some words since last analysis
+  if (session.wordsSinceLastAnalysis === 0) return false;
+
   const timeSinceLastAnalysis = Date.now() - session.lastAnalysisAt;
   const hasEnoughTime = timeSinceLastAnalysis >= intervalMs;
   const hasEnoughWords = session.wordsSinceLastAnalysis >= ANALYSIS_WORD_THRESHOLD;
@@ -113,4 +118,27 @@ export function getLatestAnalysis(session: SessionState): AnalysisResult | undef
 export function getLatestTopics(session: SessionState): string[] {
   const latest = getLatestAnalysis(session);
   return latest?.topics ?? [];
+}
+
+export function addCameraFrame(session: SessionState, frame: CameraFrame): SessionState {
+  const frames = [...session.cameraFrames, frame];
+  // Keep only the latest N frames (ring buffer)
+  const trimmedFrames = frames.length > CAMERA_FRAME_BUFFER_SIZE
+    ? frames.slice(frames.length - CAMERA_FRAME_BUFFER_SIZE)
+    : frames;
+
+  return {
+    ...session,
+    cameraFrames: trimmedFrames,
+  };
+}
+
+export function getCameraFrames(session: SessionState): CameraFrame[] {
+  return session.cameraFrames;
+}
+
+export function getLatestImage(
+  session: SessionState,
+): { base64: string; prompt: string; timestamp: number } | undefined {
+  return session.images.at(-1);
 }

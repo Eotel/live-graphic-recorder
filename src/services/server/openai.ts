@@ -7,21 +7,31 @@
 
 import OpenAI from "openai";
 import { OPENAI_CONFIG } from "@/config/constants";
-import type { AnalysisResult } from "@/types/messages";
+import type { AnalysisResult, CameraFrame } from "@/types/messages";
+
+export interface AnalysisInput {
+  transcript: string;
+  previousTopics?: string[];
+  cameraFrames?: CameraFrame[];
+  previousImage?: { base64: string };
+}
 
 export interface OpenAIService {
-  analyzeTranscript: (transcript: string, previousTopics?: string[]) => Promise<AnalysisResult>;
+  analyzeTranscript: (input: AnalysisInput) => Promise<AnalysisResult>;
 }
 
 const ANALYSIS_SYSTEM_PROMPT = `You are an expert at analyzing meeting transcripts and creating graphic recording content.
 
-Given a meeting transcript, you will:
+Given a meeting transcript (and optionally visual context from camera snapshots and previous graphic recording), you will:
 1. Extract 3-5 key summary points (bullet points)
 2. Identify 1-3 main topics being discussed
 3. Generate 3-5 relevant hashtags
 4. Rate the "flow" (how smoothly the conversation is progressing, 0-100)
 5. Rate the "heat" (how engaged/energetic the discussion is, 0-100)
 6. Generate a prompt for creating a graphic recording image that captures the essence of the discussion
+
+If camera frames are provided, use them to understand the visual context (participants, gestures, whiteboard content, etc.).
+If a previous graphic recording image is provided, ensure continuity and build upon its visual narrative.
 
 Respond in JSON format:
 {
@@ -45,30 +55,65 @@ export function createOpenAIService(): OpenAIService {
 
   const client = new OpenAI({ apiKey });
 
-  async function analyzeTranscript(
-    transcript: string,
-    previousTopics: string[] = [],
-  ): Promise<AnalysisResult> {
-    const userPrompt = previousTopics.length
+  async function analyzeTranscript(input: AnalysisInput): Promise<AnalysisResult> {
+    const { transcript, previousTopics = [], cameraFrames = [], previousImage } = input;
+
+    // Build the user message content (multimodal)
+    const content: OpenAI.Chat.Completions.ChatCompletionContentPart[] = [];
+
+    // Add text content
+    let textContent = previousTopics.length
       ? `Previous topics discussed: ${previousTopics.join(", ")}\n\nNew transcript segment:\n${transcript}`
       : `Transcript:\n${transcript}`;
 
+    if (cameraFrames.length > 0) {
+      textContent += "\n\nThe following camera frames show the visual context of the meeting:";
+    }
+
+    if (previousImage) {
+      textContent += "\n\nThe following is the previous graphic recording image. Build upon its visual narrative:";
+    }
+
+    content.push({ type: "text", text: textContent });
+
+    // Add camera frames as images
+    for (const frame of cameraFrames) {
+      content.push({
+        type: "image_url",
+        image_url: {
+          url: `data:image/jpeg;base64,${frame.base64}`,
+          detail: "low",
+        },
+      });
+    }
+
+    // Add previous graphic recording image
+    if (previousImage) {
+      content.push({
+        type: "image_url",
+        image_url: {
+          url: `data:image/png;base64,${previousImage.base64}`,
+          detail: "low",
+        },
+      });
+    }
+
     const response = await client.chat.completions.create({
       model: OPENAI_CONFIG.model,
-      max_tokens: OPENAI_CONFIG.maxTokens,
+      max_completion_tokens: OPENAI_CONFIG.maxTokens,
       response_format: { type: "json_object" },
       messages: [
         { role: "system", content: ANALYSIS_SYSTEM_PROMPT },
-        { role: "user", content: userPrompt },
+        { role: "user", content },
       ],
     });
 
-    const content = response.choices[0]?.message?.content;
-    if (!content) {
+    const responseContent = response.choices[0]?.message?.content;
+    if (!responseContent) {
       throw new Error("No response from OpenAI");
     }
 
-    const result = JSON.parse(content) as {
+    const result = JSON.parse(responseContent) as {
       summary: string[];
       topics: string[];
       tags: string[];

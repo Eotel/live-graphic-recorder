@@ -8,11 +8,17 @@
 // Analysis Trigger Settings
 // ============================================================================
 
-/** Minimum time between analyses in milliseconds (3 minutes) */
-export const ANALYSIS_INTERVAL_MS = 3 * 60 * 1000;
+/** Minimum time between analyses in milliseconds (5 minutes) */
+export const ANALYSIS_INTERVAL_MS = 5 * 60 * 1000;
 
 /** Minimum word count to trigger analysis */
 export const ANALYSIS_WORD_THRESHOLD = 500;
+
+/** Interval for capturing camera frames in milliseconds (60 seconds) */
+export const CAMERA_CAPTURE_INTERVAL_MS = 60 * 1000;
+
+/** Maximum number of camera frames to keep in buffer */
+export const CAMERA_FRAME_BUFFER_SIZE = 5;
 
 // ============================================================================
 // Deepgram Settings
@@ -26,6 +32,8 @@ export const DEEPGRAM_CONFIG = {
   utterance_end_ms: 1000,
   vad_events: true,
   smart_format: true,
+  // Note: Do not specify encoding when sending WebM container from browser
+  // Deepgram will auto-detect the format
 } as const;
 
 // ============================================================================
@@ -33,7 +41,7 @@ export const DEEPGRAM_CONFIG = {
 // ============================================================================
 
 export const OPENAI_CONFIG = {
-  model: "gpt-4o-mini",
+  model: "gpt-5.2",
   maxTokens: 1024,
 } as const;
 
@@ -43,6 +51,8 @@ export const OPENAI_CONFIG = {
 
 export const GEMINI_CONFIG = {
   model: "gemini-2.5-flash-image",
+  maxRetries: 3,
+  initialBackoffMs: 30000,
 } as const;
 
 // ============================================================================

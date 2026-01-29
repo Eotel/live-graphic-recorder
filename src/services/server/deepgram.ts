@@ -36,6 +36,9 @@ export function createDeepgramService(events: DeepgramServiceEvents): DeepgramSe
   let client: DeepgramClient | null = null;
   let connection: ListenLiveClient | null = null;
   let connected = false;
+  let keepAliveInterval: ReturnType<typeof setInterval> | null = null;
+  // Buffer for audio data received before connection is ready
+  const pendingAudioBuffer: (ArrayBuffer | Buffer)[] = [];
 
   async function start(): Promise<void> {
     client = createClient(apiKey);
@@ -43,17 +46,42 @@ export function createDeepgramService(events: DeepgramServiceEvents): DeepgramSe
     connection = client.listen.live(DEEPGRAM_CONFIG);
 
     return new Promise((resolve, reject) => {
-      if (!connection) {
+      const conn = connection;
+      if (!conn) {
         reject(new Error("Failed to create connection"));
         return;
       }
 
-      connection.on(LiveTranscriptionEvents.Open, () => {
+      conn.on(LiveTranscriptionEvents.Open, () => {
+        console.log("[Deepgram] Connection opened");
         connected = true;
+
+        // Flush any buffered audio data (including WebM header)
+        if (pendingAudioBuffer.length > 0) {
+          for (const bufferedAudio of pendingAudioBuffer) {
+            const data =
+              bufferedAudio instanceof ArrayBuffer
+                ? bufferedAudio
+                : bufferedAudio.buffer.slice(
+                    bufferedAudio.byteOffset,
+                    bufferedAudio.byteOffset + bufferedAudio.byteLength,
+                  );
+            conn.send(data);
+          }
+          pendingAudioBuffer.length = 0;
+        }
+
+        // Send keepalive every 8 seconds to prevent timeout during audio gaps
+        keepAliveInterval = setInterval(() => {
+          if (connection && connected) {
+            connection.keepAlive();
+          }
+        }, 8000);
+
         resolve();
       });
 
-      connection.on(LiveTranscriptionEvents.Transcript, (data) => {
+      conn.on(LiveTranscriptionEvents.Transcript, (data) => {
         const transcript = data.channel?.alternatives?.[0];
         if (transcript?.transcript) {
           events.onTranscript({
@@ -64,11 +92,12 @@ export function createDeepgramService(events: DeepgramServiceEvents): DeepgramSe
         }
       });
 
-      connection.on(LiveTranscriptionEvents.Error, (error) => {
+      conn.on(LiveTranscriptionEvents.Error, (error) => {
+        console.error("[Deepgram] Error:", error);
         events.onError(error instanceof Error ? error : new Error(String(error)));
       });
 
-      connection.on(LiveTranscriptionEvents.Close, () => {
+      conn.on(LiveTranscriptionEvents.Close, () => {
         connected = false;
         events.onClose();
       });
@@ -89,10 +118,17 @@ export function createDeepgramService(events: DeepgramServiceEvents): DeepgramSe
           ? audio
           : audio.buffer.slice(audio.byteOffset, audio.byteOffset + audio.byteLength);
       connection.send(data);
+    } else if (connection && !connected) {
+      // Connection is being established, buffer the audio (including WebM header)
+      pendingAudioBuffer.push(audio);
     }
   }
 
   function stop(): void {
+    if (keepAliveInterval) {
+      clearInterval(keepAliveInterval);
+      keepAliveInterval = null;
+    }
     if (connection) {
       connection.requestClose();
       connection = null;

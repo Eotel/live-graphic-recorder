@@ -29,6 +29,42 @@ const GRAPHIC_RECORDING_STYLE_PREFIX = `Create a professional graphic recording 
 
 Content to illustrate: `;
 
+/**
+ * Sleep for a given number of milliseconds.
+ */
+export function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
+ * Check if an error is a rate limit error (429 or RESOURCE_EXHAUSTED).
+ */
+export function isRateLimitError(error: unknown): boolean {
+  if (error instanceof Error) {
+    if ((error as unknown as { status?: number }).status === 429) {
+      return true;
+    }
+    if (error.message.includes("RESOURCE_EXHAUSTED")) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * Parse the retry delay from an error, if present.
+ * Returns the delay in seconds, or null if not found.
+ */
+export function parseRetryDelay(error: unknown): number | null {
+  if (error && typeof error === "object" && "retryDelay" in error) {
+    const delay = (error as { retryDelay: unknown }).retryDelay;
+    if (typeof delay === "number") {
+      return delay;
+    }
+  }
+  return null;
+}
+
 export function createGeminiService(): GeminiService {
   const apiKey = process.env["GOOGLE_API_KEY"];
   if (!apiKey) {
@@ -37,9 +73,7 @@ export function createGeminiService(): GeminiService {
 
   const ai = new GoogleGenAI({ apiKey });
 
-  async function generateImage(prompt: string): Promise<GeneratedImage> {
-    const fullPrompt = GRAPHIC_RECORDING_STYLE_PREFIX + prompt;
-
+  async function doGenerate(fullPrompt: string): Promise<GeneratedImage> {
     const response = await ai.models.generateContent({
       model: GEMINI_CONFIG.model,
       contents: fullPrompt,
@@ -54,13 +88,51 @@ export function createGeminiService(): GeminiService {
       if (part.inlineData?.data) {
         return {
           base64: part.inlineData.data,
-          prompt,
+          prompt: fullPrompt,
           timestamp: Date.now(),
         };
       }
     }
 
     throw new Error("No image data in Gemini response");
+  }
+
+  async function generateImage(prompt: string): Promise<GeneratedImage> {
+    const fullPrompt = GRAPHIC_RECORDING_STYLE_PREFIX + prompt;
+    const maxRetries = GEMINI_CONFIG.maxRetries;
+    let lastError: Error | null = null;
+
+    for (let attempt = 0; attempt < maxRetries; attempt++) {
+      try {
+        const result = await doGenerate(fullPrompt);
+        // Fix prompt to be the original prompt, not the full prompt
+        return {
+          ...result,
+          prompt,
+        };
+      } catch (error) {
+        lastError = error instanceof Error ? error : new Error(String(error));
+
+        if (isRateLimitError(error)) {
+          const parsedDelay = parseRetryDelay(error);
+          const backoffMs = parsedDelay !== null
+            ? parsedDelay * 1000
+            : GEMINI_CONFIG.initialBackoffMs * (attempt + 1);
+
+          console.log(
+            `[Gemini] Rate limited, retrying in ${backoffMs / 1000}s (attempt ${attempt + 1}/${maxRetries})`,
+          );
+          await sleep(backoffMs);
+          continue;
+        }
+
+        // Non-rate-limit error, don't retry
+        throw lastError;
+      }
+    }
+
+    // All retries exhausted
+    throw lastError ?? new Error("Max retries exceeded");
   }
 
   return {

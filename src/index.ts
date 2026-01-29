@@ -13,6 +13,7 @@ import type {
   SessionState,
   TranscriptSegment,
   AnalysisResult,
+  CameraFrame,
 } from "./types/messages";
 import {
   createSession,
@@ -21,6 +22,7 @@ import {
   addTranscript,
   markAnalysisComplete,
   addImage,
+  addCameraFrame,
 } from "./services/server/session";
 import { createDeepgramService, type DeepgramService } from "./services/server/deepgram";
 import { createOpenAIService } from "./services/server/openai";
@@ -34,6 +36,8 @@ interface WSContext {
   deepgram: DeepgramService | null;
   analysis: AnalysisService | null;
   checkInterval: ReturnType<typeof setInterval> | null;
+  // Buffer for audio data received before Deepgram is ready
+  pendingAudio: (ArrayBuffer | Buffer)[];
 }
 
 function generateSessionId(): string {
@@ -60,6 +64,7 @@ const server = Bun.serve<WSContext>({
           deepgram: null,
           analysis: null,
           checkInterval: null,
+          pendingAudio: [],
         } satisfies WSContext,
       });
       if (success) return undefined;
@@ -84,6 +89,9 @@ const server = Bun.serve<WSContext>({
       if (message instanceof ArrayBuffer || message instanceof Buffer) {
         if (ctx.deepgram?.isConnected()) {
           ctx.deepgram.sendAudio(message);
+        } else {
+          // Buffer audio until Deepgram is ready (preserves WebM header)
+          ctx.pendingAudio.push(message);
         }
         return;
       }
@@ -99,6 +107,10 @@ const server = Bun.serve<WSContext>({
 
           case "session:stop":
             handleSessionStop(ws, ctx);
+            break;
+
+          case "camera:frame":
+            handleCameraFrame(ctx, parsed.data);
             break;
         }
       } catch (error) {
@@ -187,6 +199,15 @@ async function handleSessionStart(ws: ServerWebSocket<WSContext>, ctx: WSContext
     });
 
     await ctx.deepgram.start();
+
+    // Flush any buffered audio data (including WebM header)
+    if (ctx.pendingAudio.length > 0) {
+      for (const audio of ctx.pendingAudio) {
+        ctx.deepgram.sendAudio(audio);
+      }
+      ctx.pendingAudio.length = 0;
+    }
+
     ctx.session = startSession(ctx.session);
 
     // Periodic analysis check (in case words are few but time has passed)
@@ -222,6 +243,11 @@ function handleSessionStop(ws: ServerWebSocket<WSContext>, ctx: WSContext): void
   });
 
   console.log(`[WS] Recording stopped: ${ctx.sessionId}`);
+}
+
+function handleCameraFrame(ctx: WSContext, frame: CameraFrame): void {
+  ctx.session = addCameraFrame(ctx.session, frame);
+  console.log(`[WS] Camera frame received: ${ctx.sessionId}, frames: ${ctx.session.cameraFrames.length}`);
 }
 
 function cleanup(ctx: WSContext): void {
