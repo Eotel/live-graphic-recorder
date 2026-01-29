@@ -188,6 +188,8 @@ export function App() {
               onAudioDeviceChange={setAudioDevice}
               onVideoDeviceChange={setVideoDevice}
               disabled={isRecording}
+              stream={stream}
+              isRecording={isRecording}
             />
           )}
           <CameraPreview

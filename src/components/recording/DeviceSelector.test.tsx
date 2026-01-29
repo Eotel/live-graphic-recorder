@@ -4,9 +4,50 @@
  * Related: src/components/recording/DeviceSelector.tsx
  */
 
-import { describe, test, expect } from "bun:test";
-import { render, screen } from "@testing-library/react";
+import { describe, test, expect, beforeAll, afterAll, afterEach } from "bun:test";
+import { render, screen, cleanup } from "@testing-library/react";
 import { DeviceSelector, type DeviceSelectorProps } from "./DeviceSelector";
+
+afterEach(() => {
+  cleanup();
+});
+
+// Mock AudioContext for useAudioLevel hook
+class MockAnalyserNode {
+  fftSize = 256;
+  frequencyBinCount = 128;
+  getByteFrequencyData() {}
+  disconnect() {}
+}
+
+class MockMediaStreamAudioSourceNode {
+  connect() {}
+  disconnect() {}
+}
+
+class MockAudioContext {
+  state: AudioContextState = "running";
+  createAnalyser() {
+    return new MockAnalyserNode() as unknown as AnalyserNode;
+  }
+  createMediaStreamSource() {
+    return new MockMediaStreamAudioSourceNode() as unknown as MediaStreamAudioSourceNode;
+  }
+  close() {
+    this.state = "closed";
+    return Promise.resolve();
+  }
+}
+
+const originalAudioContext = globalThis.AudioContext;
+
+beforeAll(() => {
+  globalThis.AudioContext = MockAudioContext as unknown as typeof AudioContext;
+});
+
+afterAll(() => {
+  globalThis.AudioContext = originalAudioContext;
+});
 
 describe("DeviceSelector", () => {
   const createMockDevice = (

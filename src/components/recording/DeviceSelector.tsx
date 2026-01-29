@@ -5,7 +5,7 @@
  * Related: src/hooks/useMediaStream.ts, src/components/recording/CameraPreview.tsx
  */
 
-import { Mic, Video } from "lucide-react";
+import { Video } from "lucide-react";
 import {
   Select,
   SelectContent,
@@ -13,6 +13,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { AudioLevelIndicator } from "./AudioLevelIndicator";
+import { useAudioLevel } from "@/hooks/useAudioLevel";
 
 export interface DeviceSelectorProps {
   audioDevices: MediaDeviceInfo[];
@@ -22,6 +24,8 @@ export interface DeviceSelectorProps {
   onAudioDeviceChange: (deviceId: string) => void;
   onVideoDeviceChange: (deviceId: string) => void;
   disabled?: boolean;
+  stream?: MediaStream | null;
+  isRecording?: boolean;
 }
 
 export function DeviceSelector({
@@ -32,7 +36,12 @@ export function DeviceSelector({
   onAudioDeviceChange,
   onVideoDeviceChange,
   disabled = false,
+  stream = null,
+  isRecording = false,
 }: DeviceSelectorProps) {
+  const { isActive: isAudioActive } = useAudioLevel(stream, {
+    enabled: isRecording,
+  });
   const hasDevices = audioDevices.length > 0 || videoDevices.length > 0;
 
   if (!hasDevices) {
@@ -43,7 +52,7 @@ export function DeviceSelector({
     <div className="flex flex-col gap-3">
       {audioDevices.length > 0 && (
         <div className="flex items-center gap-2">
-          <Mic className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+          <AudioLevelIndicator isActive={isAudioActive} />
           <Select
             value={selectedAudioDeviceId ?? undefined}
             onValueChange={onAudioDeviceChange}
