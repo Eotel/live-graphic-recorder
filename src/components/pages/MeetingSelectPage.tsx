@@ -5,6 +5,7 @@
  * Related: src/App.tsx, src/components/meeting/MeetingSelector.tsx
  */
 
+import { useState, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import type { MeetingInfo } from "@/types/messages";
 

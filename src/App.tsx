@@ -167,6 +167,13 @@ export function App() {
     onImage: handleImage,
   });
 
+  // Auto-connect WebSocket on mount to enable meeting list loading
+  useEffect(() => {
+    if (!isConnected) {
+      connect();
+    }
+  }, []);
+
   // Request meeting list when connected
   useEffect(() => {
     if (isConnected) {
