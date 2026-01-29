@@ -260,24 +260,31 @@ export function App() {
               className="flex-shrink-0 mb-2"
             />
           )}
-          <ResizablePanelGroup id="camera-graphics" orientation="vertical" className="flex-1 min-h-0">
+          <ResizablePanelGroup
+            id="camera-graphics"
+            orientation="vertical"
+            className="flex-1 min-h-0"
+          >
             <ResizablePanel id="camera-panel" defaultSize={35} minSize={20} maxSize={70}>
-              <CameraPreview
-                videoRef={videoRef}
-                hasPermission={hasPermission}
-                isRecording={isRecording}
-                elapsedTime={elapsedTime}
-                className="h-full"
-              />
+              <div className="h-full pb-2">
+                <CameraPreview
+                  videoRef={videoRef}
+                  hasPermission={hasPermission}
+                  isRecording={isRecording}
+                  className="h-full"
+                />
+              </div>
             </ResizablePanel>
-            <ResizableHandle withHandle />
+            <ResizableHandle />
             <ResizablePanel id="graphics-panel" defaultSize={65} minSize={30} maxSize={80}>
-              <ImageCarousel
-                images={images}
-                isGenerating={isGenerating}
-                generationPhase={generationPhase}
-                className="h-full"
-              />
+              <div className="h-full pt-2">
+                <ImageCarousel
+                  images={images}
+                  isGenerating={isGenerating}
+                  generationPhase={generationPhase}
+                  className="h-full"
+                />
+              </div>
             </ResizablePanel>
           </ResizablePanelGroup>
         </div>
@@ -289,6 +296,7 @@ export function App() {
           hasPermission={hasPermission}
           isLoading={mediaLoading}
           error={error}
+          elapsedTime={elapsedTime}
           onRequestPermission={handleRequestPermission}
           onStart={handleStart}
           onStop={handleStop}

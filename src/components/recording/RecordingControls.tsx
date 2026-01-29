@@ -15,6 +15,8 @@ interface RecordingControlsProps {
   hasPermission: boolean;
   isLoading: boolean;
   error: string | null;
+  /** Formatted elapsed time to display when recording (e.g., "02:45") */
+  elapsedTime?: string;
   onRequestPermission: () => void;
   onStart: () => void;
   onStop: () => void;
@@ -26,6 +28,7 @@ export function RecordingControls({
   hasPermission,
   isLoading,
   error,
+  elapsedTime,
   onRequestPermission,
   onStart,
   onStop,
@@ -45,10 +48,17 @@ export function RecordingControls({
           Grant Camera & Mic Access
         </Button>
       ) : isRecording ? (
-        <Button onClick={onStop} variant="destructive" size="lg" className="gap-2">
-          <Square className="size-4 fill-current" />
-          Stop Recording
-        </Button>
+        <>
+          <Button onClick={onStop} variant="destructive" size="lg" className="gap-2">
+            <Square className="size-4 fill-current" />
+            Stop Recording
+          </Button>
+          {elapsedTime && (
+            <span className="font-mono tabular-nums text-sm text-muted-foreground">
+              {elapsedTime}
+            </span>
+          )}
+        </>
       ) : (
         <Button
           onClick={onStart}

@@ -22,7 +22,7 @@ export function CameraPreview({
   className,
 }: CameraPreviewProps) {
   return (
-    <div className={cn("relative aspect-video bg-muted rounded-lg overflow-hidden", className)}>
+    <div className={cn("relative h-full bg-muted rounded-lg overflow-hidden", className)}>
       {hasPermission ? (
         <>
           <video ref={videoRef} autoPlay playsInline muted className="w-full h-full object-cover" />
