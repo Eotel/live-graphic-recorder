@@ -23,7 +23,8 @@ export interface WebSocketActions {
 }
 
 export interface WebSocketCallbacks {
-  onTranscript?: (data: { text: string; isFinal: boolean; timestamp: number }) => void;
+  onTranscript?: (data: { text: string; isFinal: boolean; timestamp: number; speaker?: number; startTime?: number }) => void;
+  onUtteranceEnd?: (timestamp: number) => void;
   onAnalysis?: (data: {
     summary: string[];
     topics: string[];
@@ -101,6 +102,10 @@ export function useWebSocket(
 
           case "generation:status":
             setGenerationPhase(message.data.phase);
+            break;
+
+          case "utterance:end":
+            callbacksRef.current.onUtteranceEnd?.(message.data.timestamp);
             break;
 
           case "error":

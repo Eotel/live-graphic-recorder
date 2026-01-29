@@ -14,8 +14,30 @@ import {
 import { DEEPGRAM_CONFIG } from "@/config/constants";
 import type { TranscriptSegment } from "@/types/messages";
 
+interface DeepgramWord {
+  word: string;
+  start: number;
+  end: number;
+  confidence: number;
+  speaker?: number;
+}
+
+/**
+ * Extracts speaker info from words array.
+ * Returns speaker ID and start time from the first word with speaker info.
+ */
+function extractSpeakerInfo(words?: DeepgramWord[]): { speaker?: number; startTime?: number } {
+  if (!words?.length) return {};
+  const firstWord = words[0];
+  return {
+    speaker: firstWord?.speaker,
+    startTime: firstWord?.start,
+  };
+}
+
 export interface DeepgramServiceEvents {
   onTranscript: (segment: TranscriptSegment) => void;
+  onUtteranceEnd: (timestamp: number) => void;
   onError: (error: Error) => void;
   onClose: () => void;
 }
@@ -84,12 +106,19 @@ export function createDeepgramService(events: DeepgramServiceEvents): DeepgramSe
       conn.on(LiveTranscriptionEvents.Transcript, (data) => {
         const transcript = data.channel?.alternatives?.[0];
         if (transcript?.transcript) {
+          const { speaker, startTime } = extractSpeakerInfo(transcript.words as DeepgramWord[]);
           events.onTranscript({
             text: transcript.transcript,
             isFinal: data.is_final ?? false,
             timestamp: Date.now(),
+            speaker,
+            startTime,
           });
         }
+      });
+
+      conn.on(LiveTranscriptionEvents.UtteranceEnd, () => {
+        events.onUtteranceEnd(Date.now());
       });
 
       conn.on(LiveTranscriptionEvents.Error, (error) => {

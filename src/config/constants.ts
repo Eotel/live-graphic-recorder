@@ -32,6 +32,7 @@ export const DEEPGRAM_CONFIG = {
   utterance_end_ms: 1000,
   vad_events: true,
   smart_format: true,
+  diarize: true,
   // Note: Do not specify encoding when sending WebM container from browser
   // Deepgram will auto-detect the format
 } as const;

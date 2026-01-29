@@ -21,6 +21,7 @@ import {
   startSession,
   stopSession,
   addTranscript,
+  markUtteranceEnd,
   markAnalysisComplete,
   addImage,
   addCameraFrame,
@@ -187,11 +188,24 @@ async function handleSessionStart(ws: ServerWebSocket<WSContext>, ctx: WSContext
         ctx.session = addTranscript(ctx.session, segment);
         send(ws, {
           type: "transcript",
-          data: segment,
+          data: {
+            text: segment.text,
+            isFinal: segment.isFinal,
+            timestamp: segment.timestamp,
+            speaker: segment.speaker,
+            startTime: segment.startTime,
+          },
         });
 
         // Check if we should trigger analysis
         ctx.analysis?.checkAndTrigger(ctx.session);
+      },
+      onUtteranceEnd(timestamp: number) {
+        ctx.session = markUtteranceEnd(ctx.session);
+        send(ws, {
+          type: "utterance:end",
+          data: { timestamp },
+        });
       },
       onError(error: Error) {
         console.error("[Deepgram] Error:", error);

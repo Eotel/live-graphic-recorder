@@ -35,10 +35,10 @@ describe("SummaryPanel", () => {
       ).toBeDefined();
     });
 
-    test("displays final segments with default text color", () => {
+    test("displays final segments grouped by utterance", () => {
       const segments: TranscriptSegment[] = [
-        { text: "Hello world", timestamp: 1000, isFinal: true },
-        { text: "How are you", timestamp: 2000, isFinal: true },
+        { text: "Hello world", timestamp: 1000, isFinal: true, speaker: 0, startTime: 0 },
+        { text: "How are you", timestamp: 2000, isFinal: true, speaker: 0, startTime: 1 },
       ];
 
       render(
@@ -49,14 +49,8 @@ describe("SummaryPanel", () => {
         />
       );
 
-      // Final segments should be rendered without muted class
-      const helloSpan = screen.getByText("Hello world");
-      const howSpan = screen.getByText("How are you");
-
-      expect(helloSpan).toBeDefined();
-      expect(howSpan).toBeDefined();
-      expect(helloSpan.className).not.toContain("text-muted-foreground");
-      expect(howSpan.className).not.toContain("text-muted-foreground");
+      // Segments from same speaker without utterance end are grouped together
+      expect(screen.getByText("Hello world How are you")).toBeDefined();
     });
 
     test("displays interim text with muted styling", () => {
@@ -68,14 +62,15 @@ describe("SummaryPanel", () => {
         />
       );
 
+      // In the new UI, interim text is part of TranscriptLine with italic styling
       const interimSpan = screen.getByText("typing in progress");
       expect(interimSpan).toBeDefined();
-      expect(interimSpan.className).toContain("text-muted-foreground/50");
+      expect(interimSpan.className).toContain("italic");
     });
 
     test("displays both final segments and interim text together", () => {
       const segments: TranscriptSegment[] = [
-        { text: "Confirmed text", timestamp: 1000, isFinal: true },
+        { text: "Confirmed text", timestamp: 1000, isFinal: true, speaker: 0, startTime: 0, isUtteranceEnd: true },
       ];
 
       render(
@@ -83,29 +78,68 @@ describe("SummaryPanel", () => {
           summaryPages={[]}
           transcriptSegments={segments}
           interimText="still typing"
+          interimSpeaker={0}
+          interimStartTime={1}
         />
       );
 
-      const finalSpan = screen.getByText("Confirmed text");
-      const interimSpan = screen.getByText("still typing");
-
-      expect(finalSpan).toBeDefined();
-      expect(interimSpan).toBeDefined();
-      expect(finalSpan.className).not.toContain("text-muted-foreground");
-      expect(interimSpan.className).toContain("text-muted-foreground/50");
+      // Since the first segment has isUtteranceEnd, they will be separate
+      expect(screen.getByText("Confirmed text")).toBeDefined();
+      expect(screen.getByText("still typing")).toBeDefined();
     });
 
-    test("interim text has transition class for smooth color change", () => {
+    test("groups segments until utterance end", () => {
+      const segments: TranscriptSegment[] = [
+        { text: "First part", timestamp: 1000, isFinal: true, speaker: 0, startTime: 0 },
+        { text: "second part", timestamp: 2000, isFinal: true, speaker: 0, startTime: 1, isUtteranceEnd: true },
+        { text: "New utterance", timestamp: 3000, isFinal: true, speaker: 0, startTime: 2 },
+      ];
+
       render(
         <SummaryPanel
           summaryPages={[]}
-          transcriptSegments={[]}
-          interimText="transitioning"
+          transcriptSegments={segments}
+          interimText={null}
         />
       );
 
-      const interimSpan = screen.getByText("transitioning");
-      expect(interimSpan.className).toContain("transition-colors");
+      // First two segments should be grouped, third is separate
+      expect(screen.getByText("First part second part")).toBeDefined();
+      expect(screen.getByText("New utterance")).toBeDefined();
+    });
+
+    test("splits on speaker change", () => {
+      const segments: TranscriptSegment[] = [
+        { text: "Speaker A says", timestamp: 1000, isFinal: true, speaker: 0, startTime: 0 },
+        { text: "Speaker B responds", timestamp: 2000, isFinal: true, speaker: 1, startTime: 1 },
+      ];
+
+      render(
+        <SummaryPanel
+          summaryPages={[]}
+          transcriptSegments={segments}
+          interimText={null}
+        />
+      );
+
+      expect(screen.getByText("Speaker A says")).toBeDefined();
+      expect(screen.getByText("Speaker B responds")).toBeDefined();
+    });
+
+    test("displays speaker labels when speaker info is present", () => {
+      const segments: TranscriptSegment[] = [
+        { text: "Hello", timestamp: 1000, isFinal: true, speaker: 0, startTime: 0 },
+      ];
+
+      render(
+        <SummaryPanel
+          summaryPages={[]}
+          transcriptSegments={segments}
+          interimText={null}
+        />
+      );
+
+      expect(screen.getByText("Speaker 1:")).toBeDefined();
     });
   });
 

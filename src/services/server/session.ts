@@ -61,6 +61,34 @@ export function addTranscript(session: SessionState, segment: TranscriptSegment)
   };
 }
 
+export function markUtteranceEnd(session: SessionState): SessionState {
+  if (session.transcript.length === 0) {
+    return session;
+  }
+
+  // Find the last final segment and mark it as utterance end
+  const transcriptCopy = [...session.transcript];
+  for (let i = transcriptCopy.length - 1; i >= 0; i--) {
+    const segment = transcriptCopy[i];
+    if (segment && segment.isFinal) {
+      transcriptCopy[i] = {
+        text: segment.text,
+        timestamp: segment.timestamp,
+        isFinal: segment.isFinal,
+        speaker: segment.speaker,
+        startTime: segment.startTime,
+        isUtteranceEnd: true,
+      };
+      break;
+    }
+  }
+
+  return {
+    ...session,
+    transcript: transcriptCopy,
+  };
+}
+
 export function getFullTranscript(session: SessionState): string {
   return session.transcript
     .filter((segment) => segment.isFinal)

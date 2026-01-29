@@ -9,6 +9,11 @@ import { useState, useCallback, useEffect, useRef } from "react";
 import "./index.css";
 
 import { MainLayout } from "@/components/layout/MainLayout";
+import {
+  ResizablePanelGroup,
+  ResizablePanel,
+  ResizableHandle,
+} from "@/components/ui/resizable";
 import { RecordingControls } from "@/components/recording/RecordingControls";
 import { CameraPreview } from "@/components/recording/CameraPreview";
 import { DeviceSelector } from "@/components/recording/DeviceSelector";
@@ -30,6 +35,8 @@ interface TranscriptData {
   text: string;
   isFinal: boolean;
   timestamp: number;
+  speaker?: number;
+  startTime?: number;
 }
 
 interface AnalysisData {
@@ -66,6 +73,8 @@ export function App() {
   // Accumulated data
   const [transcriptSegments, setTranscriptSegments] = useState<TranscriptSegment[]>([]);
   const [interimText, setInterimText] = useState<string | null>(null);
+  const [interimSpeaker, setInterimSpeaker] = useState<number | undefined>(undefined);
+  const [interimStartTime, setInterimStartTime] = useState<number | undefined>(undefined);
   const [summaryPages, setSummaryPages] = useState<SummaryPage[]>([]);
   const [topics, setTopics] = useState<string[]>([]);
   const [tags, setTags] = useState<string[]>([]);
@@ -78,12 +87,42 @@ export function App() {
     if (data.isFinal) {
       setTranscriptSegments((prev) => [
         ...prev,
-        { text: data.text, timestamp: data.timestamp, isFinal: true },
+        {
+          text: data.text,
+          timestamp: data.timestamp,
+          isFinal: true,
+          speaker: data.speaker,
+          startTime: data.startTime,
+        },
       ]);
       setInterimText(null);
+      setInterimSpeaker(undefined);
+      setInterimStartTime(undefined);
     } else {
       setInterimText(data.text);
+      setInterimSpeaker(data.speaker);
+      setInterimStartTime(data.startTime);
     }
+  }, []);
+
+  const handleUtteranceEnd = useCallback(() => {
+    // Mark the last segment as utterance end
+    setTranscriptSegments((prev) => {
+      if (prev.length === 0) return prev;
+      const lastSegment = prev[prev.length - 1];
+      if (!lastSegment) return prev;
+      return [
+        ...prev.slice(0, -1),
+        {
+          text: lastSegment.text,
+          timestamp: lastSegment.timestamp,
+          isFinal: lastSegment.isFinal,
+          speaker: lastSegment.speaker,
+          startTime: lastSegment.startTime,
+          isUtteranceEnd: true,
+        },
+      ];
+    });
   }, []);
 
   const handleAnalysis = useCallback((data: AnalysisData) => {
@@ -109,6 +148,7 @@ export function App() {
     sendAudio,
   } = useWebSocket({
     onTranscript: handleTranscript,
+    onUtteranceEnd: handleUtteranceEnd,
     onAnalysis: handleAnalysis,
     onImage: handleImage,
   });
@@ -196,6 +236,8 @@ export function App() {
             summaryPages={summaryPages}
             transcriptSegments={transcriptSegments}
             interimText={interimText}
+            interimSpeaker={interimSpeaker}
+            interimStartTime={interimStartTime}
             isAnalyzing={isAnalyzing}
             className="flex-1 min-h-0"
           />
@@ -203,7 +245,7 @@ export function App() {
         </div>
       }
       rightPanel={
-        <div className="h-full flex flex-col space-y-3">
+        <div className="h-full flex flex-col">
           {hasPermission && (
             <DeviceSelector
               audioDevices={audioDevices}
@@ -215,22 +257,29 @@ export function App() {
               disabled={isRecording}
               stream={stream}
               isRecording={isRecording}
-              className="flex-shrink-0"
+              className="flex-shrink-0 mb-2"
             />
           )}
-          <CameraPreview
-            videoRef={videoRef}
-            hasPermission={hasPermission}
-            isRecording={isRecording}
-            elapsedTime={elapsedTime}
-            className="flex-shrink-0"
-          />
-          <ImageCarousel
-            images={images}
-            isGenerating={isGenerating}
-            generationPhase={generationPhase}
-            className="flex-1 min-h-0"
-          />
+          <ResizablePanelGroup id="camera-graphics" orientation="vertical" className="flex-1 min-h-0">
+            <ResizablePanel id="camera-panel" defaultSize={35} minSize={20} maxSize={70}>
+              <CameraPreview
+                videoRef={videoRef}
+                hasPermission={hasPermission}
+                isRecording={isRecording}
+                elapsedTime={elapsedTime}
+                className="h-full"
+              />
+            </ResizablePanel>
+            <ResizableHandle withHandle />
+            <ResizablePanel id="graphics-panel" defaultSize={65} minSize={30} maxSize={80}>
+              <ImageCarousel
+                images={images}
+                isGenerating={isGenerating}
+                generationPhase={generationPhase}
+                className="h-full"
+              />
+            </ResizablePanel>
+          </ResizablePanelGroup>
         </div>
       }
       footer={

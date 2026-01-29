@@ -5,18 +5,22 @@
  * Related: src/hooks/useAutoScroll.ts, src/types/messages.ts
  */
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { useAutoScroll } from "@/hooks/useAutoScroll";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import type { TranscriptSegment, SummaryPage } from "@/types/messages";
 import { SummarySkeleton } from "./SummarySkeleton";
+import { TranscriptLine } from "./TranscriptLine";
+import { groupByUtterance } from "@/lib/transcript-utils";
 
 interface SummaryPanelProps {
   summaryPages: SummaryPage[];
   transcriptSegments: TranscriptSegment[];
   interimText: string | null;
+  interimSpeaker?: number;
+  interimStartTime?: number;
   isAnalyzing?: boolean;
   className?: string;
 }
@@ -25,6 +29,8 @@ export function SummaryPanel({
   summaryPages,
   transcriptSegments,
   interimText,
+  interimSpeaker,
+  interimStartTime,
   isAnalyzing = false,
   className,
 }: SummaryPanelProps) {
@@ -38,6 +44,27 @@ export function SummaryPanel({
       setCurrentIndex(summaryPages.length - 1);
     }
   }, [summaryPages.length]);
+
+  // Group transcript segments by utterance
+  const segmentsWithInterim = useMemo(() => {
+    if (!interimText) return transcriptSegments;
+    // Add interim text as a non-final segment for grouping
+    return [
+      ...transcriptSegments,
+      {
+        text: interimText,
+        timestamp: Date.now(),
+        isFinal: false,
+        speaker: interimSpeaker,
+        startTime: interimStartTime,
+      },
+    ];
+  }, [transcriptSegments, interimText, interimSpeaker, interimStartTime]);
+
+  const utteranceGroups = useMemo(
+    () => groupByUtterance(segmentsWithInterim),
+    [segmentsWithInterim]
+  );
 
   const hasPages = summaryPages.length > 0;
   const hasMultiplePages = summaryPages.length > 1;
@@ -108,29 +135,24 @@ export function SummaryPanel({
         <h3 className="flex-shrink-0 text-sm font-semibold text-muted-foreground mb-2">Live Transcript</h3>
         <div
           ref={containerRef}
-          className="flex-1 min-h-0 overflow-y-auto rounded-md bg-muted/30 p-2 text-sm leading-relaxed"
+          className="flex-1 min-h-0 overflow-y-auto rounded-md bg-muted/30 p-2"
         >
-          {transcriptSegments.length === 0 && !interimText ? (
-            <span className="text-muted-foreground italic">
+          {utteranceGroups.length === 0 ? (
+            <span className="text-muted-foreground italic text-sm">
               Start recording to see the transcript...
             </span>
           ) : (
-            <>
-              {/* Final segments - full opacity */}
-              {transcriptSegments.map((segment, index) => (
-                <span key={`final-${segment.timestamp}-${index}`}>
-                  {index > 0 && " "}
-                  {segment.text}
-                </span>
+            <div className="space-y-2">
+              {utteranceGroups.map((group, index) => (
+                <TranscriptLine
+                  key={`utterance-${index}`}
+                  text={group.text}
+                  speaker={group.speaker}
+                  startTime={group.startTime}
+                  isInterim={group.isInterim}
+                />
               ))}
-              {/* Interim text - muted styling */}
-              {interimText && (
-                <span className="text-muted-foreground/50 transition-colors duration-200">
-                  {transcriptSegments.length > 0 && " "}
-                  {interimText}
-                </span>
-              )}
-            </>
+            </div>
           )}
         </div>
       </div>

@@ -39,6 +39,8 @@ export interface TranscriptMessage {
     text: string;
     isFinal: boolean;
     timestamp: number;
+    speaker?: number;
+    startTime?: number;
   };
 }
 
@@ -95,13 +97,21 @@ export interface GenerationStatusMessage {
   };
 }
 
+export interface UtteranceEndMessage {
+  type: "utterance:end";
+  data: {
+    timestamp: number;
+  };
+}
+
 export type ServerMessage =
   | TranscriptMessage
   | AnalysisMessage
   | ImageMessage
   | SessionStatusMessage
   | ErrorMessage
-  | GenerationStatusMessage;
+  | GenerationStatusMessage
+  | UtteranceEndMessage;
 
 // ============================================================================
 // Session State Types
@@ -111,6 +121,9 @@ export interface TranscriptSegment {
   text: string;
   timestamp: number;
   isFinal: boolean;
+  speaker?: number;        // Speaker ID from diarization (0, 1, 2, ...)
+  startTime?: number;      // Audio start time in seconds
+  isUtteranceEnd?: boolean; // Marks end of utterance (for line breaks)
 }
 
 export interface SummaryPage {
