@@ -62,16 +62,93 @@ export function MeetingSelectPage({
   onRefresh,
 }: MeetingSelectPageProps) {
   const meetingList = meetings ?? [];
+  const [showTitleDialog, setShowTitleDialog] = useState(false);
+  const [titleInput, setTitleInput] = useState("");
+  const titleInputRef = useRef<HTMLInputElement>(null);
+
+  // Focus input when dialog opens
+  useEffect(() => {
+    if (showTitleDialog && titleInputRef.current) {
+      titleInputRef.current.focus();
+    }
+  }, [showTitleDialog]);
+
+  const handleNewMeetingClick = () => {
+    setTitleInput("");
+    setShowTitleDialog(true);
+  };
+
+  const handleConfirmNewMeeting = () => {
+    const title = titleInput.trim() || undefined;
+    setShowTitleDialog(false);
+    setTitleInput("");
+    onNewMeeting(title);
+  };
+
+  const handleCancelDialog = () => {
+    setShowTitleDialog(false);
+    setTitleInput("");
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter") {
+      handleConfirmNewMeeting();
+    } else if (e.key === "Escape") {
+      handleCancelDialog();
+    }
+  };
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center bg-background p-6">
+      {/* Title Dialog */}
+      {showTitleDialog && (
+        <div
+          className="fixed inset-0 bg-black/50 flex items-center justify-center z-50"
+          onClick={handleCancelDialog}
+          onKeyDown={(e) => e.key === "Escape" && handleCancelDialog()}
+        >
+          <div
+            className="bg-card rounded-lg p-6 w-full max-w-sm mx-4 shadow-lg"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 className="text-lg font-semibold text-foreground mb-4">New Meeting</h2>
+            <input
+              ref={titleInputRef}
+              type="text"
+              value={titleInput}
+              onChange={(e) => setTitleInput(e.target.value)}
+              onKeyDown={handleKeyDown}
+              placeholder="Meeting title (optional)"
+              className="w-full px-3 py-2 rounded-md border border-input bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+            />
+            <div className="flex gap-3 mt-4">
+              <Button
+                variant="outline"
+                onClick={handleCancelDialog}
+                type="button"
+                className="flex-1"
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={handleConfirmNewMeeting}
+                type="button"
+                className="flex-1"
+              >
+                Start
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="w-full max-w-md flex flex-col gap-8">
         {/* App Title */}
         <h1 className="text-3xl font-bold text-center text-foreground">Live Graphic Recorder</h1>
 
         {/* New Meeting Button */}
         <Button
-          onClick={() => onNewMeeting()}
+          onClick={handleNewMeetingClick}
           size="lg"
           type="button"
           className="w-full py-6 text-lg"
