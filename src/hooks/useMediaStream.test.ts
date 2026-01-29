@@ -3,34 +3,35 @@ import { renderHook, act, waitFor } from "@testing-library/react";
 import { useMediaStream } from "./useMediaStream";
 
 describe("useMediaStream", () => {
-  const mockMediaStream = {
-    getTracks: () => [
-      {
-        stop: mock(() => {}),
-        kind: "audio",
-        getSettings: () => ({ deviceId: "audio-1" }),
-      },
-      {
-        stop: mock(() => {}),
-        kind: "video",
-        getSettings: () => ({ deviceId: "video-1" }),
-        onended: null as (() => void) | null,
-      },
-    ],
-    getAudioTracks: () => [
-      {
-        stop: mock(() => {}),
-        getSettings: () => ({ deviceId: "audio-1" }),
-      },
-    ],
-    getVideoTracks: () => [
-      {
-        stop: mock(() => {}),
-        getSettings: () => ({ deviceId: "video-1" }),
-        onended: null as (() => void) | null,
-      },
-    ],
-  } as unknown as MediaStream;
+  const createMockMediaStream = () =>
+    ({
+      getTracks: () => [
+        {
+          stop: mock(() => {}),
+          kind: "audio",
+          getSettings: () => ({ deviceId: "audio-1" }),
+        },
+        {
+          stop: mock(() => {}),
+          kind: "video",
+          getSettings: () => ({ deviceId: "video-1" }),
+          onended: null as (() => void) | null,
+        },
+      ],
+      getAudioTracks: () => [
+        {
+          stop: mock(() => {}),
+          getSettings: () => ({ deviceId: "audio-1" }),
+        },
+      ],
+      getVideoTracks: () => [
+        {
+          stop: mock(() => {}),
+          getSettings: () => ({ deviceId: "video-1" }),
+          onended: null as (() => void) | null,
+        },
+      ],
+    }) as unknown as MediaStream;
 
   const mockDevices = [
     { kind: "audioinput", deviceId: "audio-1", label: "Mic 1" },
@@ -38,12 +39,31 @@ describe("useMediaStream", () => {
   ] as MediaDeviceInfo[];
 
   beforeEach(() => {
-    // Mock navigator.mediaDevices
+    // Mock MediaStream constructor
+    (globalThis as unknown as { MediaStream: unknown }).MediaStream = class MockMediaStream {
+      private tracks: unknown[];
+      constructor(tracks?: unknown[]) {
+        this.tracks = tracks ?? [];
+      }
+      getTracks() {
+        return this.tracks;
+      }
+      getAudioTracks() {
+        return this.tracks.filter((t: unknown) => (t as { kind?: string }).kind === "audio");
+      }
+      getVideoTracks() {
+        return this.tracks.filter((t: unknown) => (t as { kind?: string }).kind === "video");
+      }
+    };
+
+    // Mock navigator.mediaDevices - create fresh mock streams for each test
     Object.defineProperty(navigator, "mediaDevices", {
       value: {
-        getUserMedia: mock(async () => mockMediaStream),
-        getDisplayMedia: mock(async () => mockMediaStream),
+        getUserMedia: mock(async () => createMockMediaStream()),
+        getDisplayMedia: mock(async () => createMockMediaStream()),
         enumerateDevices: mock(async () => mockDevices),
+        addEventListener: mock(() => {}),
+        removeEventListener: mock(() => {}),
       },
       writable: true,
       configurable: true,
@@ -107,7 +127,7 @@ describe("useMediaStream", () => {
       expect(result.current.sourceType).toBe("camera");
     });
 
-    test("resets hasPermission when switching source type", async () => {
+    test("preserves hasPermission when switching source type", async () => {
       const { result } = renderHook(() => useMediaStream());
 
       // Request permission first
@@ -122,7 +142,9 @@ describe("useMediaStream", () => {
         result.current.switchSourceType("screen");
       });
 
-      expect(result.current.hasPermission).toBe(false);
+      // Permission should be preserved, but stream should be released
+      expect(result.current.hasPermission).toBe(true);
+      expect(result.current.stream).toBeNull();
     });
 
     test("stops existing stream when switching source type", async () => {

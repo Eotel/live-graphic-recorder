@@ -227,7 +227,11 @@ export function useMediaStream(): MediaStreamState & MediaStreamActions {
     });
   }, []);
 
-  const stopStream = useCallback(() => {
+  /**
+   * Release streams without resetting permission state.
+   * Used when switching source types to preserve the permission flag.
+   */
+  const releaseStreams = useCallback(() => {
     // Invalidate in-flight acquire/switch operations.
     opIdRef.current += 1;
     videoSwitchOpIdRef.current += 1;
@@ -246,9 +250,16 @@ export function useMediaStream(): MediaStreamState & MediaStreamActions {
     setStream(null);
     setAudioStream(null);
     setVideoStream(null);
-    setHasPermission(false);
+    // NOTE: Does NOT reset hasPermission
     attachVideo(null);
   }, [attachVideo]);
+
+  const stopStream = useCallback(() => {
+    releaseStreams();
+    if (isMountedRef.current) {
+      setHasPermission(false);
+    }
+  }, [releaseStreams]);
 
   const applyStream = useCallback(
     (nextStream: MediaStream, nextSourceType: MediaSourceType) => {
@@ -420,13 +431,13 @@ export function useMediaStream(): MediaStreamState & MediaStreamActions {
 
       // Record whether we had permission before switching
       shouldAutoRequestRef.current = hasPermission;
-      stopStream();
+      releaseStreams(); // Use releaseStreams to preserve hasPermission state
       setSourceType(type);
       if (isMountedRef.current) {
         setError(null);
       }
     },
-    [sourceType, stopStream, hasPermission],
+    [sourceType, releaseStreams, hasPermission],
   );
 
   /**
