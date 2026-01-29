@@ -87,6 +87,8 @@ export function useMediaStream(): MediaStreamState & MediaStreamActions {
   const streamInstanceIdRef = useRef(0);
   const opIdRef = useRef(0);
   const isMountedRef = useRef(true);
+  // Track if we should auto-request permission after source type change
+  const shouldAutoRequestRef = useRef(false);
 
   const attachVideo = useCallback((next: MediaStream | null) => {
     if (!videoRef.current) return;
@@ -353,17 +355,20 @@ export function useMediaStream(): MediaStreamState & MediaStreamActions {
     (type: MediaSourceType) => {
       if (type === sourceType) return;
 
+      // Record whether we had permission before switching
+      shouldAutoRequestRef.current = hasPermission;
       stopStream();
       setSourceType(type);
       if (isMountedRef.current) {
         setError(null);
       }
     },
-    [sourceType, stopStream],
+    [sourceType, stopStream, hasPermission],
   );
 
-  // Cleanup on unmount
+  // Track mount state for async operations
   useEffect(() => {
+    isMountedRef.current = true;
     return () => {
       isMountedRef.current = false;
       opIdRef.current += 1;
@@ -371,6 +376,14 @@ export function useMediaStream(): MediaStreamState & MediaStreamActions {
       streamRef.current = null;
     };
   }, []);
+
+  // Auto-request permission after source type change
+  useEffect(() => {
+    if (shouldAutoRequestRef.current) {
+      shouldAutoRequestRef.current = false;
+      void requestPermission();
+    }
+  }, [sourceType, requestPermission]);
 
   // Ensure the MediaStream is attached once the <video> element actually mounts.
   useEffect(() => {
