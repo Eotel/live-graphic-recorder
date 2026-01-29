@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/select";
 import { AudioLevelIndicator } from "./AudioLevelIndicator";
 import { useAudioLevel } from "@/hooks/useAudioLevel";
+import { cn } from "@/lib/utils";
 
 export interface DeviceSelectorProps {
   audioDevices: MediaDeviceInfo[];
@@ -26,6 +27,7 @@ export interface DeviceSelectorProps {
   disabled?: boolean;
   stream?: MediaStream | null;
   isRecording?: boolean;
+  className?: string;
 }
 
 export function DeviceSelector({
@@ -38,6 +40,7 @@ export function DeviceSelector({
   disabled = false,
   stream = null,
   isRecording = false,
+  className,
 }: DeviceSelectorProps) {
   const { isActive: isAudioActive } = useAudioLevel(stream, {
     enabled: isRecording,
@@ -49,7 +52,7 @@ export function DeviceSelector({
   }
 
   return (
-    <div className="flex flex-col gap-3">
+    <div className={cn("flex flex-col gap-3", className)}>
       {audioDevices.length > 0 && (
         <div className="flex items-center gap-2">
           <AudioLevelIndicator isActive={isAudioActive} />
