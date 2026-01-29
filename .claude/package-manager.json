@@ -1,0 +1,8 @@
+{
+  "packageManager": "bun",
+  "tools": {
+    "lint": "oxlint",
+    "format": "oxfmt",
+    "build": "tsgo"
+  }
+}
