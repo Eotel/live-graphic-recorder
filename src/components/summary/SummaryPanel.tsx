@@ -63,7 +63,7 @@ export function SummaryPanel({
               ))}
               {/* Interim text - muted styling */}
               {interimText && (
-                <span className="text-muted-foreground transition-colors duration-200">
+                <span className="text-muted-foreground/50 transition-colors duration-200">
                   {transcriptSegments.length > 0 && " "}
                   {interimText}
                 </span>

@@ -69,7 +69,7 @@ describe("SummaryPanel", () => {
 
       const interimSpan = screen.getByText("typing in progress");
       expect(interimSpan).toBeDefined();
-      expect(interimSpan.className).toContain("text-muted-foreground");
+      expect(interimSpan.className).toContain("text-muted-foreground/50");
     });
 
     test("displays both final segments and interim text together", () => {
@@ -91,7 +91,7 @@ describe("SummaryPanel", () => {
       expect(finalSpan).toBeDefined();
       expect(interimSpan).toBeDefined();
       expect(finalSpan.className).not.toContain("text-muted-foreground");
-      expect(interimSpan.className).toContain("text-muted-foreground");
+      expect(interimSpan.className).toContain("text-muted-foreground/50");
     });
 
     test("interim text has transition class for smooth color change", () => {
