@@ -54,6 +54,7 @@ export const GEMINI_CONFIG = {
   model: "gemini-2.5-flash-image",
   maxRetries: 3,
   initialBackoffMs: 30000,
+  aspectRatio: "16:9",
 } as const;
 
 // ============================================================================

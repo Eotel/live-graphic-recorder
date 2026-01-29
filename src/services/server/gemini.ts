@@ -81,6 +81,11 @@ export function createGeminiService(): GeminiService {
     const response = await ai.models.generateContent({
       model: GEMINI_CONFIG.model,
       contents: fullPrompt,
+      config: {
+        imageConfig: {
+          aspectRatio: GEMINI_CONFIG.aspectRatio,
+        },
+      },
     });
 
     const candidate = response.candidates?.[0];
