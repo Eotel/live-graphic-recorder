@@ -24,7 +24,8 @@ import { TopicIndicator } from "@/components/summary/TopicIndicator";
 import { FlowMeter } from "@/components/metrics/FlowMeter";
 import { HeatMeter } from "@/components/metrics/HeatMeter";
 import { ImageCarousel } from "@/components/graphics/ImageCarousel";
-import { MeetingSelector } from "@/components/meeting/MeetingSelector";
+import { MeetingSelectPage } from "@/components/pages/MeetingSelectPage";
+import { MeetingHeader } from "@/components/navigation/MeetingHeader";
 
 import { useMediaStream } from "@/hooks/useMediaStream";
 import { useWebSocket } from "@/hooks/useWebSocket";
@@ -55,7 +56,12 @@ interface ImageData {
   timestamp: number;
 }
 
+type View = "select" | "recording";
+
 export function App() {
+  // View state for routing
+  const [view, setView] = useState<View>("select");
+
   // Media stream state
   const {
     stream,
@@ -168,26 +174,26 @@ export function App() {
     }
   }, [isConnected, requestMeetingList]);
 
-  // Meeting handlers
+  // Meeting handlers for MeetingSelectPage
   const handleNewMeeting = useCallback(
     (title?: string) => {
       if (!isConnected) {
         connect();
         // Meeting will be started after connection (handled via effect)
-        return;
       }
       startMeeting(title);
+      setView("recording");
     },
     [isConnected, connect, startMeeting],
   );
 
-  const handleJoinMeeting = useCallback(
+  const handleSelectMeeting = useCallback(
     (meetingId: string) => {
       if (!isConnected) {
         connect();
-        return;
       }
       startMeeting(undefined, meetingId);
+      setView("recording");
     },
     [isConnected, connect, startMeeting],
   );
@@ -286,14 +292,40 @@ export function App() {
     stopRecording();
   };
 
-  // Determine if recording is allowed (meeting must be active)
-  const canStartRecording = meeting.meetingId !== null && hasPermission && stream;
+  // Back navigation handler
+  const handleBack = useCallback(() => {
+    if (isRecording) {
+      stopRecording();
+    }
+    setView("select");
+  }, [isRecording, stopRecording]);
 
+  // Show meeting selection page
+  if (view === "select") {
+    return (
+      <MeetingSelectPage
+        meetings={meeting.meetingList}
+        isLoading={!isConnected}
+        onNewMeeting={handleNewMeeting}
+        onSelectMeeting={handleSelectMeeting}
+        onRefresh={handleRefreshMeetings}
+      />
+    );
+  }
+
+  // Show recording page (3-panel layout)
   return (
     <MainLayout
       header={
         <div className="flex items-center justify-between flex-wrap gap-4">
-          <TopicIndicator topics={topics} />
+          <div className="flex items-center gap-4">
+            <MeetingHeader
+              title={meeting.meetingTitle}
+              onBack={handleBack}
+              isRecording={isRecording}
+            />
+            <TopicIndicator topics={topics} />
+          </div>
           <div className="flex items-center gap-6">
             <FlowMeter value={flow} />
             <HeatMeter value={heat} />
@@ -317,21 +349,11 @@ export function App() {
       rightPanel={
         <div className="h-full flex flex-col">
           <div className="flex-shrink-0 mx-4 mt-4 mb-2 flex flex-col gap-3">
-            <MeetingSelector
-              meetings={meeting.meetingList}
-              activeMeetingId={meeting.meetingId}
-              onNewMeeting={handleNewMeeting}
-              onJoinMeeting={handleJoinMeeting}
-              onRefresh={handleRefreshMeetings}
+            <MediaSourceToggle
+              value={sourceType}
+              onChange={switchSourceType}
               disabled={isRecording}
             />
-            <div className="border-t border-border pt-3">
-              <MediaSourceToggle
-                value={sourceType}
-                onChange={switchSourceType}
-                disabled={isRecording}
-              />
-            </div>
             {hasPermission && (
               <DeviceSelector
                 audioDevices={audioDevices}
