@@ -5,12 +5,13 @@
  * Related: src/components/layout/MainLayout.tsx, src/hooks/*
  */
 
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import "./index.css";
 
 import { MainLayout } from "@/components/layout/MainLayout";
 import { RecordingControls } from "@/components/recording/RecordingControls";
 import { CameraPreview } from "@/components/recording/CameraPreview";
+import { DeviceSelector } from "@/components/recording/DeviceSelector";
 import { SummaryPanel } from "@/components/summary/SummaryPanel";
 import { TagList } from "@/components/summary/TagList";
 import { TopicIndicator } from "@/components/summary/TopicIndicator";
@@ -51,6 +52,12 @@ export function App() {
     isLoading: mediaLoading,
     hasPermission,
     requestPermission,
+    audioDevices,
+    videoDevices,
+    selectedAudioDeviceId,
+    selectedVideoDeviceId,
+    setAudioDevice,
+    setVideoDevice,
   } = useMediaStream();
 
   // Accumulated data
@@ -108,27 +115,32 @@ export function App() {
     onSessionStop: () => sendMessage({ type: "session:stop" }),
   });
 
-  // Connect WebSocket on mount
+  // Track pending start request (waiting for WebSocket connection)
+  const pendingStartRef = useRef(false);
+
+  // Start recording when WebSocket connects and start was pending
   useEffect(() => {
-    connect();
-  }, [connect]);
+    if (isConnected && pendingStartRef.current) {
+      pendingStartRef.current = false;
+      startRecording();
+    }
+  }, [isConnected, startRecording]);
 
   // Combined error state
   const error = mediaError || wsError || recordingError;
 
   // Handlers
   const handleRequestPermission = async () => {
-    const success = await requestPermission();
-    if (success && !isConnected) {
-      connect();
-    }
+    await requestPermission();
   };
 
   const handleStart = () => {
-    if (!isConnected) {
+    if (isConnected) {
+      startRecording();
+    } else {
+      pendingStartRef.current = true;
       connect();
     }
-    startRecording();
   };
 
   const handleStop = () => {
@@ -154,6 +166,17 @@ export function App() {
       }
       rightPanel={
         <div className="space-y-6">
+          {hasPermission && (
+            <DeviceSelector
+              audioDevices={audioDevices}
+              videoDevices={videoDevices}
+              selectedAudioDeviceId={selectedAudioDeviceId}
+              selectedVideoDeviceId={selectedVideoDeviceId}
+              onAudioDeviceChange={setAudioDevice}
+              onVideoDeviceChange={setVideoDevice}
+              disabled={isRecording}
+            />
+          )}
           <CameraPreview
             videoRef={videoRef}
             hasPermission={hasPermission}

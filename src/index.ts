@@ -5,7 +5,7 @@
  * Related: src/services/server/*, src/types/messages.ts
  */
 
-import { serve, type ServerWebSocket } from "bun";
+import { type ServerWebSocket, type Server } from "bun";
 import index from "./index.html";
 import type {
   ClientMessage,
@@ -44,34 +44,37 @@ function send(ws: ServerWebSocket<WSContext>, message: ServerMessage): void {
   ws.send(JSON.stringify(message));
 }
 
-const server = serve<WSContext>({
+// Create server with WebSocket support
+const server = Bun.serve<WSContext>({
   routes: {
-    // Serve index.html for all unmatched routes
-    "/*": index,
-
-    // API endpoints
+    "/": index,
     "/api/health": {
       GET: () => Response.json({ status: "ok", timestamp: Date.now() }),
     },
+    "/ws/recording": (req: Request, server: Server<WSContext>) => {
+      const sessionId = generateSessionId();
+      const success = server.upgrade(req, {
+        data: {
+          sessionId,
+          session: createSession(sessionId),
+          deepgram: null,
+          analysis: null,
+          checkInterval: null,
+        } satisfies WSContext,
+      });
+      if (success) return undefined;
+      return new Response("WebSocket upgrade failed", { status: 500 });
+    },
+    "/*": index, // Fallback for SPA routing
   },
 
   websocket: {
     open(ws) {
-      const sessionId = generateSessionId();
-      ws.data = {
-        sessionId,
-        session: createSession(sessionId),
-        deepgram: null,
-        analysis: null,
-        checkInterval: null,
-      };
-
       send(ws, {
         type: "session:status",
         data: { status: "idle" },
       });
-
-      console.log(`[WS] Session opened: ${sessionId}`);
+      console.log(`[WS] Session opened: ${ws.data.sessionId}`);
     },
 
     async message(ws, message) {
