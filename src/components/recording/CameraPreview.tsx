@@ -1,17 +1,19 @@
 /**
- * Camera preview video element.
+ * Camera/Screen preview video element.
  *
  * Design doc: plans/live-graphic-recorder-plan.md
  * Related: src/hooks/useMediaStream.ts
  */
 
-import { VideoOff } from "lucide-react";
+import { VideoOff, Monitor } from "lucide-react";
 import { cn } from "@/lib/utils";
+import type { MediaSourceType } from "@/types/messages";
 
 interface CameraPreviewProps {
   videoRef: React.RefObject<HTMLVideoElement | null>;
   hasPermission: boolean;
   isRecording: boolean;
+  sourceType?: MediaSourceType;
   className?: string;
 }
 
@@ -19,8 +21,12 @@ export function CameraPreview({
   videoRef,
   hasPermission,
   isRecording,
+  sourceType = "camera",
   className,
 }: CameraPreviewProps) {
+  const Icon = sourceType === "camera" ? VideoOff : Monitor;
+  const placeholderText = sourceType === "camera" ? "Camera not available" : "Screen not shared";
+
   return (
     <div className={cn("relative h-full bg-muted rounded-lg overflow-hidden", className)}>
       {hasPermission ? (
@@ -35,8 +41,8 @@ export function CameraPreview({
         </>
       ) : (
         <div className="absolute inset-0 flex flex-col items-center justify-center text-muted-foreground">
-          <VideoOff className="size-12 mb-2" />
-          <p className="text-sm">Camera not available</p>
+          <Icon className="size-12 mb-2" />
+          <p className="text-sm">{placeholderText}</p>
         </div>
       )}
     </div>

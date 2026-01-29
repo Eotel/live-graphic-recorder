@@ -17,12 +17,14 @@ import {
 import { RecordingControls } from "@/components/recording/RecordingControls";
 import { CameraPreview } from "@/components/recording/CameraPreview";
 import { DeviceSelector } from "@/components/recording/DeviceSelector";
+import { MediaSourceToggle } from "@/components/recording/MediaSourceToggle";
 import { SummaryPanel } from "@/components/summary/SummaryPanel";
 import { TagList } from "@/components/summary/TagList";
 import { TopicIndicator } from "@/components/summary/TopicIndicator";
 import { FlowMeter } from "@/components/metrics/FlowMeter";
 import { HeatMeter } from "@/components/metrics/HeatMeter";
 import { ImageCarousel } from "@/components/graphics/ImageCarousel";
+import { MeetingSelector } from "@/components/meeting/MeetingSelector";
 
 import { useMediaStream } from "@/hooks/useMediaStream";
 import { useWebSocket } from "@/hooks/useWebSocket";
@@ -68,6 +70,8 @@ export function App() {
     selectedVideoDeviceId,
     setAudioDevice,
     setVideoDevice,
+    sourceType,
+    switchSourceType,
   } = useMediaStream();
 
   // Accumulated data
@@ -143,15 +147,56 @@ export function App() {
     sessionStatus,
     generationPhase,
     error: wsError,
+    meeting,
     connect,
     sendMessage,
     sendAudio,
+    startMeeting,
+    stopMeeting,
+    requestMeetingList,
   } = useWebSocket({
     onTranscript: handleTranscript,
     onUtteranceEnd: handleUtteranceEnd,
     onAnalysis: handleAnalysis,
     onImage: handleImage,
   });
+
+  // Request meeting list when connected
+  useEffect(() => {
+    if (isConnected) {
+      requestMeetingList();
+    }
+  }, [isConnected, requestMeetingList]);
+
+  // Meeting handlers
+  const handleNewMeeting = useCallback(
+    (title?: string) => {
+      if (!isConnected) {
+        connect();
+        // Meeting will be started after connection (handled via effect)
+        return;
+      }
+      startMeeting(title);
+    },
+    [isConnected, connect, startMeeting],
+  );
+
+  const handleJoinMeeting = useCallback(
+    (meetingId: string) => {
+      if (!isConnected) {
+        connect();
+        return;
+      }
+      startMeeting(undefined, meetingId);
+    },
+    [isConnected, connect, startMeeting],
+  );
+
+  const handleRefreshMeetings = useCallback(() => {
+    if (isConnected) {
+      requestMeetingList();
+    }
+  }, [isConnected, requestMeetingList]);
 
   // Recording orchestration
   const {
@@ -190,9 +235,21 @@ export function App() {
   useEffect(() => {
     if (isConnected && pendingStartRef.current) {
       pendingStartRef.current = false;
-      startRecording();
+      // Guard against races: permission/stream might have been lost while connecting.
+      if (hasPermission && stream) {
+        startRecording();
+      }
     }
-  }, [isConnected, startRecording]);
+  }, [isConnected, hasPermission, stream, startRecording]);
+
+  // If permission/stream is lost mid-session (e.g. user stops screen share), cancel pending start and stop recording.
+  useEffect(() => {
+    if (hasPermission && stream) return;
+    pendingStartRef.current = false;
+    if (isRecording) {
+      stopRecording();
+    }
+  }, [hasPermission, stream, isRecording, stopRecording]);
 
   // Combined error state
   const error = mediaError || wsError || recordingError;
@@ -207,6 +264,15 @@ export function App() {
   };
 
   const handleStart = () => {
+    if (!hasPermission || !stream) {
+      return;
+    }
+
+    // Meeting must be active to start recording
+    if (!meeting.meetingId) {
+      return;
+    }
+
     if (isConnected) {
       startRecording();
     } else {
@@ -216,8 +282,12 @@ export function App() {
   };
 
   const handleStop = () => {
+    pendingStartRef.current = false;
     stopRecording();
   };
+
+  // Determine if recording is allowed (meeting must be active)
+  const canStartRecording = meeting.meetingId !== null && hasPermission && stream;
 
   return (
     <MainLayout
@@ -246,43 +316,61 @@ export function App() {
       }
       rightPanel={
         <div className="h-full flex flex-col">
-          {hasPermission && (
-            <DeviceSelector
-              audioDevices={audioDevices}
-              videoDevices={videoDevices}
-              selectedAudioDeviceId={selectedAudioDeviceId}
-              selectedVideoDeviceId={selectedVideoDeviceId}
-              onAudioDeviceChange={setAudioDevice}
-              onVideoDeviceChange={setVideoDevice}
+          <div className="flex-shrink-0 mx-4 mt-4 mb-2 flex flex-col gap-3">
+            <MeetingSelector
+              meetings={meeting.meetingList}
+              activeMeetingId={meeting.meetingId}
+              onNewMeeting={handleNewMeeting}
+              onJoinMeeting={handleJoinMeeting}
+              onRefresh={handleRefreshMeetings}
               disabled={isRecording}
-              stream={stream}
-              isRecording={isRecording}
-              className="flex-shrink-0 mb-2"
             />
-          )}
+            <div className="border-t border-border pt-3">
+              <MediaSourceToggle
+                value={sourceType}
+                onChange={switchSourceType}
+                disabled={isRecording}
+              />
+            </div>
+            {hasPermission && (
+              <DeviceSelector
+                audioDevices={audioDevices}
+                videoDevices={videoDevices}
+                selectedAudioDeviceId={selectedAudioDeviceId}
+                selectedVideoDeviceId={selectedVideoDeviceId}
+                onAudioDeviceChange={setAudioDevice}
+                onVideoDeviceChange={setVideoDevice}
+                disabled={isRecording}
+                stream={stream}
+                isRecording={isRecording}
+                sourceType={sourceType}
+              />
+            )}
+          </div>
           <ResizablePanelGroup
             id="camera-graphics"
-            orientation="vertical"
+            direction="vertical"
             className="flex-1 min-h-0"
           >
             <ResizablePanel id="camera-panel" defaultSize={35} minSize={20} maxSize={70}>
-              <div className="h-full pb-2">
+              <div className="h-full flex flex-col px-4 pb-4">
                 <CameraPreview
                   videoRef={videoRef}
                   hasPermission={hasPermission}
                   isRecording={isRecording}
-                  className="h-full"
+                  sourceType={sourceType}
+                  className="flex-1 min-h-0"
                 />
               </div>
             </ResizablePanel>
             <ResizableHandle />
             <ResizablePanel id="graphics-panel" defaultSize={65} minSize={30} maxSize={80}>
-              <div className="h-full pt-2">
+              <div className="h-full flex flex-col px-4 pt-4 pb-4">
                 <ImageCarousel
                   images={images}
                   isGenerating={isGenerating}
                   generationPhase={generationPhase}
-                  className="h-full"
+                  className="flex-1 min-h-0"
                 />
               </div>
             </ResizablePanel>
@@ -296,7 +384,9 @@ export function App() {
           hasPermission={hasPermission}
           isLoading={mediaLoading}
           error={error}
+          sourceType={sourceType}
           elapsedTime={elapsedTime}
+          hasMeeting={meeting.meetingId !== null}
           onRequestPermission={handleRequestPermission}
           onStart={handleStart}
           onStop={handleStop}

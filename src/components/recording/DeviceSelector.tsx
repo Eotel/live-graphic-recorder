@@ -16,6 +16,7 @@ import {
 import { AudioLevelIndicator } from "./AudioLevelIndicator";
 import { useAudioLevel } from "@/hooks/useAudioLevel";
 import { cn } from "@/lib/utils";
+import type { MediaSourceType } from "@/types/messages";
 
 export interface DeviceSelectorProps {
   audioDevices: MediaDeviceInfo[];
@@ -27,6 +28,7 @@ export interface DeviceSelectorProps {
   disabled?: boolean;
   stream?: MediaStream | null;
   isRecording?: boolean;
+  sourceType?: MediaSourceType;
   className?: string;
 }
 
@@ -40,12 +42,16 @@ export function DeviceSelector({
   disabled = false,
   stream = null,
   isRecording = false,
+  sourceType = "camera",
   className,
 }: DeviceSelectorProps) {
   const { isActive: isAudioActive } = useAudioLevel(stream, {
     enabled: isRecording,
   });
-  const hasDevices = audioDevices.length > 0 || videoDevices.length > 0;
+
+  // Only show video selector in camera mode
+  const showVideoSelector = sourceType === "camera" && videoDevices.length > 0;
+  const hasDevices = audioDevices.length > 0 || showVideoSelector;
 
   if (!hasDevices) {
     return null;
@@ -65,9 +71,9 @@ export function DeviceSelector({
               <SelectValue placeholder="Select microphone" />
             </SelectTrigger>
             <SelectContent>
-              {audioDevices.map((device) => (
+              {audioDevices.map((device, index) => (
                 <SelectItem key={device.deviceId} value={device.deviceId}>
-                  {device.label || `Microphone ${device.deviceId.slice(0, 8)}`}
+                  {device.label || `Microphone ${index + 1}`}
                 </SelectItem>
               ))}
             </SelectContent>
@@ -75,7 +81,7 @@ export function DeviceSelector({
         </div>
       )}
 
-      {videoDevices.length > 0 && (
+      {showVideoSelector && (
         <div className="flex items-center gap-2">
           <Video className="h-4 w-4 text-muted-foreground flex-shrink-0" />
           <Select
@@ -87,9 +93,9 @@ export function DeviceSelector({
               <SelectValue placeholder="Select camera" />
             </SelectTrigger>
             <SelectContent>
-              {videoDevices.map((device) => (
+              {videoDevices.map((device, index) => (
                 <SelectItem key={device.deviceId} value={device.deviceId}>
-                  {device.label || `Camera ${device.deviceId.slice(0, 8)}`}
+                  {device.label || `Camera ${index + 1}`}
                 </SelectItem>
               ))}
             </SelectContent>

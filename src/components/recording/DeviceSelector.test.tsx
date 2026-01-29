@@ -155,7 +155,8 @@ describe("DeviceSelector", () => {
         />,
       );
 
-      expect(screen.getByText("Microphone abcd1234")).toBeTruthy();
+      // Security fix: numbered labels instead of deviceId substring to avoid fingerprinting
+      expect(screen.getByText("Microphone 1")).toBeTruthy();
     });
   });
 });

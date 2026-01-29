@@ -6,6 +6,12 @@
  */
 
 // ============================================================================
+// Media Source Types
+// ============================================================================
+
+export type MediaSourceType = "camera" | "screen";
+
+// ============================================================================
 // Client → Server Messages
 // ============================================================================
 
@@ -27,7 +33,33 @@ export interface CameraFrameMessage {
   data: CameraFrame;
 }
 
-export type ClientMessage = SessionStartMessage | SessionStopMessage | CameraFrameMessage;
+// ============================================================================
+// Meeting Messages (Client → Server)
+// ============================================================================
+
+export interface MeetingStartMessage {
+  type: "meeting:start";
+  data: {
+    title?: string;
+    meetingId?: string; // Optional: join existing meeting
+  };
+}
+
+export interface MeetingStopMessage {
+  type: "meeting:stop";
+}
+
+export interface MeetingListRequestMessage {
+  type: "meeting:list:request";
+}
+
+export type ClientMessage =
+  | SessionStartMessage
+  | SessionStopMessage
+  | CameraFrameMessage
+  | MeetingStartMessage
+  | MeetingStopMessage
+  | MeetingListRequestMessage;
 
 // ============================================================================
 // Server → Client Messages
@@ -104,6 +136,34 @@ export interface UtteranceEndMessage {
   };
 }
 
+// ============================================================================
+// Meeting Messages (Server → Client)
+// ============================================================================
+
+export interface MeetingStatusMessage {
+  type: "meeting:status";
+  data: {
+    meetingId: string;
+    title?: string;
+    sessionId: string;
+  };
+}
+
+export interface MeetingInfo {
+  id: string;
+  title: string | null;
+  startedAt: number;
+  endedAt: number | null;
+  createdAt: number;
+}
+
+export interface MeetingListMessage {
+  type: "meeting:list";
+  data: {
+    meetings: MeetingInfo[];
+  };
+}
+
 export type ServerMessage =
   | TranscriptMessage
   | AnalysisMessage
@@ -111,7 +171,9 @@ export type ServerMessage =
   | SessionStatusMessage
   | ErrorMessage
   | GenerationStatusMessage
-  | UtteranceEndMessage;
+  | UtteranceEndMessage
+  | MeetingStatusMessage
+  | MeetingListMessage;
 
 // ============================================================================
 // Session State Types

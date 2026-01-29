@@ -7,7 +7,7 @@
 
 import { Circle, Square, AlertCircle, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import type { SessionStatus } from "@/types/messages";
+import type { SessionStatus, MediaSourceType } from "@/types/messages";
 
 interface RecordingControlsProps {
   sessionStatus: SessionStatus;
@@ -15,8 +15,11 @@ interface RecordingControlsProps {
   hasPermission: boolean;
   isLoading: boolean;
   error: string | null;
+  sourceType?: MediaSourceType;
   /** Formatted elapsed time to display when recording (e.g., "02:45") */
   elapsedTime?: string;
+  /** Whether a meeting is active (required to start recording) */
+  hasMeeting?: boolean;
   onRequestPermission: () => void;
   onStart: () => void;
   onStop: () => void;
@@ -28,11 +31,16 @@ export function RecordingControls({
   hasPermission,
   isLoading,
   error,
+  sourceType = "camera",
   elapsedTime,
+  hasMeeting = true,
   onRequestPermission,
   onStart,
   onStop,
 }: RecordingControlsProps) {
+  const permissionButtonText =
+    sourceType === "camera" ? "Grant Camera & Mic Access" : "Share Screen & Mic";
+
   return (
     <div className="flex items-center justify-center gap-4">
       {error && (
@@ -45,7 +53,7 @@ export function RecordingControls({
       {!hasPermission ? (
         <Button onClick={onRequestPermission} disabled={isLoading} size="lg" className="gap-2">
           {isLoading ? <Loader2 className="size-4 animate-spin" /> : <Circle className="size-4" />}
-          Grant Camera & Mic Access
+          {permissionButtonText}
         </Button>
       ) : isRecording ? (
         <>
@@ -64,14 +72,15 @@ export function RecordingControls({
           onClick={onStart}
           size="lg"
           className="gap-2"
-          disabled={sessionStatus === "processing"}
+          disabled={sessionStatus === "processing" || isLoading || !hasMeeting}
+          title={!hasMeeting ? "Start or join a meeting first" : undefined}
         >
           {sessionStatus === "processing" ? (
             <Loader2 className="size-4 animate-spin" />
           ) : (
             <Circle className="size-4 fill-red-500 text-red-500" />
           )}
-          Start Recording
+          {hasMeeting ? "Start Recording" : "Select Meeting First"}
         </Button>
       )}
     </div>

@@ -1,11 +1,12 @@
 /**
- * Hook for accessing camera and microphone streams.
+ * Hook for accessing camera/screen and microphone streams.
  *
  * Design doc: plans/live-graphic-recorder-plan.md
  * Related: src/hooks/useRecording.ts, src/components/recording/DeviceSelector.tsx
  */
 
 import { useState, useCallback, useRef, useEffect } from "react";
+import type { MediaSourceType } from "@/types/messages";
 
 export interface MediaStreamState {
   stream: MediaStream | null;
@@ -17,6 +18,7 @@ export interface MediaStreamState {
   videoDevices: MediaDeviceInfo[];
   selectedAudioDeviceId: string | null;
   selectedVideoDeviceId: string | null;
+  sourceType: MediaSourceType;
 }
 
 export interface MediaStreamActions {
@@ -24,6 +26,49 @@ export interface MediaStreamActions {
   stopStream: () => void;
   setAudioDevice: (deviceId: string) => void;
   setVideoDevice: (deviceId: string) => void;
+  switchSourceType: (type: MediaSourceType) => void;
+}
+
+function stopTracks(target: MediaStream | null) {
+  if (!target) return;
+  target.getTracks().forEach((track) => {
+    try {
+      (track as unknown as { onended?: (() => void) | null }).onended = null;
+    } catch {
+      // Ignore
+    }
+    try {
+      track.stop();
+    } catch {
+      // Ignore
+    }
+  });
+}
+
+function formatMediaError(err: unknown): string {
+  if (
+    err &&
+    typeof err === "object" &&
+    "name" in err &&
+    typeof (err as { name: unknown }).name === "string"
+  ) {
+    const name = (err as { name: string }).name;
+    switch (name) {
+      case "NotAllowedError":
+      case "SecurityError":
+        return "Permission denied. Please allow access to your camera/microphone or screen.";
+      case "NotFoundError":
+        return "No compatible device found (camera/microphone).";
+      case "NotReadableError":
+      case "TrackStartError":
+        return "Device is already in use or cannot be accessed right now.";
+      case "OverconstrainedError":
+        return "Selected device/constraints are not supported.";
+      case "AbortError":
+        return "Request was aborted.";
+    }
+  }
+  return err instanceof Error ? err.message : "Failed to access media devices";
 }
 
 export function useMediaStream(): MediaStreamState & MediaStreamActions {
@@ -35,15 +80,36 @@ export function useMediaStream(): MediaStreamState & MediaStreamActions {
   const [videoDevices, setVideoDevices] = useState<MediaDeviceInfo[]>([]);
   const [selectedAudioDeviceId, setSelectedAudioDeviceId] = useState<string | null>(null);
   const [selectedVideoDeviceId, setSelectedVideoDeviceId] = useState<string | null>(null);
+  const [sourceType, setSourceType] = useState<MediaSourceType>("camera");
+
   const videoRef = useRef<HTMLVideoElement | null>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+  const streamInstanceIdRef = useRef(0);
+  const opIdRef = useRef(0);
+  const isMountedRef = useRef(true);
+
+  const attachVideo = useCallback((next: MediaStream | null) => {
+    if (!videoRef.current) return;
+    videoRef.current.srcObject = next;
+    if (next) {
+      // Avoid unhandled promise rejection on browsers that require user gesture.
+      void videoRef.current.play().catch(() => {});
+    }
+  }, []);
 
   const enumerateDevices = useCallback(async () => {
+    if (!navigator.mediaDevices?.enumerateDevices) {
+      console.warn("MediaDevices API not available");
+      return { audio: [], video: [] };
+    }
     try {
       const devices = await navigator.mediaDevices.enumerateDevices();
       const audio = devices.filter((d) => d.kind === "audioinput");
       const video = devices.filter((d) => d.kind === "videoinput");
-      setAudioDevices(audio);
-      setVideoDevices(video);
+      if (isMountedRef.current) {
+        setAudioDevices(audio);
+        setVideoDevices(video);
+      }
       return { audio, video };
     } catch (err) {
       console.error("Failed to enumerate devices:", err);
@@ -51,14 +117,17 @@ export function useMediaStream(): MediaStreamState & MediaStreamActions {
     }
   }, []);
 
-  const getMediaStream = useCallback(
+  const getCameraStream = useCallback(
     async (audioDeviceId: string | null, videoDeviceId: string | null): Promise<MediaStream> => {
+      if (!navigator.mediaDevices?.getUserMedia) {
+        throw new Error("Camera/microphone APIs are not available in this browser.");
+      }
       return navigator.mediaDevices.getUserMedia({
         audio: {
           deviceId: audioDeviceId ? { exact: audioDeviceId } : undefined,
           echoCancellation: true,
           noiseSuppression: true,
-          sampleRate: 16000,
+          autoGainControl: true,
         },
         video: {
           deviceId: videoDeviceId ? { exact: videoDeviceId } : undefined,
@@ -71,145 +140,260 @@ export function useMediaStream(): MediaStreamState & MediaStreamActions {
     [],
   );
 
-  const stopStream = useCallback(() => {
-    if (stream) {
-      stream.getTracks().forEach((track) => track.stop());
-      setStream(null);
-    }
-  }, [stream]);
-
-  const requestPermission = useCallback(async (): Promise<boolean> => {
-    setIsLoading(true);
-    setError(null);
+  const getScreenStream = useCallback(async (audioDeviceId: string | null): Promise<MediaStream> => {
+    let screenStream: MediaStream | null = null;
+    let audioStream: MediaStream | null = null;
 
     try {
-      const mediaStream = await getMediaStream(selectedAudioDeviceId, selectedVideoDeviceId);
-
-      setStream(mediaStream);
-      setHasPermission(true);
-
-      if (videoRef.current) {
-        videoRef.current.srcObject = mediaStream;
+      if (!navigator.mediaDevices?.getDisplayMedia) {
+        throw new Error("Screen sharing is not supported in this browser.");
       }
+      if (!navigator.mediaDevices?.getUserMedia) {
+        throw new Error("Microphone APIs are not available in this browser.");
+      }
+      // Get screen video (no audio - we use mic for speech-to-text)
+      screenStream = await navigator.mediaDevices.getDisplayMedia({
+        video: {
+          width: { ideal: 1920 },
+          height: { ideal: 1080 },
+        },
+        audio: false,
+      });
 
-      // After getting permission, enumerate devices to get labels
-      const { audio, video } = await enumerateDevices();
+      // Get mic audio for speech-to-text
+      audioStream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          deviceId: audioDeviceId ? { exact: audioDeviceId } : undefined,
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+        },
+        video: false,
+      });
 
-      // Set default device IDs from the active tracks if not already set
-      const firstAudioDevice = audio[0];
-      if (!selectedAudioDeviceId && firstAudioDevice) {
-        const audioTrack = mediaStream.getAudioTracks()[0];
-        const audioSettings = audioTrack?.getSettings();
-        if (audioSettings?.deviceId) {
-          setSelectedAudioDeviceId(audioSettings.deviceId);
-        } else {
-          setSelectedAudioDeviceId(firstAudioDevice.deviceId);
+      // Combine: screen video + mic audio
+      return new MediaStream([
+        ...screenStream.getVideoTracks(),
+        ...audioStream.getAudioTracks(),
+      ]);
+    } catch (err) {
+      // If mic permission fails after screen capture succeeds, avoid leaking an active capture session.
+      stopTracks(screenStream);
+      stopTracks(audioStream);
+      throw err;
+    }
+  }, []);
+
+  const stopStream = useCallback(() => {
+    // Invalidate in-flight acquire/switch operations.
+    opIdRef.current += 1;
+
+    stopTracks(streamRef.current);
+    streamRef.current = null;
+    streamInstanceIdRef.current += 1;
+
+    if (!isMountedRef.current) return;
+    setIsLoading(false);
+    setStream(null);
+    setHasPermission(false);
+    attachVideo(null);
+  }, [attachVideo]);
+
+  const applyStream = useCallback(
+    (nextStream: MediaStream, nextSourceType: MediaSourceType) => {
+      stopTracks(streamRef.current);
+      streamRef.current = nextStream;
+
+      const instanceId = (streamInstanceIdRef.current += 1);
+
+      if (nextSourceType === "screen") {
+        const videoTrack = nextStream.getVideoTracks()[0];
+        if (videoTrack) {
+          videoTrack.onended = () => {
+            // Only stop if this is still the active stream instance.
+            if (streamInstanceIdRef.current !== instanceId) return;
+            if (isMountedRef.current) {
+              setError("Screen sharing ended.");
+            }
+            stopStream();
+          };
         }
       }
 
+      if (!isMountedRef.current) return;
+      setStream(nextStream);
+      setHasPermission(true);
+      attachVideo(nextStream);
+    },
+    [attachVideo, stopStream],
+  );
+
+  const replaceStream = useCallback(
+    async (create: () => Promise<MediaStream>, nextSourceType: MediaSourceType) => {
+      const opId = (opIdRef.current += 1);
+      if (isMountedRef.current) {
+        setIsLoading(true);
+        setError(null);
+      }
+
+      try {
+        const nextStream = await create();
+
+        // If a newer operation started, discard this stream to avoid state races.
+        if (opIdRef.current !== opId) {
+          stopTracks(nextStream);
+          return false;
+        }
+
+        applyStream(nextStream, nextSourceType);
+        return true;
+      } catch (err) {
+        const message = formatMediaError(err);
+        if (isMountedRef.current) {
+          setError(message);
+          if (!streamRef.current) {
+            setHasPermission(false);
+          }
+        }
+        return false;
+      } finally {
+        if (isMountedRef.current && opIdRef.current === opId) {
+          setIsLoading(false);
+        }
+      }
+    },
+    [applyStream],
+  );
+
+  const requestPermission = useCallback(async (): Promise<boolean> => {
+    const ok = await replaceStream(async () => {
+      if (sourceType === "camera") {
+        return getCameraStream(selectedAudioDeviceId, selectedVideoDeviceId);
+      }
+      return getScreenStream(selectedAudioDeviceId);
+    }, sourceType);
+
+    if (!ok) return false;
+
+    // After getting permission, enumerate devices to get labels.
+    const { audio, video } = await enumerateDevices();
+    if (!isMountedRef.current) return true;
+
+    const active = streamRef.current;
+
+    // Set default device IDs from the active tracks if not already set.
+    const firstAudioDevice = audio[0];
+    if (!selectedAudioDeviceId && firstAudioDevice) {
+      const audioTrack = active?.getAudioTracks()[0];
+      const audioSettings = audioTrack?.getSettings();
+      setSelectedAudioDeviceId(audioSettings?.deviceId ?? firstAudioDevice.deviceId);
+    }
+
+    // Only set video device for camera mode.
+    if (sourceType === "camera") {
       const firstVideoDevice = video[0];
       if (!selectedVideoDeviceId && firstVideoDevice) {
-        const videoTrack = mediaStream.getVideoTracks()[0];
+        const videoTrack = active?.getVideoTracks()[0];
         const videoSettings = videoTrack?.getSettings();
-        if (videoSettings?.deviceId) {
-          setSelectedVideoDeviceId(videoSettings.deviceId);
-        } else {
-          setSelectedVideoDeviceId(firstVideoDevice.deviceId);
-        }
+        setSelectedVideoDeviceId(videoSettings?.deviceId ?? firstVideoDevice.deviceId);
       }
-
-      return true;
-    } catch (err) {
-      const message = err instanceof Error ? err.message : "Failed to access media devices";
-      setError(message);
-      setHasPermission(false);
-      return false;
-    } finally {
-      setIsLoading(false);
     }
-  }, [selectedAudioDeviceId, selectedVideoDeviceId, getMediaStream, enumerateDevices]);
+
+    return true;
+  }, [
+    sourceType,
+    selectedAudioDeviceId,
+    selectedVideoDeviceId,
+    enumerateDevices,
+    getCameraStream,
+    getScreenStream,
+    replaceStream,
+  ]);
 
   const setAudioDevice = useCallback(
     async (deviceId: string) => {
       setSelectedAudioDeviceId(deviceId);
 
-      if (!hasPermission || !stream) {
-        return;
-      }
+      if (!hasPermission) return;
 
-      setIsLoading(true);
-      setError(null);
-
-      try {
-        // Stop existing stream
-        stream.getTracks().forEach((track) => track.stop());
-
-        // Get new stream with selected audio device
-        const mediaStream = await getMediaStream(deviceId, selectedVideoDeviceId);
-
-        setStream(mediaStream);
-
-        if (videoRef.current) {
-          videoRef.current.srcObject = mediaStream;
+      await replaceStream(async () => {
+        if (sourceType === "camera") {
+          return getCameraStream(deviceId, selectedVideoDeviceId);
         }
-      } catch (err) {
-        const message = err instanceof Error ? err.message : "Failed to switch audio device";
-        setError(message);
-      } finally {
-        setIsLoading(false);
-      }
+        return getScreenStream(deviceId);
+      }, sourceType);
     },
-    [hasPermission, stream, selectedVideoDeviceId, getMediaStream],
+    [
+      hasPermission,
+      sourceType,
+      selectedVideoDeviceId,
+      getCameraStream,
+      getScreenStream,
+      replaceStream,
+    ],
   );
 
   const setVideoDevice = useCallback(
     async (deviceId: string) => {
-      setSelectedVideoDeviceId(deviceId);
-
-      if (!hasPermission || !stream) {
+      // Video device switching only applies to camera mode
+      if (sourceType !== "camera") {
         return;
       }
 
-      setIsLoading(true);
-      setError(null);
+      setSelectedVideoDeviceId(deviceId);
 
-      try {
-        // Stop existing stream
-        stream.getTracks().forEach((track) => track.stop());
+      if (!hasPermission) return;
 
-        // Get new stream with selected video device
-        const mediaStream = await getMediaStream(selectedAudioDeviceId, deviceId);
-
-        setStream(mediaStream);
-
-        if (videoRef.current) {
-          videoRef.current.srcObject = mediaStream;
-        }
-      } catch (err) {
-        const message = err instanceof Error ? err.message : "Failed to switch video device";
-        setError(message);
-      } finally {
-        setIsLoading(false);
-      }
+      await replaceStream(() => getCameraStream(selectedAudioDeviceId, deviceId), "camera");
     },
-    [hasPermission, stream, selectedAudioDeviceId, getMediaStream],
+    [hasPermission, sourceType, selectedAudioDeviceId, getCameraStream, replaceStream],
   );
 
-  // Attach stream to video element when both are available
-  useEffect(() => {
-    if (stream && videoRef.current) {
-      videoRef.current.srcObject = stream;
-    }
-  }, [stream]);
+  const switchSourceType = useCallback(
+    (type: MediaSourceType) => {
+      if (type === sourceType) return;
+
+      stopStream();
+      setSourceType(type);
+      if (isMountedRef.current) {
+        setError(null);
+      }
+    },
+    [sourceType, stopStream],
+  );
 
   // Cleanup on unmount
   useEffect(() => {
     return () => {
-      if (stream) {
-        stream.getTracks().forEach((track) => track.stop());
-      }
+      isMountedRef.current = false;
+      opIdRef.current += 1;
+      stopTracks(streamRef.current);
+      streamRef.current = null;
     };
-  }, [stream]);
+  }, []);
+
+  // Ensure the MediaStream is attached once the <video> element actually mounts.
+  useEffect(() => {
+    if (!videoRef.current) return;
+    videoRef.current.srcObject = stream;
+    if (stream) {
+      void videoRef.current.play().catch(() => {});
+    }
+  }, [stream, hasPermission]);
+
+  // Keep device lists fresh when hardware changes
+  useEffect(() => {
+    void enumerateDevices();
+    const mediaDevices = navigator.mediaDevices;
+    if (!mediaDevices?.addEventListener) return;
+    const handler = () => {
+      void enumerateDevices();
+    };
+    mediaDevices.addEventListener("devicechange", handler);
+    return () => {
+      mediaDevices.removeEventListener("devicechange", handler);
+    };
+  }, [enumerateDevices]);
 
   return {
     stream,
@@ -221,9 +405,11 @@ export function useMediaStream(): MediaStreamState & MediaStreamActions {
     videoDevices,
     selectedAudioDeviceId,
     selectedVideoDeviceId,
+    sourceType,
     requestPermission,
     stopStream,
     setAudioDevice,
     setVideoDevice,
+    switchSourceType,
   };
 }
