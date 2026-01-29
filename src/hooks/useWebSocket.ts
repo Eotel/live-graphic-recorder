@@ -6,13 +6,27 @@
  */
 
 import { useState, useCallback, useRef, useEffect } from "react";
-import type { ServerMessage, ClientMessage, SessionStatus, GenerationPhase } from "@/types/messages";
+import type {
+  ServerMessage,
+  ClientMessage,
+  SessionStatus,
+  GenerationPhase,
+  MeetingInfo,
+} from "@/types/messages";
+
+export interface MeetingState {
+  meetingId: string | null;
+  meetingTitle: string | null;
+  sessionId: string | null;
+  meetingList: MeetingInfo[];
+}
 
 export interface WebSocketState {
   isConnected: boolean;
   sessionStatus: SessionStatus;
   generationPhase: GenerationPhase;
   error: string | null;
+  meeting: MeetingState;
 }
 
 export interface WebSocketActions {
@@ -20,6 +34,10 @@ export interface WebSocketActions {
   disconnect: () => void;
   sendMessage: (message: ClientMessage) => void;
   sendAudio: (data: ArrayBuffer) => void;
+  startMeeting: (title?: string, meetingId?: string) => void;
+  stopMeeting: () => void;
+  requestMeetingList: () => void;
+  updateMeetingTitle: (title: string) => void;
 }
 
 export interface WebSocketCallbacks {
@@ -34,6 +52,8 @@ export interface WebSocketCallbacks {
   }) => void;
   onImage?: (data: { base64: string; prompt: string; timestamp: number }) => void;
   onError?: (error: string) => void;
+  onMeetingStatus?: (data: { meetingId: string; title?: string; sessionId: string }) => void;
+  onMeetingList?: (meetings: MeetingInfo[]) => void;
 }
 
 export function useWebSocket(
@@ -43,6 +63,12 @@ export function useWebSocket(
   const [sessionStatus, setSessionStatus] = useState<SessionStatus>("idle");
   const [generationPhase, setGenerationPhase] = useState<GenerationPhase>("idle");
   const [error, setError] = useState<string | null>(null);
+  const [meeting, setMeeting] = useState<MeetingState>({
+    meetingId: null,
+    meetingTitle: null,
+    sessionId: null,
+    meetingList: [],
+  });
   const wsRef = useRef<WebSocket | null>(null);
   const callbacksRef = useRef(callbacks);
 
@@ -112,6 +138,24 @@ export function useWebSocket(
             setError(message.data.message);
             callbacksRef.current.onError?.(message.data.message);
             break;
+
+          case "meeting:status":
+            setMeeting((prev) => ({
+              ...prev,
+              meetingId: message.data.meetingId,
+              meetingTitle: message.data.title ?? null,
+              sessionId: message.data.sessionId,
+            }));
+            callbacksRef.current.onMeetingStatus?.(message.data);
+            break;
+
+          case "meeting:list":
+            setMeeting((prev) => ({
+              ...prev,
+              meetingList: message.data.meetings,
+            }));
+            callbacksRef.current.onMeetingList?.(message.data.meetings);
+            break;
         }
       } catch (err) {
         console.error("Failed to parse WebSocket message:", err);
@@ -140,6 +184,46 @@ export function useWebSocket(
     }
   }, []);
 
+  const startMeeting = useCallback((title?: string, meetingId?: string) => {
+    if (wsRef.current?.readyState === WebSocket.OPEN) {
+      wsRef.current.send(
+        JSON.stringify({
+          type: "meeting:start",
+          data: { title, meetingId },
+        }),
+      );
+    }
+  }, []);
+
+  const stopMeeting = useCallback(() => {
+    if (wsRef.current?.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify({ type: "meeting:stop" }));
+    }
+    setMeeting({
+      meetingId: null,
+      meetingTitle: null,
+      sessionId: null,
+      meetingList: [],
+    });
+  }, []);
+
+  const requestMeetingList = useCallback(() => {
+    if (wsRef.current?.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify({ type: "meeting:list:request" }));
+    }
+  }, []);
+
+  const updateMeetingTitle = useCallback((title: string) => {
+    if (wsRef.current?.readyState === WebSocket.OPEN) {
+      wsRef.current.send(
+        JSON.stringify({
+          type: "meeting:update",
+          data: { title },
+        }),
+      );
+    }
+  }, []);
+
   // Cleanup on unmount
   useEffect(() => {
     return () => {
@@ -154,9 +238,14 @@ export function useWebSocket(
     sessionStatus,
     generationPhase,
     error,
+    meeting,
     connect,
     disconnect,
     sendMessage,
     sendAudio,
+    startMeeting,
+    stopMeeting,
+    requestMeetingList,
+    updateMeetingTitle,
   };
 }

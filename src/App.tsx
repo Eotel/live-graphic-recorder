@@ -160,6 +160,7 @@ export function App() {
     startMeeting,
     stopMeeting,
     requestMeetingList,
+    updateMeetingTitle,
   } = useWebSocket({
     onTranscript: handleTranscript,
     onUtteranceEnd: handleUtteranceEnd,
@@ -330,6 +331,7 @@ export function App() {
               title={meeting.meetingTitle}
               onBack={handleBack}
               isRecording={isRecording}
+              onUpdateTitle={updateMeetingTitle}
             />
             <TopicIndicator topics={topics} />
           </div>

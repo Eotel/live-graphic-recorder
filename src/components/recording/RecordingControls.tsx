@@ -41,12 +41,21 @@ export function RecordingControls({
   const permissionButtonText =
     sourceType === "camera" ? "Grant Camera & Mic Access" : "Share Screen & Mic";
 
+  const isPermissionDenied = error?.toLowerCase().includes("permission denied");
+
   return (
-    <div className="flex items-center justify-center gap-4">
+    <div className="flex flex-col items-center justify-center gap-4">
       {error && (
-        <div className="flex items-center gap-2 text-destructive text-sm">
-          <AlertCircle className="size-4" />
-          <span>{error}</span>
+        <div className="flex flex-col items-center gap-2 text-destructive text-sm max-w-md text-center">
+          <div className="flex items-center gap-2">
+            <AlertCircle className="size-4 flex-shrink-0" />
+            <span>{error}</span>
+          </div>
+          {isPermissionDenied && (
+            <span className="text-xs text-muted-foreground">
+              Check your browser settings to enable camera/microphone access for this site.
+            </span>
+          )}
         </div>
       )}
 

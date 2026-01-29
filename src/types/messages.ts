@@ -53,13 +53,21 @@ export interface MeetingListRequestMessage {
   type: "meeting:list:request";
 }
 
+export interface MeetingUpdateMessage {
+  type: "meeting:update";
+  data: {
+    title: string;
+  };
+}
+
 export type ClientMessage =
   | SessionStartMessage
   | SessionStopMessage
   | CameraFrameMessage
   | MeetingStartMessage
   | MeetingStopMessage
-  | MeetingListRequestMessage;
+  | MeetingListRequestMessage
+  | MeetingUpdateMessage;
 
 // ============================================================================
 // Server → Client Messages

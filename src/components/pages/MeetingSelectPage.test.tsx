@@ -89,7 +89,24 @@ describe("MeetingSelectPage", () => {
     expect(screen.getByText(/no past meetings/i)).toBeDefined();
   });
 
-  test("calls onNewMeeting when new meeting button is clicked", () => {
+  test("shows title dialog when new meeting button is clicked", () => {
+    render(
+      <MeetingSelectPage
+        meetings={[]}
+        isLoading={false}
+        onNewMeeting={mock(() => {})}
+        onSelectMeeting={mock(() => {})}
+        onRefresh={mock(() => {})}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /start new meeting/i }));
+
+    expect(screen.getByText("New Meeting")).toBeDefined();
+    expect(screen.getByPlaceholderText(/meeting title/i)).toBeDefined();
+  });
+
+  test("calls onNewMeeting with title when dialog is confirmed", () => {
     const onNewMeeting = mock(() => {});
 
     render(
@@ -103,8 +120,93 @@ describe("MeetingSelectPage", () => {
     );
 
     fireEvent.click(screen.getByRole("button", { name: /start new meeting/i }));
+    fireEvent.change(screen.getByPlaceholderText(/meeting title/i), {
+      target: { value: "My Meeting" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /start$/i }));
 
     expect(onNewMeeting).toHaveBeenCalledTimes(1);
+    expect(onNewMeeting).toHaveBeenCalledWith("My Meeting");
+  });
+
+  test("calls onNewMeeting with undefined when title is empty", () => {
+    const onNewMeeting = mock(() => {});
+
+    render(
+      <MeetingSelectPage
+        meetings={[]}
+        isLoading={false}
+        onNewMeeting={onNewMeeting}
+        onSelectMeeting={mock(() => {})}
+        onRefresh={mock(() => {})}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /start new meeting/i }));
+    fireEvent.click(screen.getByRole("button", { name: /start$/i }));
+
+    expect(onNewMeeting).toHaveBeenCalledTimes(1);
+    expect(onNewMeeting).toHaveBeenCalledWith(undefined);
+  });
+
+  test("closes dialog when cancel is clicked", () => {
+    render(
+      <MeetingSelectPage
+        meetings={[]}
+        isLoading={false}
+        onNewMeeting={mock(() => {})}
+        onSelectMeeting={mock(() => {})}
+        onRefresh={mock(() => {})}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /start new meeting/i }));
+    expect(screen.getByText("New Meeting")).toBeDefined();
+
+    fireEvent.click(screen.getByRole("button", { name: /cancel/i }));
+
+    expect(screen.queryByText("New Meeting")).toBeNull();
+  });
+
+  test("submits dialog on Enter key", () => {
+    const onNewMeeting = mock(() => {});
+
+    render(
+      <MeetingSelectPage
+        meetings={[]}
+        isLoading={false}
+        onNewMeeting={onNewMeeting}
+        onSelectMeeting={mock(() => {})}
+        onRefresh={mock(() => {})}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /start new meeting/i }));
+    const input = screen.getByPlaceholderText(/meeting title/i);
+    fireEvent.change(input, { target: { value: "Enter Test" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+
+    expect(onNewMeeting).toHaveBeenCalledWith("Enter Test");
+  });
+
+  test("closes dialog on Escape key", () => {
+    render(
+      <MeetingSelectPage
+        meetings={[]}
+        isLoading={false}
+        onNewMeeting={mock(() => {})}
+        onSelectMeeting={mock(() => {})}
+        onRefresh={mock(() => {})}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /start new meeting/i }));
+    expect(screen.getByText("New Meeting")).toBeDefined();
+
+    const input = screen.getByPlaceholderText(/meeting title/i);
+    fireEvent.keyDown(input, { key: "Escape" });
+
+    expect(screen.queryByText("New Meeting")).toBeNull();
   });
 
   test("calls onSelectMeeting when a meeting is clicked", () => {
