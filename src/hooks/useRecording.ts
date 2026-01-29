@@ -19,14 +19,18 @@ export interface RecordingActions {
 }
 
 interface UseRecordingOptions {
-  stream: MediaStream | null;
+  /**
+   * Audio-only stream for recording. Use audioStream from useMediaStream
+   * to ensure recording continues uninterrupted during video source switches.
+   */
+  audioStream: MediaStream | null;
   onAudioData: (data: ArrayBuffer) => void;
   onSessionStart: () => void;
   onSessionStop: () => void;
 }
 
 export function useRecording({
-  stream,
+  audioStream,
   onAudioData,
   onSessionStart,
   onSessionStop,
@@ -36,20 +40,19 @@ export function useRecording({
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
 
   const startRecording = useCallback(() => {
-    if (!stream) {
-      setError("No media stream available");
+    if (!audioStream) {
+      setError("No audio stream available");
       return;
     }
 
     try {
-      // Get audio track only for MediaRecorder
-      const audioTrack = stream.getAudioTracks()[0];
+      // Use the audio stream directly for MediaRecorder
+      const audioTrack = audioStream.getAudioTracks()[0];
       if (!audioTrack) {
         setError("No audio track available");
         return;
       }
 
-      const audioStream = new MediaStream([audioTrack]);
       const mediaRecorder = new MediaRecorder(audioStream, {
         mimeType: AUDIO_CONFIG.mimeType,
       });
@@ -77,7 +80,7 @@ export function useRecording({
       const message = err instanceof Error ? err.message : "Failed to start recording";
       setError(message);
     }
-  }, [stream, onAudioData, onSessionStart]);
+  }, [audioStream, onAudioData, onSessionStart]);
 
   const stopRecording = useCallback(() => {
     if (mediaRecorderRef.current) {
@@ -89,7 +92,7 @@ export function useRecording({
     setIsRecording(false);
   }, [onSessionStop]);
 
-  // Cleanup on unmount or stream change
+  // Cleanup on unmount or audioStream change
   useEffect(() => {
     return () => {
       if (mediaRecorderRef.current) {
@@ -97,7 +100,7 @@ export function useRecording({
         mediaRecorderRef.current = null;
       }
     };
-  }, [stream]);
+  }, [audioStream]);
 
   return {
     isRecording,

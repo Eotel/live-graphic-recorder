@@ -12,6 +12,7 @@ import type {
   SessionStatus,
   GenerationPhase,
   MeetingInfo,
+  MeetingHistoryMessage,
 } from "@/types/messages";
 
 export interface MeetingState {
@@ -41,7 +42,13 @@ export interface WebSocketActions {
 }
 
 export interface WebSocketCallbacks {
-  onTranscript?: (data: { text: string; isFinal: boolean; timestamp: number; speaker?: number; startTime?: number }) => void;
+  onTranscript?: (data: {
+    text: string;
+    isFinal: boolean;
+    timestamp: number;
+    speaker?: number;
+    startTime?: number;
+  }) => void;
   onUtteranceEnd?: (timestamp: number) => void;
   onAnalysis?: (data: {
     summary: string[];
@@ -54,6 +61,7 @@ export interface WebSocketCallbacks {
   onError?: (error: string) => void;
   onMeetingStatus?: (data: { meetingId: string; title?: string; sessionId: string }) => void;
   onMeetingList?: (meetings: MeetingInfo[]) => void;
+  onMeetingHistory?: (data: MeetingHistoryMessage["data"]) => void;
 }
 
 export function useWebSocket(
@@ -76,7 +84,11 @@ export function useWebSocket(
   callbacksRef.current = callbacks;
 
   const connect = useCallback(() => {
-    if (wsRef.current?.readyState === WebSocket.OPEN) {
+    // Prevent duplicate connections (including CONNECTING state)
+    if (
+      wsRef.current?.readyState === WebSocket.OPEN ||
+      wsRef.current?.readyState === WebSocket.CONNECTING
+    ) {
       return;
     }
 
@@ -155,6 +167,10 @@ export function useWebSocket(
               meetingList: message.data.meetings,
             }));
             callbacksRef.current.onMeetingList?.(message.data.meetings);
+            break;
+
+          case "meeting:history":
+            callbacksRef.current.onMeetingHistory?.(message.data);
             break;
         }
       } catch (err) {

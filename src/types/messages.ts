@@ -122,7 +122,6 @@ export interface ErrorMessage {
   };
 }
 
-
 // ============================================================================
 // Generation Phase Types (for progress indicators)
 // ============================================================================
@@ -172,6 +171,43 @@ export interface MeetingListMessage {
   };
 }
 
+export interface MeetingHistoryMessage {
+  type: "meeting:history";
+  data: {
+    transcripts: Array<{
+      text: string;
+      timestamp: number;
+      isFinal: boolean;
+      speaker?: number;
+      startTime?: number;
+      isUtteranceEnd?: boolean;
+    }>;
+    analyses: Array<{
+      summary: string[];
+      topics: string[];
+      tags: string[];
+      flow: number;
+      heat: number;
+      timestamp: number;
+    }>;
+    images: Array<{
+      url: string;
+      prompt: string;
+      timestamp: number;
+    }>;
+    captures: Array<{
+      url: string;
+      timestamp: number;
+    }>;
+    metaSummaries: Array<{
+      summary: string[];
+      themes: string[];
+      startTime: number;
+      endTime: number;
+    }>;
+  };
+}
+
 export type ServerMessage =
   | TranscriptMessage
   | AnalysisMessage
@@ -181,7 +217,8 @@ export type ServerMessage =
   | GenerationStatusMessage
   | UtteranceEndMessage
   | MeetingStatusMessage
-  | MeetingListMessage;
+  | MeetingListMessage
+  | MeetingHistoryMessage;
 
 // ============================================================================
 // Session State Types
@@ -191,8 +228,8 @@ export interface TranscriptSegment {
   text: string;
   timestamp: number;
   isFinal: boolean;
-  speaker?: number;        // Speaker ID from diarization (0, 1, 2, ...)
-  startTime?: number;      // Audio start time in seconds
+  speaker?: number; // Speaker ID from diarization (0, 1, 2, ...)
+  startTime?: number; // Audio start time in seconds
   isUtteranceEnd?: boolean; // Marks end of utterance (for line breaks)
 }
 

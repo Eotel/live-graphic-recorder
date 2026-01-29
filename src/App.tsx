@@ -9,11 +9,7 @@ import { useState, useCallback, useEffect, useRef } from "react";
 import "./index.css";
 
 import { MainLayout } from "@/components/layout/MainLayout";
-import {
-  ResizablePanelGroup,
-  ResizablePanel,
-  ResizableHandle,
-} from "@/components/ui/resizable";
+import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from "@/components/ui/resizable";
 import { RecordingControls } from "@/components/recording/RecordingControls";
 import { CameraPreview } from "@/components/recording/CameraPreview";
 import { DeviceSelector } from "@/components/recording/DeviceSelector";
@@ -28,33 +24,11 @@ import { MeetingSelectPage } from "@/components/pages/MeetingSelectPage";
 import { MeetingHeader } from "@/components/navigation/MeetingHeader";
 
 import { useMediaStream } from "@/hooks/useMediaStream";
-import { useWebSocket } from "@/hooks/useWebSocket";
 import { useRecording } from "@/hooks/useRecording";
 import { useCameraCapture } from "@/hooks/useCameraCapture";
 import { useElapsedTime } from "@/hooks/useElapsedTime";
-import type { TranscriptSegment, CameraFrame, SummaryPage } from "@/types/messages";
-
-interface TranscriptData {
-  text: string;
-  isFinal: boolean;
-  timestamp: number;
-  speaker?: number;
-  startTime?: number;
-}
-
-interface AnalysisData {
-  summary: string[];
-  topics: string[];
-  tags: string[];
-  flow: number;
-  heat: number;
-}
-
-interface ImageData {
-  base64: string;
-  prompt: string;
-  timestamp: number;
-}
+import { useMeetingSession } from "@/hooks/useMeetingSession";
+import type { CameraFrame } from "@/types/messages";
 
 type View = "select" | "recording";
 
@@ -62,12 +36,14 @@ export function App() {
   // View state for routing
   const [view, setView] = useState<View>("select");
 
-  // Media stream state
+  // Media stream management
   const {
     stream,
+    audioStream,
     videoRef,
     error: mediaError,
     isLoading: mediaLoading,
+    isSwitching,
     hasPermission,
     requestPermission,
     audioDevices,
@@ -78,199 +54,133 @@ export function App() {
     setVideoDevice,
     sourceType,
     switchSourceType,
+    switchVideoSource,
   } = useMediaStream();
 
-  // Accumulated data
-  const [transcriptSegments, setTranscriptSegments] = useState<TranscriptSegment[]>([]);
-  const [interimText, setInterimText] = useState<string | null>(null);
-  const [interimSpeaker, setInterimSpeaker] = useState<number | undefined>(undefined);
-  const [interimStartTime, setInterimStartTime] = useState<number | undefined>(undefined);
-  const [summaryPages, setSummaryPages] = useState<SummaryPage[]>([]);
-  const [topics, setTopics] = useState<string[]>([]);
-  const [tags, setTags] = useState<string[]>([]);
-  const [flow, setFlow] = useState(50);
-  const [heat, setHeat] = useState(50);
-  const [images, setImages] = useState<ImageData[]>([]);
+  // Meeting session management (WebSocket, transcripts, analyses, images)
+  const session = useMeetingSession();
 
-  // WebSocket callbacks
-  const handleTranscript = useCallback((data: TranscriptData) => {
-    if (data.isFinal) {
-      setTranscriptSegments((prev) => [
-        ...prev,
-        {
-          text: data.text,
-          timestamp: data.timestamp,
-          isFinal: true,
-          speaker: data.speaker,
-          startTime: data.startTime,
-        },
-      ]);
-      setInterimText(null);
-      setInterimSpeaker(undefined);
-      setInterimStartTime(undefined);
-    } else {
-      setInterimText(data.text);
-      setInterimSpeaker(data.speaker);
-      setInterimStartTime(data.startTime);
-    }
-  }, []);
-
-  const handleUtteranceEnd = useCallback(() => {
-    // Mark the last segment as utterance end
-    setTranscriptSegments((prev) => {
-      if (prev.length === 0) return prev;
-      const lastSegment = prev[prev.length - 1];
-      if (!lastSegment) return prev;
-      return [
-        ...prev.slice(0, -1),
-        {
-          text: lastSegment.text,
-          timestamp: lastSegment.timestamp,
-          isFinal: lastSegment.isFinal,
-          speaker: lastSegment.speaker,
-          startTime: lastSegment.startTime,
-          isUtteranceEnd: true,
-        },
-      ];
-    });
-  }, []);
-
-  const handleAnalysis = useCallback((data: AnalysisData) => {
-    setSummaryPages((prev) => [...prev, { points: data.summary, timestamp: Date.now() }]);
-    setTopics(data.topics);
-    setTags(data.tags);
-    setFlow(data.flow);
-    setHeat(data.heat);
-  }, []);
-
-  const handleImage = useCallback((data: ImageData) => {
-    setImages((prev) => [...prev, data]);
-  }, []);
-
-  // WebSocket connection
-  const {
-    isConnected,
-    sessionStatus,
-    generationPhase,
-    error: wsError,
-    meeting,
-    connect,
-    sendMessage,
-    sendAudio,
-    startMeeting,
-    stopMeeting,
-    requestMeetingList,
-    updateMeetingTitle,
-  } = useWebSocket({
-    onTranscript: handleTranscript,
-    onUtteranceEnd: handleUtteranceEnd,
-    onAnalysis: handleAnalysis,
-    onImage: handleImage,
-  });
-
-  // Auto-connect WebSocket on mount to enable meeting list loading
+  // Auto-connect WebSocket on mount
   useEffect(() => {
-    if (!isConnected) {
-      connect();
+    if (!session.isConnected) {
+      session.connect();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Request meeting list when connected
+  // Track pending meeting action (waiting for WebSocket connection)
+  const pendingMeetingActionRef = useRef<{
+    type: "new" | "select";
+    title?: string;
+    meetingId?: string;
+  } | null>(null);
+
+  // Handle connection established
   useEffect(() => {
-    if (isConnected) {
-      requestMeetingList();
+    if (!session.isConnected) return;
+
+    const pending = pendingMeetingActionRef.current;
+    if (pending) {
+      pendingMeetingActionRef.current = null;
+      if (pending.type === "new") {
+        session.startMeeting(pending.title);
+      } else {
+        session.startMeeting(undefined, pending.meetingId);
+      }
+      setView("recording");
+      return;
     }
-  }, [isConnected, requestMeetingList]);
+
+    session.requestMeetingList();
+  }, [session.isConnected, session]);
 
   // Meeting handlers for MeetingSelectPage
   const handleNewMeeting = useCallback(
     (title?: string) => {
-      if (!isConnected) {
-        connect();
-        // Meeting will be started after connection (handled via effect)
+      if (!session.isConnected) {
+        pendingMeetingActionRef.current = { type: "new", title };
+        session.connect();
+        return;
       }
-      startMeeting(title);
+      session.startMeeting(title);
       setView("recording");
     },
-    [isConnected, connect, startMeeting],
+    [session],
   );
 
   const handleSelectMeeting = useCallback(
     (meetingId: string) => {
-      if (!isConnected) {
-        connect();
+      if (!session.isConnected) {
+        pendingMeetingActionRef.current = { type: "select", meetingId };
+        session.connect();
+        return;
       }
-      startMeeting(undefined, meetingId);
+      session.startMeeting(undefined, meetingId);
       setView("recording");
     },
-    [isConnected, connect, startMeeting],
+    [session],
   );
 
   const handleRefreshMeetings = useCallback(() => {
-    if (isConnected) {
-      requestMeetingList();
+    if (session.isConnected) {
+      session.requestMeetingList();
     }
-  }, [isConnected, requestMeetingList]);
+  }, [session]);
 
-  // Recording orchestration
+  // Recording orchestration (use audioStream for uninterrupted recording during video switch)
   const {
     isRecording,
     error: recordingError,
     startRecording,
     stopRecording,
   } = useRecording({
-    stream,
-    onAudioData: sendAudio,
-    onSessionStart: () => sendMessage({ type: "session:start" }),
-    onSessionStop: () => sendMessage({ type: "session:stop" }),
+    audioStream,
+    onAudioData: session.sendAudio,
+    onSessionStart: () => session.sendMessage({ type: "session:start" }),
+    onSessionStop: () => session.sendMessage({ type: "session:stop" }),
   });
 
-  // Elapsed time tracking for recording
+  // Elapsed time tracking
   const { formattedTime: elapsedTime } = useElapsedTime({ enabled: isRecording });
 
-  // Camera frame capture (sends to server for multimodal analysis)
-  const handleCameraFrameCaptured = useCallback(
+  // Camera frame capture
+  const onFrameCaptured = useCallback(
     (frame: CameraFrame) => {
-      sendMessage({ type: "camera:frame", data: frame });
+      session.sendMessage({ type: "camera:frame", data: frame });
     },
-    [sendMessage],
+    [session],
   );
 
   useCameraCapture({
     videoRef,
     isRecording,
-    onFrameCaptured: handleCameraFrameCaptured,
+    onFrameCaptured,
   });
 
-  // Track pending start request (waiting for WebSocket connection)
+  // Track pending start request
   const pendingStartRef = useRef(false);
 
-  // Start recording when WebSocket connects and start was pending
+  // Start recording when WebSocket connects
   useEffect(() => {
-    if (isConnected && pendingStartRef.current) {
+    if (session.isConnected && pendingStartRef.current) {
       pendingStartRef.current = false;
-      // Guard against races: permission/stream might have been lost while connecting.
-      if (hasPermission && stream) {
+      if (hasPermission && audioStream) {
         startRecording();
       }
     }
-  }, [isConnected, hasPermission, stream, startRecording]);
+  }, [session.isConnected, hasPermission, audioStream, startRecording]);
 
-  // If permission/stream is lost mid-session (e.g. user stops screen share), cancel pending start and stop recording.
+  // Handle permission/stream loss (check audioStream since recording depends on it)
   useEffect(() => {
-    if (hasPermission && stream) return;
+    if (hasPermission && audioStream) return;
     pendingStartRef.current = false;
     if (isRecording) {
       stopRecording();
     }
-  }, [hasPermission, stream, isRecording, stopRecording]);
+  }, [hasPermission, audioStream, isRecording, stopRecording]);
 
   // Combined error state
-  const error = mediaError || wsError || recordingError;
-
-  // Derive generation states for components
-  const isAnalyzing = generationPhase === "analyzing";
-  const isGenerating = generationPhase === "generating" || generationPhase === "retrying";
+  const error = mediaError || session.error || recordingError;
 
   // Handlers
   const handleRequestPermission = async () => {
@@ -278,20 +188,15 @@ export function App() {
   };
 
   const handleStart = () => {
-    if (!hasPermission || !stream) {
+    if (!hasPermission || !audioStream || !session.meeting.meetingId) {
       return;
     }
 
-    // Meeting must be active to start recording
-    if (!meeting.meetingId) {
-      return;
-    }
-
-    if (isConnected) {
+    if (session.isConnected) {
       startRecording();
     } else {
       pendingStartRef.current = true;
-      connect();
+      session.connect();
     }
   };
 
@@ -300,20 +205,21 @@ export function App() {
     stopRecording();
   };
 
-  // Back navigation handler
   const handleBack = useCallback(() => {
     if (isRecording) {
       stopRecording();
     }
+    session.stopMeeting();
+    session.resetSession();
     setView("select");
-  }, [isRecording, stopRecording]);
+  }, [isRecording, stopRecording, session]);
 
   // Show meeting selection page
   if (view === "select") {
     return (
       <MeetingSelectPage
-        meetings={meeting.meetingList}
-        isLoading={!isConnected}
+        meetings={session.meeting.meetingList}
+        isLoading={!session.isConnected}
         onNewMeeting={handleNewMeeting}
         onSelectMeeting={handleSelectMeeting}
         onRefresh={handleRefreshMeetings}
@@ -321,38 +227,38 @@ export function App() {
     );
   }
 
-  // Show recording page (3-panel layout)
+  // Show recording page
   return (
     <MainLayout
       header={
         <div className="flex items-center justify-between flex-wrap gap-4">
           <div className="flex items-center gap-4">
             <MeetingHeader
-              title={meeting.meetingTitle}
+              title={session.meeting.meetingTitle}
               onBack={handleBack}
               isRecording={isRecording}
-              onUpdateTitle={updateMeetingTitle}
+              onUpdateTitle={session.updateMeetingTitle}
             />
-            <TopicIndicator topics={topics} />
+            <TopicIndicator topics={session.topics} />
           </div>
           <div className="flex items-center gap-6">
-            <FlowMeter value={flow} />
-            <HeatMeter value={heat} />
+            <FlowMeter value={session.flow} />
+            <HeatMeter value={session.heat} />
           </div>
         </div>
       }
       leftPanel={
         <div className="h-full flex flex-col overflow-hidden">
           <SummaryPanel
-            summaryPages={summaryPages}
-            transcriptSegments={transcriptSegments}
-            interimText={interimText}
-            interimSpeaker={interimSpeaker}
-            interimStartTime={interimStartTime}
-            isAnalyzing={isAnalyzing}
+            summaryPages={session.summaryPages}
+            transcriptSegments={session.transcriptSegments}
+            interimText={session.interimText}
+            interimSpeaker={session.interimSpeaker}
+            interimStartTime={session.interimStartTime}
+            isAnalyzing={session.isAnalyzing}
             className="flex-1 min-h-0"
           />
-          <TagList tags={tags} className="flex-shrink-0 mt-3 pt-3 border-t border-border" />
+          <TagList tags={session.tags} className="flex-shrink-0 mt-3 pt-3 border-t border-border" />
         </div>
       }
       rightPanel={
@@ -360,8 +266,9 @@ export function App() {
           <div className="flex-shrink-0 mx-4 mt-4 mb-2 flex flex-col gap-3">
             <MediaSourceToggle
               value={sourceType}
-              onChange={switchSourceType}
-              disabled={isRecording}
+              onChange={isRecording ? switchVideoSource : switchSourceType}
+              disabled={isSwitching}
+              isLoading={isSwitching}
             />
             {hasPermission && (
               <DeviceSelector
@@ -371,18 +278,14 @@ export function App() {
                 selectedVideoDeviceId={selectedVideoDeviceId}
                 onAudioDeviceChange={setAudioDevice}
                 onVideoDeviceChange={setVideoDevice}
-                disabled={isRecording}
+                disabled={isSwitching}
                 stream={stream}
                 isRecording={isRecording}
                 sourceType={sourceType}
               />
             )}
           </div>
-          <ResizablePanelGroup
-            id="camera-graphics"
-            direction="vertical"
-            className="flex-1 min-h-0"
-          >
+          <ResizablePanelGroup id="camera-graphics" direction="vertical" className="flex-1 min-h-0">
             <ResizablePanel id="camera-panel" defaultSize={35} minSize={20} maxSize={70}>
               <div className="h-full flex flex-col px-4 pb-4">
                 <CameraPreview
@@ -398,9 +301,9 @@ export function App() {
             <ResizablePanel id="graphics-panel" defaultSize={65} minSize={30} maxSize={80}>
               <div className="h-full flex flex-col px-4 pt-4 pb-4">
                 <ImageCarousel
-                  images={images}
-                  isGenerating={isGenerating}
-                  generationPhase={generationPhase}
+                  images={session.images}
+                  isGenerating={session.isGenerating}
+                  generationPhase={session.generationPhase}
                   className="flex-1 min-h-0"
                 />
               </div>
@@ -410,14 +313,14 @@ export function App() {
       }
       footer={
         <RecordingControls
-          sessionStatus={sessionStatus}
+          sessionStatus={session.sessionStatus}
           isRecording={isRecording}
           hasPermission={hasPermission}
           isLoading={mediaLoading}
           error={error}
           sourceType={sourceType}
           elapsedTime={elapsedTime}
-          hasMeeting={meeting.meetingId !== null}
+          hasMeeting={session.meeting.meetingId !== null}
           onRequestPermission={handleRequestPermission}
           onStart={handleStart}
           onStop={handleStop}

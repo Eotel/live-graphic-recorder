@@ -63,7 +63,7 @@ export function DeviceSelector({
         <div className="flex items-center gap-2">
           <AudioLevelIndicator isActive={isAudioActive} />
           <Select
-            value={selectedAudioDeviceId ?? undefined}
+            value={selectedAudioDeviceId || undefined}
             onValueChange={onAudioDeviceChange}
             disabled={disabled}
           >
@@ -71,11 +71,13 @@ export function DeviceSelector({
               <SelectValue placeholder="Select microphone" />
             </SelectTrigger>
             <SelectContent>
-              {audioDevices.map((device, index) => (
-                <SelectItem key={device.deviceId} value={device.deviceId}>
-                  {device.label || `Microphone ${index + 1}`}
-                </SelectItem>
-              ))}
+              {audioDevices
+                .filter((device) => device.deviceId)
+                .map((device, index) => (
+                  <SelectItem key={device.deviceId} value={device.deviceId}>
+                    {device.label || `Microphone ${index + 1}`}
+                  </SelectItem>
+                ))}
             </SelectContent>
           </Select>
         </div>
@@ -85,7 +87,7 @@ export function DeviceSelector({
         <div className="flex items-center gap-2">
           <Video className="h-4 w-4 text-muted-foreground flex-shrink-0" />
           <Select
-            value={selectedVideoDeviceId ?? undefined}
+            value={selectedVideoDeviceId || undefined}
             onValueChange={onVideoDeviceChange}
             disabled={disabled}
           >
@@ -93,11 +95,13 @@ export function DeviceSelector({
               <SelectValue placeholder="Select camera" />
             </SelectTrigger>
             <SelectContent>
-              {videoDevices.map((device, index) => (
-                <SelectItem key={device.deviceId} value={device.deviceId}>
-                  {device.label || `Camera ${index + 1}`}
-                </SelectItem>
-              ))}
+              {videoDevices
+                .filter((device) => device.deviceId)
+                .map((device, index) => (
+                  <SelectItem key={device.deviceId} value={device.deviceId}>
+                    {device.label || `Camera ${index + 1}`}
+                  </SelectItem>
+                ))}
             </SelectContent>
           </Select>
         </div>

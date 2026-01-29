@@ -38,11 +38,13 @@ import {
 import {
   createGeneratedImage,
   findGeneratedImagesBySessionId,
+  findGeneratedImageByIdAndMeetingId,
   type PersistedGeneratedImage,
 } from "./db/repository/image";
 import {
   createCameraCapture,
   findCameraCapturesBySessionId,
+  findCameraCapturByIdAndMeetingId,
   type PersistedCameraCapture,
 } from "./db/repository/capture";
 import {
@@ -67,7 +69,12 @@ export interface MetaSummaryInput {
   representativeImageId: string | null;
 }
 
-export type { PersistedMetaSummary, PersistedAnalysis, PersistedGeneratedImage };
+export type {
+  PersistedMetaSummary,
+  PersistedAnalysis,
+  PersistedGeneratedImage,
+  PersistedCameraCapture,
+};
 
 export class PersistenceService {
   private readonly db: Database;
@@ -224,6 +231,14 @@ export class PersistenceService {
     return this.storage.loadImage(filePath);
   }
 
+  /**
+   * Get an image by ID with meeting ownership validation.
+   * Returns null if the image doesn't exist or doesn't belong to the meeting.
+   */
+  getImageByIdAndMeetingId(imageId: number, meetingId: string): PersistedGeneratedImage | null {
+    return findGeneratedImageByIdAndMeetingId(this.db, imageId, meetingId);
+  }
+
   // ============================================================================
   // Camera Frame Operations
   // ============================================================================
@@ -239,6 +254,14 @@ export class PersistenceService {
 
   loadCaptures(sessionId: string): PersistedCameraCapture[] {
     return findCameraCapturesBySessionId(this.db, sessionId);
+  }
+
+  /**
+   * Get a capture by ID with meeting ownership validation.
+   * Returns null if the capture doesn't exist or doesn't belong to the meeting.
+   */
+  getCaptureByIdAndMeetingId(captureId: number, meetingId: string): PersistedCameraCapture | null {
+    return findCameraCapturByIdAndMeetingId(this.db, captureId, meetingId);
   }
 
   // ============================================================================
@@ -300,6 +323,18 @@ export class PersistenceService {
   loadRecentMeetingImages(meetingId: string, limit: number): PersistedGeneratedImage[] {
     const allImages = this.loadMeetingImages(meetingId);
     return allImages.slice(-limit);
+  }
+
+  loadMeetingCaptures(meetingId: string): PersistedCameraCapture[] {
+    const sessions = findSessionsByMeetingId(this.db, meetingId);
+    const allCaptures: PersistedCameraCapture[] = [];
+
+    for (const session of sessions) {
+      const captures = findCameraCapturesBySessionId(this.db, session.id);
+      allCaptures.push(...captures);
+    }
+
+    return allCaptures.sort((a, b) => a.timestamp - b.timestamp);
   }
 
   // ============================================================================

@@ -5,7 +5,7 @@
  * Related: src/App.tsx, src/components/graphics/ImageSkeleton.tsx
  */
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { ChevronLeft, ChevronRight, ImageIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -13,7 +13,8 @@ import { ImageSkeleton } from "./ImageSkeleton";
 import type { GenerationPhase } from "@/types/messages";
 
 interface GraphicImage {
-  base64: string;
+  base64?: string;
+  url?: string;
   prompt: string;
   timestamp: number;
 }
@@ -25,6 +26,17 @@ interface ImageCarouselProps {
   className?: string;
 }
 
+/**
+ * Get the image source URL from a GraphicImage object.
+ * Supports both base64-encoded images (real-time) and URL-based images (history).
+ * Returns null if no valid source is available.
+ */
+function getImageSrc(image: GraphicImage): string | null {
+  if (image.url) return image.url;
+  if (image.base64) return `data:image/png;base64,${image.base64}`;
+  return null;
+}
+
 export function ImageCarousel({
   images,
   isGenerating = false,
@@ -32,11 +44,27 @@ export function ImageCarousel({
   className,
 }: ImageCarouselProps) {
   const [currentIndex, setCurrentIndex] = useState(0);
+  const [loadErrors, setLoadErrors] = useState<Set<number>>(new Set());
+
+  // Clamp currentIndex when images array changes
+  useEffect(() => {
+    if (images.length === 0) {
+      setCurrentIndex(0);
+      setLoadErrors(new Set());
+    } else if (currentIndex >= images.length) {
+      setCurrentIndex(images.length - 1);
+    }
+  }, [images.length, currentIndex]);
 
   const hasImages = images.length > 0;
-  const currentImage = images[currentIndex];
+  const clampedIndex = Math.min(currentIndex, Math.max(0, images.length - 1));
+  const currentImage = hasImages ? images[clampedIndex] : undefined;
   const showSkeleton = isGenerating && !hasImages;
   const isRetrying = generationPhase === "retrying";
+
+  const handleImageError = (index: number) => {
+    setLoadErrors((prev) => new Set(prev).add(index));
+  };
 
   const goToPrevious = () => {
     setCurrentIndex((prev) => (prev > 0 ? prev - 1 : images.length - 1));
@@ -54,19 +82,25 @@ export function ImageCarousel({
 
   return (
     <div className={cn("flex flex-col", className)}>
-      <h3 className="text-sm font-semibold text-muted-foreground mb-2">Graphic Recordings</h3>
-
       {showSkeleton ? (
         <ImageSkeleton isRetrying={isRetrying} />
       ) : (
-        <div className="relative aspect-video bg-muted rounded-lg overflow-hidden">
+        <div className="relative flex-1 min-h-0 bg-muted rounded-lg overflow-hidden">
           {hasImages && currentImage ? (
             <>
-              <img
-                src={`data:image/png;base64,${currentImage.base64}`}
-                alt={currentImage.prompt}
-                className="w-full h-full object-contain"
-              />
+              {loadErrors.has(clampedIndex) || !getImageSrc(currentImage) ? (
+                <div className="absolute inset-0 flex flex-col items-center justify-center text-muted-foreground">
+                  <ImageIcon className="size-12 mb-2" />
+                  <p className="text-sm">Failed to load image</p>
+                </div>
+              ) : (
+                <img
+                  src={getImageSrc(currentImage)!}
+                  alt={currentImage.prompt}
+                  className="w-full h-full object-contain"
+                  onError={() => handleImageError(clampedIndex)}
+                />
+              )}
 
               {/* Navigation arrows */}
               {images.length > 1 && (
@@ -92,7 +126,7 @@ export function ImageCarousel({
 
               {/* Image counter */}
               <div className="absolute bottom-2 left-1/2 -translate-x-1/2 bg-black/50 text-white text-xs px-2 py-1 rounded-full">
-                {currentIndex + 1} / {images.length}
+                {clampedIndex + 1} / {images.length}
               </div>
             </>
           ) : (
@@ -107,24 +141,33 @@ export function ImageCarousel({
       {/* Thumbnail strip */}
       {images.length > 1 && (
         <div className="flex gap-2 mt-2 overflow-x-auto pb-2">
-          {images.map((image, index) => (
-            <button
-              key={image.timestamp}
-              onClick={() => setCurrentIndex(index)}
-              className={cn(
-                "flex-shrink-0 w-16 h-12 rounded overflow-hidden border-2 transition-colors",
-                index === currentIndex
-                  ? "border-primary"
-                  : "border-transparent hover:border-muted-foreground/50",
-              )}
-            >
-              <img
-                src={`data:image/png;base64,${image.base64}`}
-                alt={`Thumbnail ${index + 1}`}
-                className="w-full h-full object-cover"
-              />
-            </button>
-          ))}
+          {images.map((image, index) => {
+            const thumbSrc = getImageSrc(image);
+            return (
+              <button
+                key={`${index}-${image.timestamp}`}
+                onClick={() => setCurrentIndex(index)}
+                className={cn(
+                  "flex-shrink-0 w-16 h-12 rounded overflow-hidden border-2 transition-colors",
+                  index === clampedIndex
+                    ? "border-primary"
+                    : "border-transparent hover:border-muted-foreground/50",
+                )}
+              >
+                {thumbSrc ? (
+                  <img
+                    src={thumbSrc}
+                    alt={`Thumbnail ${index + 1}`}
+                    className="w-full h-full object-cover"
+                  />
+                ) : (
+                  <div className="w-full h-full bg-muted flex items-center justify-center">
+                    <ImageIcon className="size-4 text-muted-foreground" />
+                  </div>
+                )}
+              </button>
+            );
+          })}
         </div>
       )}
     </div>

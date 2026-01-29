@@ -6,7 +6,9 @@
  */
 
 import { type ServerWebSocket, type Server } from "bun";
+import { resolve, relative, isAbsolute } from "node:path";
 import index from "./index.html";
+import { DB_CONFIG, WS_CONFIG } from "@/config/constants";
 import type {
   ClientMessage,
   ServerMessage,
@@ -15,6 +17,7 @@ import type {
   AnalysisResult,
   CameraFrame,
   GenerationPhase,
+  MeetingHistoryMessage,
 } from "./types/messages";
 import {
   createSession,
@@ -54,21 +57,17 @@ async function checkAndGenerateMetaSummary(
   console.log(`[MetaSummary] Triggering meta-summary generation for meeting: ${meetingId}`);
 
   try {
-    const result = await generateAndPersistMetaSummary(
-      persistence,
-      meetingId,
-      async (input) => {
-        return openaiService.generateMetaSummary({
-          analyses: input.analyses.map((a) => ({
-            summary: a.summary,
-            topics: a.topics,
-            timestamp: a.timestamp,
-          })),
-          startTime: input.startTime,
-          endTime: input.endTime,
-        });
-      },
-    );
+    const result = await generateAndPersistMetaSummary(persistence, meetingId, async (input) => {
+      return openaiService.generateMetaSummary({
+        analyses: input.analyses.map((a) => ({
+          summary: a.summary,
+          topics: a.topics,
+          timestamp: a.timestamp,
+        })),
+        startTime: input.startTime,
+        endTime: input.endTime,
+      });
+    });
 
     if (result) {
       console.log(
@@ -100,9 +99,96 @@ function send(ws: ServerWebSocket<WSContext>, message: ServerMessage): void {
   ws.send(JSON.stringify(message));
 }
 
+/**
+ * Sanitize error message for client consumption.
+ * Avoids leaking internal details like file paths, stack traces, or API keys.
+ */
+function sanitizeErrorMessage(error: unknown): string {
+  if (!(error instanceof Error)) {
+    return "An unexpected error occurred";
+  }
+  const msg = error.message;
+  // Strip potential sensitive patterns
+  if (
+    msg.includes("/") ||
+    msg.includes("\\") ||
+    msg.includes("ENOENT") ||
+    msg.includes("EACCES") ||
+    msg.includes("api_key") ||
+    msg.includes("API key")
+  ) {
+    return "An internal error occurred";
+  }
+  // Truncate long messages
+  return msg.length > 200 ? msg.slice(0, 200) + "..." : msg;
+}
+
 // Server configuration
 const PORT = Number(process.env["PORT"]) || 3000;
-const HOST = process.env["HOST"] || "0.0.0.0";
+const HOST = process.env["HOST"] || "127.0.0.1";
+
+// Resolved media path for security validation
+const MEDIA_BASE_PATH = resolve(DB_CONFIG.defaultMediaPath);
+
+/**
+ * Validate that a file path is within the allowed media directory.
+ * Prevents path traversal attacks.
+ */
+function isPathWithinMediaDir(requestedPath: string): boolean {
+  const resolvedPath = resolve(requestedPath);
+  const rel = relative(MEDIA_BASE_PATH, resolvedPath);
+  // Reject anything that escapes the base directory
+  if (
+    rel === "" ||
+    rel === ".." ||
+    rel.startsWith("../") ||
+    rel.startsWith("..\\") ||
+    isAbsolute(rel)
+  ) {
+    return false;
+  }
+  return true;
+}
+
+/**
+ * Serve a static media file from the media directory.
+ */
+async function serveMediaFile(subdir: string, filePath: string): Promise<Response> {
+  // Decode URL-encoded characters and construct full path
+  let decodedPath: string;
+  try {
+    decodedPath = decodeURIComponent(filePath);
+  } catch {
+    return new Response("Bad Request", { status: 400 });
+  }
+  const fullPath = resolve(MEDIA_BASE_PATH, subdir, decodedPath);
+
+  // Security check: ensure path is within media directory
+  if (!isPathWithinMediaDir(fullPath)) {
+    return new Response("Forbidden", { status: 403 });
+  }
+
+  const file = Bun.file(fullPath);
+  if (!(await file.exists())) {
+    return new Response("Not Found", { status: 404 });
+  }
+
+  // Determine content type based on extension
+  const ext = fullPath.split(".").pop()?.toLowerCase();
+  const contentType =
+    ext === "png"
+      ? "image/png"
+      : ext === "jpg" || ext === "jpeg"
+        ? "image/jpeg"
+        : "application/octet-stream";
+
+  return new Response(file, {
+    headers: {
+      "Content-Type": contentType,
+      "Cache-Control": "public, max-age=31536000, immutable",
+    },
+  });
+}
 
 // Create server with WebSocket support
 const server = Bun.serve<WSContext>({
@@ -112,6 +198,50 @@ const server = Bun.serve<WSContext>({
     "/": index,
     "/api/health": {
       GET: () => Response.json({ status: "ok", timestamp: Date.now() }),
+    },
+    "/api/meetings/:meetingId/images/:imageId": async (req: Request) => {
+      const url = new URL(req.url);
+      const match = url.pathname.match(/^\/api\/meetings\/([^/]+)\/images\/(\d+)$/);
+      if (!match) {
+        return new Response("Bad Request", { status: 400 });
+      }
+      const [, meetingId, imageIdStr] = match;
+      const imageId = parseInt(imageIdStr!, 10);
+
+      // Validate meeting ID format
+      if (!meetingId || !isValidUUID(meetingId)) {
+        return new Response("Invalid meeting ID", { status: 400 });
+      }
+
+      // Get image with meeting ownership validation
+      const image = persistence.getImageByIdAndMeetingId(imageId, meetingId);
+      if (!image) {
+        return new Response("Not Found", { status: 404 });
+      }
+
+      return serveMediaFile("images", image.filePath.replace(/^.*\/images\//, ""));
+    },
+    "/api/meetings/:meetingId/captures/:captureId": async (req: Request) => {
+      const url = new URL(req.url);
+      const match = url.pathname.match(/^\/api\/meetings\/([^/]+)\/captures\/(\d+)$/);
+      if (!match) {
+        return new Response("Bad Request", { status: 400 });
+      }
+      const [, meetingId, captureIdStr] = match;
+      const captureId = parseInt(captureIdStr!, 10);
+
+      // Validate meeting ID format
+      if (!meetingId || !isValidUUID(meetingId)) {
+        return new Response("Invalid meeting ID", { status: 400 });
+      }
+
+      // Get capture with meeting ownership validation
+      const capture = persistence.getCaptureByIdAndMeetingId(captureId, meetingId);
+      if (!capture) {
+        return new Response("Not Found", { status: 404 });
+      }
+
+      return serveMediaFile("captures", capture.filePath.replace(/^.*\/captures\//, ""));
     },
     "/ws/recording": (req: Request, server: Server<WSContext>) => {
       const sessionId = generateSessionId();
@@ -148,10 +278,12 @@ const server = Bun.serve<WSContext>({
       if (message instanceof ArrayBuffer || message instanceof Buffer) {
         if (ctx.deepgram?.isConnected()) {
           ctx.deepgram.sendAudio(message);
-        } else {
+        } else if (ctx.pendingAudio.length < WS_CONFIG.maxPendingAudioChunks) {
           // Buffer audio until Deepgram is ready (preserves WebM header)
+          // Limit buffer size to prevent memory exhaustion
           ctx.pendingAudio.push(message);
         }
+        // Drop audio if buffer is full to prevent DoS
         return;
       }
 
@@ -217,6 +349,82 @@ function isValidUUID(id: string): boolean {
   return UUID_PATTERN.test(id);
 }
 
+/**
+ * Generate a meeting-scoped URL for an image.
+ */
+function imageToUrl(meetingId: string, imageId: number): string {
+  return `/api/meetings/${meetingId}/images/${imageId}`;
+}
+
+/**
+ * Generate a meeting-scoped URL for a capture.
+ */
+function captureToUrl(meetingId: string, captureId: number): string {
+  return `/api/meetings/${meetingId}/captures/${captureId}`;
+}
+
+/**
+ * Send meeting history data to the client when joining an existing meeting.
+ */
+function sendMeetingHistory(ws: ServerWebSocket<WSContext>, meetingId: string): void {
+  try {
+    // Load all historical data
+    const transcripts = persistence.loadMeetingTranscript(meetingId);
+    const analyses = persistence.loadMeetingAnalyses(meetingId);
+    const images = persistence.loadMeetingImages(meetingId);
+    const captures = persistence.loadMeetingCaptures(meetingId);
+    const metaSummaries = persistence.loadMetaSummaries(meetingId);
+
+    const historyMessage: MeetingHistoryMessage = {
+      type: "meeting:history",
+      data: {
+        transcripts: transcripts.map((t) => ({
+          text: t.text,
+          timestamp: t.timestamp,
+          isFinal: t.isFinal,
+          speaker: t.speaker ?? undefined,
+          startTime: t.startTime ?? undefined,
+          isUtteranceEnd: t.isUtteranceEnd ?? undefined,
+        })),
+        analyses: analyses.map((a) => ({
+          summary: a.summary,
+          topics: a.topics,
+          tags: a.tags,
+          flow: a.flow,
+          heat: a.heat,
+          timestamp: a.timestamp,
+        })),
+        images: images.map((img) => ({
+          url: imageToUrl(meetingId, img.id),
+          prompt: img.prompt,
+          timestamp: img.timestamp,
+        })),
+        captures: captures.map((cap) => ({
+          url: captureToUrl(meetingId, cap.id),
+          timestamp: cap.timestamp,
+        })),
+        metaSummaries: metaSummaries.map((ms) => ({
+          summary: ms.summary,
+          themes: ms.themes,
+          startTime: ms.startTime,
+          endTime: ms.endTime,
+        })),
+      },
+    };
+
+    send(ws, historyMessage);
+    console.log(
+      `[WS] Sent meeting history: ${transcripts.length} transcripts, ${analyses.length} analyses, ${images.length} images, ${captures.length} captures`,
+    );
+  } catch (error) {
+    console.error("[WS] Failed to send meeting history:", error);
+    send(ws, {
+      type: "error",
+      data: { message: "Failed to load meeting history" },
+    });
+  }
+}
+
 function handleMeetingStart(
   ws: ServerWebSocket<WSContext>,
   ctx: WSContext,
@@ -225,6 +433,7 @@ function handleMeetingStart(
   try {
     let meetingId: string;
     let title: string | undefined;
+    let isExistingMeeting = false;
 
     if (data.meetingId) {
       // Validate meetingId format
@@ -247,6 +456,7 @@ function handleMeetingStart(
       }
       meetingId = existing.id;
       title = existing.title ?? undefined;
+      isExistingMeeting = true;
     } else {
       // Create new meeting
       const meeting = persistence.createMeeting(data.title);
@@ -263,6 +473,11 @@ function handleMeetingStart(
       type: "meeting:status",
       data: { meetingId, title, sessionId: ctx.sessionId },
     });
+
+    // Send historical data for existing meetings
+    if (isExistingMeeting) {
+      sendMeetingHistory(ws, meetingId);
+    }
 
     console.log(`[WS] Meeting started: ${meetingId}, session: ${ctx.sessionId}`);
   } catch (error) {
@@ -365,31 +580,31 @@ async function handleSessionStart(ws: ServerWebSocket<WSContext>, ctx: WSContext
             checkAndGenerateMetaSummary(ctx.meetingId, openaiService);
           }
         },
-      onImageComplete(image: GeneratedImage) {
-        ctx.session = addImage(ctx.session, image);
-        send(ws, {
-          type: "image",
-          data: {
-            base64: image.base64,
-            prompt: image.prompt,
-            timestamp: image.timestamp,
-          },
-        });
-        // Persist image
-        if (ctx.meetingId) {
-          persistence.persistImage(ctx.sessionId, image).catch((err) => {
-            console.error("[Persistence] Failed to persist image:", err);
+        onImageComplete(image: GeneratedImage) {
+          ctx.session = addImage(ctx.session, image);
+          send(ws, {
+            type: "image",
+            data: {
+              base64: image.base64,
+              prompt: image.prompt,
+              timestamp: image.timestamp,
+            },
           });
-        }
-      },
-      onError(error: Error) {
-        console.error("[Analysis] Error:", error);
-        send(ws, {
-          type: "error",
-          data: { message: error.message },
-        });
-      },
-      onPhaseChange(phase: GenerationPhase, retryAttempt?: number) {
+          // Persist image
+          if (ctx.meetingId) {
+            persistence.persistImage(ctx.sessionId, image).catch((err) => {
+              console.error("[Persistence] Failed to persist image:", err);
+            });
+          }
+        },
+        onError(error: Error) {
+          console.error("[Analysis] Error:", error);
+          send(ws, {
+            type: "error",
+            data: { message: sanitizeErrorMessage(error) },
+          });
+        },
+        onPhaseChange(phase: GenerationPhase, retryAttempt?: number) {
           send(ws, {
             type: "generation:status",
             data: { phase, retryAttempt },
@@ -438,7 +653,7 @@ async function handleSessionStart(ws: ServerWebSocket<WSContext>, ctx: WSContext
         console.error("[Deepgram] Error:", error);
         send(ws, {
           type: "error",
-          data: { message: error.message },
+          data: { message: sanitizeErrorMessage(error) },
         });
       },
       onClose() {
@@ -480,7 +695,7 @@ async function handleSessionStart(ws: ServerWebSocket<WSContext>, ctx: WSContext
       type: "session:status",
       data: {
         status: "error",
-        error: error instanceof Error ? error.message : "Failed to start",
+        error: sanitizeErrorMessage(error),
       },
     });
   }
@@ -513,7 +728,9 @@ function handleCameraFrame(ctx: WSContext, frame: CameraFrame): void {
     });
   }
 
-  console.log(`[WS] Camera frame received: ${ctx.sessionId}, frames: ${ctx.session.cameraFrames.length}`);
+  console.log(
+    `[WS] Camera frame received: ${ctx.sessionId}, frames: ${ctx.session.cameraFrames.length}`,
+  );
 }
 
 function cleanup(ctx: WSContext): void {

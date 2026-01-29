@@ -10,9 +10,12 @@ import type { MediaSourceType } from "@/types/messages";
 
 export interface MediaStreamState {
   stream: MediaStream | null;
+  audioStream: MediaStream | null;
+  videoStream: MediaStream | null;
   videoRef: React.RefObject<HTMLVideoElement | null>;
   error: string | null;
   isLoading: boolean;
+  isSwitching: boolean;
   hasPermission: boolean;
   audioDevices: MediaDeviceInfo[];
   videoDevices: MediaDeviceInfo[];
@@ -27,6 +30,7 @@ export interface MediaStreamActions {
   setAudioDevice: (deviceId: string) => void;
   setVideoDevice: (deviceId: string) => void;
   switchSourceType: (type: MediaSourceType) => void;
+  switchVideoSource: (type: MediaSourceType) => Promise<boolean>;
 }
 
 function stopTracks(target: MediaStream | null) {
@@ -73,8 +77,11 @@ function formatMediaError(err: unknown): string {
 
 export function useMediaStream(): MediaStreamState & MediaStreamActions {
   const [stream, setStream] = useState<MediaStream | null>(null);
+  const [audioStream, setAudioStream] = useState<MediaStream | null>(null);
+  const [videoStream, setVideoStream] = useState<MediaStream | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [isSwitching, setIsSwitching] = useState(false);
   const [hasPermission, setHasPermission] = useState(false);
   const [audioDevices, setAudioDevices] = useState<MediaDeviceInfo[]>([]);
   const [videoDevices, setVideoDevices] = useState<MediaDeviceInfo[]>([]);
@@ -84,8 +91,11 @@ export function useMediaStream(): MediaStreamState & MediaStreamActions {
 
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
+  const audioStreamRef = useRef<MediaStream | null>(null);
+  const videoStreamRef = useRef<MediaStream | null>(null);
   const streamInstanceIdRef = useRef(0);
   const opIdRef = useRef(0);
+  const videoSwitchOpIdRef = useRef(0);
   const isMountedRef = useRef(true);
   // Track if we should auto-request permission after source type change
   const shouldAutoRequestRef = useRef(false);
@@ -142,61 +152,100 @@ export function useMediaStream(): MediaStreamState & MediaStreamActions {
     [],
   );
 
-  const getScreenStream = useCallback(async (audioDeviceId: string | null): Promise<MediaStream> => {
-    let screenStream: MediaStream | null = null;
-    let audioStream: MediaStream | null = null;
+  const getScreenStream = useCallback(
+    async (audioDeviceId: string | null): Promise<MediaStream> => {
+      let screenStream: MediaStream | null = null;
+      let audioStream: MediaStream | null = null;
 
-    try {
-      if (!navigator.mediaDevices?.getDisplayMedia) {
-        throw new Error("Screen sharing is not supported in this browser.");
+      try {
+        if (!navigator.mediaDevices?.getDisplayMedia) {
+          throw new Error("Screen sharing is not supported in this browser.");
+        }
+        if (!navigator.mediaDevices?.getUserMedia) {
+          throw new Error("Microphone APIs are not available in this browser.");
+        }
+        // Get screen video (no audio - we use mic for speech-to-text)
+        screenStream = await navigator.mediaDevices.getDisplayMedia({
+          video: {
+            width: { ideal: 1920 },
+            height: { ideal: 1080 },
+          },
+          audio: false,
+        });
+
+        // Get mic audio for speech-to-text
+        audioStream = await navigator.mediaDevices.getUserMedia({
+          audio: {
+            deviceId: audioDeviceId ? { exact: audioDeviceId } : undefined,
+            echoCancellation: true,
+            noiseSuppression: true,
+            autoGainControl: true,
+          },
+          video: false,
+        });
+
+        // Combine: screen video + mic audio
+        return new MediaStream([...screenStream.getVideoTracks(), ...audioStream.getAudioTracks()]);
+      } catch (err) {
+        // If mic permission fails after screen capture succeeds, avoid leaking an active capture session.
+        stopTracks(screenStream);
+        stopTracks(audioStream);
+        throw err;
       }
+    },
+    [],
+  );
+
+  const getCameraVideoOnly = useCallback(
+    async (videoDeviceId: string | null): Promise<MediaStream> => {
       if (!navigator.mediaDevices?.getUserMedia) {
-        throw new Error("Microphone APIs are not available in this browser.");
+        throw new Error("Camera APIs are not available in this browser.");
       }
-      // Get screen video (no audio - we use mic for speech-to-text)
-      screenStream = await navigator.mediaDevices.getDisplayMedia({
-        video: {
-          width: { ideal: 1920 },
-          height: { ideal: 1080 },
-        },
+      return navigator.mediaDevices.getUserMedia({
         audio: false,
-      });
-
-      // Get mic audio for speech-to-text
-      audioStream = await navigator.mediaDevices.getUserMedia({
-        audio: {
-          deviceId: audioDeviceId ? { exact: audioDeviceId } : undefined,
-          echoCancellation: true,
-          noiseSuppression: true,
-          autoGainControl: true,
+        video: {
+          deviceId: videoDeviceId ? { exact: videoDeviceId } : undefined,
+          width: { ideal: 640 },
+          height: { ideal: 480 },
+          facingMode: videoDeviceId ? undefined : "user",
         },
-        video: false,
       });
+    },
+    [],
+  );
 
-      // Combine: screen video + mic audio
-      return new MediaStream([
-        ...screenStream.getVideoTracks(),
-        ...audioStream.getAudioTracks(),
-      ]);
-    } catch (err) {
-      // If mic permission fails after screen capture succeeds, avoid leaking an active capture session.
-      stopTracks(screenStream);
-      stopTracks(audioStream);
-      throw err;
+  const getScreenVideoOnly = useCallback(async (): Promise<MediaStream> => {
+    if (!navigator.mediaDevices?.getDisplayMedia) {
+      throw new Error("Screen sharing is not supported in this browser.");
     }
+    return navigator.mediaDevices.getDisplayMedia({
+      video: {
+        width: { ideal: 1920 },
+        height: { ideal: 1080 },
+      },
+      audio: false,
+    });
   }, []);
 
   const stopStream = useCallback(() => {
     // Invalidate in-flight acquire/switch operations.
     opIdRef.current += 1;
+    videoSwitchOpIdRef.current += 1;
 
     stopTracks(streamRef.current);
+    stopTracks(audioStreamRef.current);
+    stopTracks(videoStreamRef.current);
     streamRef.current = null;
+    audioStreamRef.current = null;
+    videoStreamRef.current = null;
     streamInstanceIdRef.current += 1;
 
     if (!isMountedRef.current) return;
     setIsLoading(false);
+    setIsSwitching(false);
     setStream(null);
+    setAudioStream(null);
+    setVideoStream(null);
     setHasPermission(false);
     attachVideo(null);
   }, [attachVideo]);
@@ -204,9 +253,21 @@ export function useMediaStream(): MediaStreamState & MediaStreamActions {
   const applyStream = useCallback(
     (nextStream: MediaStream, nextSourceType: MediaSourceType) => {
       stopTracks(streamRef.current);
+      stopTracks(audioStreamRef.current);
+      stopTracks(videoStreamRef.current);
       streamRef.current = nextStream;
 
       const instanceId = (streamInstanceIdRef.current += 1);
+
+      // Create separate audio and video streams for independent management
+      const audioTracks = nextStream.getAudioTracks();
+      const videoTracks = nextStream.getVideoTracks();
+
+      const newAudioStream = audioTracks.length > 0 ? new MediaStream(audioTracks) : null;
+      const newVideoStream = videoTracks.length > 0 ? new MediaStream(videoTracks) : null;
+
+      audioStreamRef.current = newAudioStream;
+      videoStreamRef.current = newVideoStream;
 
       if (nextSourceType === "screen") {
         const videoTrack = nextStream.getVideoTracks()[0];
@@ -224,6 +285,8 @@ export function useMediaStream(): MediaStreamState & MediaStreamActions {
 
       if (!isMountedRef.current) return;
       setStream(nextStream);
+      setAudioStream(newAudioStream);
+      setVideoStream(newVideoStream);
       setHasPermission(true);
       attachVideo(nextStream);
     },
@@ -366,14 +429,108 @@ export function useMediaStream(): MediaStreamState & MediaStreamActions {
     [sourceType, stopStream, hasPermission],
   );
 
+  /**
+   * Switch video source during recording without interrupting audio.
+   *
+   * @param type - Target source type ("camera" or "screen")
+   * @returns Promise resolving to true on success, false on failure
+   */
+  const switchVideoSource = useCallback(
+    async (type: MediaSourceType): Promise<boolean> => {
+      // No-op if already on the same source
+      if (type === sourceType) return true;
+
+      // Need permission/stream to switch video
+      if (!hasPermission || !audioStreamRef.current) {
+        return false;
+      }
+
+      const opId = (videoSwitchOpIdRef.current += 1);
+      const instanceId = (streamInstanceIdRef.current += 1);
+
+      if (isMountedRef.current) {
+        setIsSwitching(true);
+        setError(null);
+      }
+
+      try {
+        // Get new video stream only
+        const newVideoStream =
+          type === "camera"
+            ? await getCameraVideoOnly(selectedVideoDeviceId)
+            : await getScreenVideoOnly();
+
+        // Check if a newer operation started
+        if (videoSwitchOpIdRef.current !== opId || !isMountedRef.current) {
+          stopTracks(newVideoStream);
+          return false;
+        }
+
+        // Stop old video stream only (keep audio intact)
+        stopTracks(videoStreamRef.current);
+        videoStreamRef.current = newVideoStream;
+
+        // Rebuild combined stream for backward compatibility
+        const combinedStream = new MediaStream([
+          ...audioStreamRef.current.getAudioTracks(),
+          ...newVideoStream.getVideoTracks(),
+        ]);
+
+        streamRef.current = combinedStream;
+
+        // Handle screen share ending for new video
+        if (type === "screen") {
+          const videoTrack = newVideoStream.getVideoTracks()[0];
+          if (videoTrack) {
+            videoTrack.onended = () => {
+              if (streamInstanceIdRef.current !== instanceId || !isMountedRef.current) return;
+              // Auto-switch back to camera
+              void switchVideoSource("camera");
+            };
+          }
+        }
+
+        if (isMountedRef.current) {
+          setStream(combinedStream);
+          setVideoStream(newVideoStream);
+          setSourceType(type);
+          setIsSwitching(false);
+          attachVideo(combinedStream);
+        }
+
+        return true;
+      } catch (err) {
+        const message = formatMediaError(err);
+        if (isMountedRef.current && videoSwitchOpIdRef.current === opId) {
+          setError(message);
+          setIsSwitching(false);
+        }
+        return false;
+      }
+    },
+    [
+      sourceType,
+      hasPermission,
+      selectedVideoDeviceId,
+      getCameraVideoOnly,
+      getScreenVideoOnly,
+      attachVideo,
+    ],
+  );
+
   // Track mount state for async operations
   useEffect(() => {
     isMountedRef.current = true;
     return () => {
       isMountedRef.current = false;
       opIdRef.current += 1;
+      videoSwitchOpIdRef.current += 1;
       stopTracks(streamRef.current);
+      stopTracks(audioStreamRef.current);
+      stopTracks(videoStreamRef.current);
       streamRef.current = null;
+      audioStreamRef.current = null;
+      videoStreamRef.current = null;
     };
   }, []);
 
@@ -410,9 +567,12 @@ export function useMediaStream(): MediaStreamState & MediaStreamActions {
 
   return {
     stream,
+    audioStream,
+    videoStream,
     videoRef,
     error,
     isLoading,
+    isSwitching,
     hasPermission,
     audioDevices,
     videoDevices,
@@ -424,5 +584,6 @@ export function useMediaStream(): MediaStreamState & MediaStreamActions {
     setAudioDevice,
     setVideoDevice,
     switchSourceType,
+    switchVideoSource,
   };
 }

@@ -7,11 +7,7 @@
 
 import type { ReactNode } from "react";
 import { cn } from "@/lib/utils";
-import {
-  ResizablePanelGroup,
-  ResizablePanel,
-  ResizableHandle,
-} from "@/components/ui/resizable";
+import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from "@/components/ui/resizable";
 
 interface MainLayoutProps {
   header: ReactNode;
@@ -31,26 +27,20 @@ export function MainLayout({ header, leftPanel, rightPanel, footer, className }:
       <main className="flex-1 flex flex-col md:flex-row overflow-hidden">
         {/* Mobile: stacked layout */}
         <div className="flex flex-col flex-1 md:hidden overflow-hidden">
-          <div className="flex-1 overflow-hidden border-b border-border bg-background p-2">
+          <div className="flex-1 overflow-hidden border-b border-border bg-background p-4">
             {leftPanel}
           </div>
-          <div className="flex-1 overflow-y-auto bg-background p-2">
-            {rightPanel}
-          </div>
+          <div className="flex-1 overflow-y-auto bg-background p-4">{rightPanel}</div>
         </div>
 
         {/* Desktop: resizable panels */}
-        <ResizablePanelGroup orientation="horizontal" className="hidden md:flex h-full">
-          <ResizablePanel defaultSize={40} minSize={25} maxSize={60}>
-            <div className="h-full overflow-hidden border-r border-border bg-background p-2">
-              {leftPanel}
-            </div>
+        <ResizablePanelGroup id="main-layout" direction="horizontal" className="hidden md:flex">
+          <ResizablePanel id="left-panel" defaultSize={40} minSize={20} maxSize={80}>
+            <div className="h-full overflow-hidden bg-background p-4">{leftPanel}</div>
           </ResizablePanel>
-          <ResizableHandle withHandle />
-          <ResizablePanel defaultSize={60} minSize={40}>
-            <div className="h-full overflow-y-auto bg-background p-2">
-              {rightPanel}
-            </div>
+          <ResizableHandle />
+          <ResizablePanel id="right-panel" defaultSize={60} minSize={20} maxSize={80}>
+            <div className="h-full overflow-hidden bg-background">{rightPanel}</div>
           </ResizablePanel>
         </ResizablePanelGroup>
       </main>

@@ -21,6 +21,22 @@ export const CAMERA_CAPTURE_INTERVAL_MS = 60 * 1000;
 export const CAMERA_FRAME_BUFFER_SIZE = 5;
 
 // ============================================================================
+// Hierarchical Context Settings
+// ============================================================================
+
+/** Interval between meta-summary generations in milliseconds (30 minutes) */
+export const META_SUMMARY_INTERVAL_MS = 30 * 60 * 1000;
+
+/** Minimum number of sessions before triggering meta-summary generation */
+export const META_SUMMARY_SESSION_THRESHOLD = 6;
+
+/** Number of recent analyses to include in short-term context (Tier 1) */
+export const RECENT_ANALYSES_COUNT = 3;
+
+/** Number of recent images to include in short-term context (Tier 1) */
+export const RECENT_IMAGES_COUNT = 3;
+
+// ============================================================================
 // Deepgram Settings
 // ============================================================================
 
@@ -64,6 +80,8 @@ export const GEMINI_CONFIG = {
 export const WS_CONFIG = {
   path: "/ws/recording",
   pingInterval: 30000,
+  /** Maximum pending audio chunks before Deepgram connection (prevents DoS) */
+  maxPendingAudioChunks: 100,
 } as const;
 
 // ============================================================================
@@ -74,4 +92,13 @@ export const AUDIO_CONFIG = {
   sampleRate: 16000,
   channelCount: 1,
   mimeType: "audio/webm;codecs=opus",
+} as const;
+
+// ============================================================================
+// Database Settings
+// ============================================================================
+
+export const DB_CONFIG = {
+  defaultPath: "./data/live-graphic-recorder.db",
+  defaultMediaPath: "./data/media",
 } as const;

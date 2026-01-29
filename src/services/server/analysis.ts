@@ -9,6 +9,8 @@ import { ANALYSIS_INTERVAL_MS } from "@/config/constants";
 import type { SessionState, AnalysisResult, GenerationPhase } from "@/types/messages";
 import type { OpenAIService } from "./openai";
 import type { GeminiService, GeneratedImage } from "./gemini";
+import type { PersistenceService } from "./persistence";
+import { buildHierarchicalContext, type HierarchicalContext } from "./context-builder";
 import {
   shouldTriggerAnalysis,
   getTranscriptSinceLastAnalysis,
@@ -30,10 +32,16 @@ export interface AnalysisService {
   dispose: () => void;
 }
 
+export interface AnalysisServiceOptions {
+  persistence?: PersistenceService;
+  meetingId?: string;
+}
+
 export function createAnalysisService(
   openaiService: OpenAIService,
   geminiService: GeminiService,
   events: AnalysisServiceEvents,
+  options?: AnalysisServiceOptions,
 ): AnalysisService {
   let analysisInProgress = false;
 
@@ -47,11 +55,29 @@ export function createAnalysisService(
     const cameraFrames = getCameraFrames(session);
     const latestImage = getLatestImage(session);
 
+    // Build hierarchical context if persistence is available
+    let hierarchicalContext: HierarchicalContext | undefined;
+    if (options?.persistence && options?.meetingId) {
+      hierarchicalContext = await buildHierarchicalContext(
+        options.persistence,
+        options.meetingId,
+        transcript,
+        cameraFrames,
+      );
+    }
+
     const analysis = await openaiService.analyzeTranscript({
       transcript,
       previousTopics,
       cameraFrames,
       previousImage: latestImage ? { base64: latestImage.base64 } : undefined,
+      // Hierarchical context (overrides previousTopics and cameraFrames if provided)
+      ...(hierarchicalContext && {
+        recentAnalyses: hierarchicalContext.recentAnalyses,
+        recentImages: hierarchicalContext.recentImages,
+        metaSummaries: hierarchicalContext.metaSummaries,
+        overallThemes: hierarchicalContext.overallThemes,
+      }),
     });
 
     return analysis;
