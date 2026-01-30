@@ -181,6 +181,58 @@ describe("PersistenceService", () => {
       expect(transcripts[1]!.text).toBe("Second");
       expect(transcripts[1]!.speaker).toBe(1);
     });
+
+    test("marks utterance end on last segment", () => {
+      service.persistTranscript(sessionId, {
+        text: "First segment",
+        timestamp: 100,
+        isFinal: true,
+      });
+      service.persistTranscript(sessionId, {
+        text: "Second segment",
+        timestamp: 200,
+        isFinal: true,
+      });
+
+      const marked = service.markUtteranceEnd(sessionId);
+      expect(marked).toBe(true);
+
+      const transcripts = service.loadTranscripts(sessionId);
+      expect(transcripts[0]!.isUtteranceEnd).toBe(false);
+      expect(transcripts[1]!.isUtteranceEnd).toBe(true);
+    });
+
+    test("does nothing when marking utterance end with no segments", () => {
+      const marked = service.markUtteranceEnd(sessionId);
+      expect(marked).toBe(false);
+
+      const transcripts = service.loadTranscripts(sessionId);
+      expect(transcripts).toHaveLength(0);
+    });
+
+    test("marks utterance end on last final segment (ignores interim)", () => {
+      service.persistTranscript(sessionId, {
+        text: "Final segment",
+        timestamp: 100,
+        isFinal: true,
+      });
+      service.persistTranscript(sessionId, {
+        text: "Interim segment",
+        timestamp: 200,
+        isFinal: false,
+      });
+
+      const marked = service.markUtteranceEnd(sessionId);
+      expect(marked).toBe(true);
+
+      const transcripts = service.loadTranscripts(sessionId);
+      expect(transcripts[0]!.isUtteranceEnd).toBe(true);
+      expect(transcripts[1]!.isUtteranceEnd).toBe(false);
+    });
+
+    test("throws for invalid session id on utterance end", () => {
+      expect(() => service.markUtteranceEnd("../bad")).toThrow();
+    });
   });
 
   describe("Analysis persistence", () => {

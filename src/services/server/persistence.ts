@@ -27,6 +27,7 @@ import {
 import {
   createTranscriptSegment,
   findTranscriptSegmentsBySessionId,
+  markLastSegmentAsUtteranceEnd,
   type PersistedTranscriptSegment,
 } from "./db/repository/transcript";
 import {
@@ -54,6 +55,15 @@ import {
   type PersistedMetaSummary,
 } from "./db/repository/meta-summary";
 import { FileStorageService } from "./db/storage/file-storage";
+
+// Keep sessionId format consistent with FileStorageService.
+const VALID_SESSION_ID_PATTERN = /^[a-zA-Z0-9_-]+$/;
+
+function assertValidSessionId(sessionId: string): void {
+  if (!sessionId || !VALID_SESSION_ID_PATTERN.test(sessionId)) {
+    throw new Error(`Invalid sessionId format: ${sessionId}`);
+  }
+}
 
 export interface ImageData {
   base64: string;
@@ -174,6 +184,11 @@ export class PersistenceService {
 
     // Sort by timestamp
     return allTranscripts.sort((a, b) => a.timestamp - b.timestamp);
+  }
+
+  markUtteranceEnd(sessionId: string): boolean {
+    assertValidSessionId(sessionId);
+    return markLastSegmentAsUtteranceEnd(this.db, sessionId);
   }
 
   // ============================================================================

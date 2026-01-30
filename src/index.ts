@@ -89,6 +89,8 @@ interface WSContext {
   checkInterval: ReturnType<typeof setInterval> | null;
   // Buffer for audio data received before Deepgram is ready
   pendingAudio: (ArrayBuffer | Buffer)[];
+  // UtteranceEnd can arrive before the final transcript is persisted; buffer and apply later.
+  pendingUtteranceEndCount: number;
 }
 
 function generateSessionId(): string {
@@ -254,6 +256,7 @@ const server = Bun.serve<WSContext>({
           analysis: null,
           checkInterval: null,
           pendingAudio: [],
+          pendingUtteranceEndCount: 0,
         } satisfies WSContext,
       });
       if (success) return undefined;
@@ -637,6 +640,19 @@ async function handleSessionStart(ws: ServerWebSocket<WSContext>, ctx: WSContext
         // Persist transcript (only final segments)
         if (ctx.meetingId && segment.isFinal) {
           persistence.persistTranscript(ctx.sessionId, segment);
+
+          // If an UtteranceEnd was received before we had any persisted final segment,
+          // apply it now to the latest persisted final segment.
+          if (ctx.pendingUtteranceEndCount > 0) {
+            try {
+              const marked = persistence.markUtteranceEnd(ctx.sessionId);
+              if (marked) {
+                ctx.pendingUtteranceEndCount = Math.max(0, ctx.pendingUtteranceEndCount - 1);
+              }
+            } catch (err) {
+              console.error("[Persistence] Failed to persist buffered utterance end:", err);
+            }
+          }
         }
 
         // Check if we should trigger analysis
@@ -648,6 +664,18 @@ async function handleSessionStart(ws: ServerWebSocket<WSContext>, ctx: WSContext
           type: "utterance:end",
           data: { timestamp },
         });
+
+        // Persist utterance end marker to database
+        if (ctx.meetingId) {
+          try {
+            const marked = persistence.markUtteranceEnd(ctx.sessionId);
+            if (!marked) {
+              ctx.pendingUtteranceEndCount += 1;
+            }
+          } catch (err) {
+            console.error("[Persistence] Failed to persist utterance end:", err);
+          }
+        }
       },
       onError(error: Error) {
         console.error("[Deepgram] Error:", error);

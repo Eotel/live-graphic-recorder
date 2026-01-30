@@ -14,6 +14,7 @@ import {
   createTranscriptSegment,
   createTranscriptSegmentBatch,
   findTranscriptSegmentsBySessionId,
+  markLastSegmentAsUtteranceEnd,
   type PersistedTranscriptSegment,
 } from "./transcript";
 
@@ -188,6 +189,107 @@ describe("TranscriptRepository", () => {
       });
 
       db.run("DELETE FROM sessions WHERE id = ?", [sessionId]);
+
+      const segments = findTranscriptSegmentsBySessionId(db, sessionId);
+      expect(segments).toHaveLength(0);
+    });
+  });
+
+  describe("markLastSegmentAsUtteranceEnd", () => {
+    test("marks the most recent segment as utterance end", () => {
+      const db = getDatabase(testDbPath);
+      createTranscriptSegment(db, {
+        sessionId,
+        text: "First",
+        timestamp: 100,
+        isFinal: true,
+      });
+      createTranscriptSegment(db, {
+        sessionId,
+        text: "Second",
+        timestamp: 200,
+        isFinal: true,
+      });
+      createTranscriptSegment(db, {
+        sessionId,
+        text: "Third (latest)",
+        timestamp: 300,
+        isFinal: true,
+      });
+
+      const marked = markLastSegmentAsUtteranceEnd(db, sessionId);
+      expect(marked).toBe(true);
+
+      const segments = findTranscriptSegmentsBySessionId(db, sessionId);
+      expect(segments[0]!.isUtteranceEnd).toBe(false);
+      expect(segments[1]!.isUtteranceEnd).toBe(false);
+      expect(segments[2]!.isUtteranceEnd).toBe(true);
+    });
+
+    test("marks the most recent final segment when interim segments exist", () => {
+      const db = getDatabase(testDbPath);
+      createTranscriptSegment(db, {
+        sessionId,
+        text: "Final 1",
+        timestamp: 100,
+        isFinal: true,
+      });
+      createTranscriptSegment(db, {
+        sessionId,
+        text: "Final 2 (should be marked)",
+        timestamp: 200,
+        isFinal: true,
+      });
+      createTranscriptSegment(db, {
+        sessionId,
+        text: "Interim (latest timestamp)",
+        timestamp: 300,
+        isFinal: false,
+      });
+
+      const marked = markLastSegmentAsUtteranceEnd(db, sessionId);
+      expect(marked).toBe(true);
+
+      const segments = findTranscriptSegmentsBySessionId(db, sessionId);
+      expect(segments[0]!.isUtteranceEnd).toBe(false);
+      expect(segments[1]!.isUtteranceEnd).toBe(true);
+      expect(segments[2]!.isUtteranceEnd).toBe(false);
+    });
+
+    test("does not affect segments from other sessions", () => {
+      const db = getDatabase(testDbPath);
+      const meeting = createMeeting(db, {});
+      const otherSession = createSession(db, { meetingId: meeting.id });
+
+      createTranscriptSegment(db, {
+        sessionId,
+        text: "This session",
+        timestamp: 100,
+        isFinal: true,
+      });
+      createTranscriptSegment(db, {
+        sessionId: otherSession.id,
+        text: "Other session",
+        timestamp: 200,
+        isFinal: true,
+      });
+
+      const marked = markLastSegmentAsUtteranceEnd(db, sessionId);
+      expect(marked).toBe(true);
+
+      const thisSessionSegments = findTranscriptSegmentsBySessionId(db, sessionId);
+      const otherSessionSegments = findTranscriptSegmentsBySessionId(db, otherSession.id);
+
+      expect(thisSessionSegments[0]!.isUtteranceEnd).toBe(true);
+      expect(otherSessionSegments[0]!.isUtteranceEnd).toBe(false);
+    });
+
+    test("does nothing when no segments exist for session", () => {
+      const db = getDatabase(testDbPath);
+
+      // Should not throw and should return false
+      const marked = markLastSegmentAsUtteranceEnd(db, sessionId);
+      expect(marked).toBe(false);
 
       const segments = findTranscriptSegmentsBySessionId(db, sessionId);
       expect(segments).toHaveLength(0);

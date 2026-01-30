@@ -112,7 +112,7 @@ export function createTranscriptSegmentBatch(
 
   const placeholders = ids.map(() => "?").join(",");
   const rows = db
-    .query(`SELECT * FROM transcript_segments WHERE id IN (${placeholders}) ORDER BY timestamp`)
+    .query(`SELECT * FROM transcript_segments WHERE id IN (${placeholders}) ORDER BY timestamp, id`)
     .all(...ids) as TranscriptSegmentRow[];
 
   return rows.map(rowToSegment);
@@ -123,7 +123,23 @@ export function findTranscriptSegmentsBySessionId(
   sessionId: string,
 ): PersistedTranscriptSegment[] {
   const rows = db
-    .query("SELECT * FROM transcript_segments WHERE session_id = ? ORDER BY timestamp")
+    .query("SELECT * FROM transcript_segments WHERE session_id = ? ORDER BY timestamp, id")
     .all(sessionId) as TranscriptSegmentRow[];
   return rows.map(rowToSegment);
+}
+
+export function markLastSegmentAsUtteranceEnd(db: Database, sessionId: string): boolean {
+  const result = db.run(
+    `UPDATE transcript_segments
+     SET is_utterance_end = 1
+     WHERE id = (
+       SELECT id FROM transcript_segments
+       WHERE session_id = ?
+       AND is_final = 1
+       ORDER BY timestamp DESC, id DESC
+       LIMIT 1
+     )`,
+    [sessionId],
+  );
+  return result.changes > 0;
 }
