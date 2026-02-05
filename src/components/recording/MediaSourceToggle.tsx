@@ -2,7 +2,7 @@
  * Toggle between camera and screen capture sources.
  *
  * Design doc: plans/live-graphic-recorder-plan.md
- * Related: src/hooks/useMediaStream.ts, src/components/recording/CameraPreview.tsx
+ * Related: src/hooks/useMediaStreamController.ts, src/components/recording/CameraPreview.tsx
  */
 
 import { Camera, Monitor, Loader2 } from "lucide-react";

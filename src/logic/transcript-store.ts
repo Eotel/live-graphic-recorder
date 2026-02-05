@@ -2,7 +2,7 @@
  * Transcript store - manages transcript segments.
  *
  * Design doc: plans/view-logic-separation-plan.md
- * Related: src/types/messages.ts, src/hooks/useWebSocket.ts
+ * Related: src/types/messages.ts, src/hooks/useMeetingController.ts
  */
 
 import type { TranscriptSegment } from "../types/messages";

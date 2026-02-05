@@ -2,16 +2,14 @@
  * Client hooks barrel export.
  */
 
-// Legacy hooks (still functional, delegates to new controllers internally)
-export * from "./useMediaStream";
-export * from "./useWebSocket";
-export * from "./useRecording";
+// Utility hooks
 export * from "./useAutoScroll";
 export * from "./useElapsedTime";
 
-// New controller-based hooks
+// Controller-based hooks
 export * from "./useMediaStreamController";
 export * from "./useMeetingController";
+export * from "./useRecordingController";
 export * from "./useTranscriptStore";
 export * from "./useSessionStore";
 export * from "./useMeetingSession";

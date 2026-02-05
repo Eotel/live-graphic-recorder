@@ -2,7 +2,7 @@
  * Camera/Screen preview video element.
  *
  * Design doc: plans/live-graphic-recorder-plan.md
- * Related: src/hooks/useMediaStream.ts
+ * Related: src/hooks/useMediaStreamController.ts
  */
 
 import { VideoOff, Monitor } from "lucide-react";

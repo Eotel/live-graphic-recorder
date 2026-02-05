@@ -2,14 +2,11 @@
  * Hook for capturing camera frames at regular intervals.
  *
  * Design doc: plans/live-graphic-recorder-plan.md
- * Related: src/hooks/useMediaStream.ts, src/App.tsx
+ * Related: src/hooks/useMediaStreamController.ts, src/App.tsx
  */
 
 import { useCallback, useRef, useEffect } from "react";
-import {
-  CAMERA_CAPTURE_INTERVAL_MS,
-  CAMERA_FRAME_BUFFER_SIZE,
-} from "@/config/constants";
+import { CAMERA_CAPTURE_INTERVAL_MS, CAMERA_FRAME_BUFFER_SIZE } from "@/config/constants";
 import type { CameraFrame } from "@/types/messages";
 
 export interface CameraCaptureOptions {

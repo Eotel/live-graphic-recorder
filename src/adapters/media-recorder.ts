@@ -2,7 +2,7 @@
  * MediaRecorder browser API adapter.
  *
  * Design doc: plans/view-logic-separation-plan.md
- * Related: src/adapters/types.ts, src/hooks/useRecording.ts
+ * Related: src/adapters/types.ts, src/logic/recording-controller.ts
  */
 
 import type { MediaRecorderAdapter, MediaRecorderInstance, MediaRecorderOptions } from "./types";

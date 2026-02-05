@@ -2,7 +2,7 @@
  * Meeting controller - manages WebSocket connection and meeting state.
  *
  * Design doc: plans/view-logic-separation-plan.md
- * Related: src/adapters/websocket.ts, src/hooks/useWebSocket.ts
+ * Related: src/adapters/websocket.ts, src/hooks/useMeetingController.ts
  */
 
 import type { ServerMessage, TranscriptSegment, CameraFrame } from "../types/messages";

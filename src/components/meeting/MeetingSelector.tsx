@@ -2,7 +2,7 @@
  * MeetingSelector component for creating and joining meetings.
  *
  * Design doc: plans/live-graphic-recorder-plan.md
- * Related: src/hooks/useWebSocket.ts, src/types/messages.ts
+ * Related: src/hooks/useMeetingController.ts, src/types/messages.ts
  */
 
 import { Button } from "@/components/ui/button";

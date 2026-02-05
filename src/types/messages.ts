@@ -2,7 +2,7 @@
  * WebSocket message types for client-server communication.
  *
  * Design doc: plans/live-graphic-recorder-plan.md
- * Related: src/services/server/session.ts, src/hooks/useWebSocket.ts
+ * Related: src/services/server/session.ts, src/hooks/useMeetingController.ts
  */
 
 // ============================================================================

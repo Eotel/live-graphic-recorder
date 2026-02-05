@@ -2,7 +2,7 @@
  * Recording control buttons (Start/Stop).
  *
  * Design doc: plans/live-graphic-recorder-plan.md
- * Related: src/hooks/useRecording.ts
+ * Related: src/hooks/useRecordingController.ts
  */
 
 import { Circle, Square, AlertCircle, Loader2 } from "lucide-react";

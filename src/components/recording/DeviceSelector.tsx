@@ -2,7 +2,7 @@
  * Device selector component for choosing microphone and camera.
  *
  * Design doc: plans/live-graphic-recorder-plan.md
- * Related: src/hooks/useMediaStream.ts, src/components/recording/CameraPreview.tsx
+ * Related: src/hooks/useMediaStreamController.ts, src/components/recording/CameraPreview.tsx
  */
 
 import { Video } from "lucide-react";

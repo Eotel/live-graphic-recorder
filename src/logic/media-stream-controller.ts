@@ -2,7 +2,7 @@
  * Media stream controller - manages camera/microphone/screen capture.
  *
  * Design doc: plans/view-logic-separation-plan.md
- * Related: src/adapters/media-devices.ts, src/hooks/useMediaStream.ts
+ * Related: src/adapters/media-devices.ts, src/hooks/useMediaStreamController.ts
  */
 
 import type { MediaSourceType } from "../types/messages";
