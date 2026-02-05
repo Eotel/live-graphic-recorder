@@ -52,6 +52,34 @@ describe("SessionRepository", () => {
 
       expect(session.id).toBe("custom-session-id");
     });
+
+    test("upserts session when id already exists with different meeting", () => {
+      const db = getDatabase(testDbPath);
+      const otherMeeting = createMeeting(db, { title: "Other Meeting" });
+
+      const first = createSession(db, { meetingId, id: "reused-session" });
+      expect(first.meetingId).toBe(meetingId);
+
+      // Simulate starting a new meeting with same session
+      const second = createSession(db, { meetingId: otherMeeting.id, id: "reused-session" });
+      expect(second.id).toBe("reused-session");
+      expect(second.meetingId).toBe(otherMeeting.id);
+      expect(second.status).toBe("idle");
+      expect(second.startedAt).toBeNull();
+      expect(second.endedAt).toBeNull();
+    });
+
+    test("resets session state on upsert", () => {
+      const db = getDatabase(testDbPath);
+      const session = createSession(db, { meetingId, id: "reset-session" });
+      updateSession(db, session.id, { status: "recording", startedAt: Date.now() });
+
+      // Re-create with same id should reset
+      const recreated = createSession(db, { meetingId, id: "reset-session" });
+      expect(recreated.status).toBe("idle");
+      expect(recreated.startedAt).toBeNull();
+      expect(recreated.endedAt).toBeNull();
+    });
   });
 
   describe("findSessionById", () => {

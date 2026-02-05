@@ -46,10 +46,11 @@ export interface CreateSessionInput {
 export function createSession(db: Database, input: CreateSessionInput): PersistedSession {
   const id = input.id ?? generateId();
 
-  db.run(`INSERT INTO sessions (id, meeting_id, status) VALUES (?, ?, 'idle')`, [
-    id,
-    input.meetingId,
-  ]);
+  db.run(
+    `INSERT INTO sessions (id, meeting_id, status) VALUES (?, ?, 'idle')
+     ON CONFLICT(id) DO UPDATE SET meeting_id = excluded.meeting_id, status = 'idle', started_at = NULL, ended_at = NULL`,
+    [id, input.meetingId],
+  );
 
   const row = db.query("SELECT * FROM sessions WHERE id = ?").get(id) as SessionRow;
   return rowToSession(row);
