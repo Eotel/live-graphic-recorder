@@ -21,11 +21,7 @@ export { WebSocketReadyState } from "./types";
 export { createMediaDevicesAdapter, createMockMediaDevicesAdapter } from "./media-devices";
 
 // MediaRecorder
-export {
-  createMediaRecorderAdapter,
-  createMockMediaRecorderAdapter,
-  createMockMediaRecorderInstance,
-} from "./media-recorder";
+export { createMediaRecorderAdapter } from "./media-recorder";
 
 // WebSocket
 export {
