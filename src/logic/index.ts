@@ -30,6 +30,11 @@ export type {
   MeetingControllerCallbacks,
   MeetingControllerEvents,
   MeetingController,
+  RecordingContext,
+  RecordingControllerState,
+  RecordingControllerDeps,
+  RecordingControllerCallbacks,
+  RecordingControllerActions,
   StateEmitter,
 } from "./types";
 
@@ -45,3 +50,6 @@ export { createSessionStore } from "./session-store";
 // Meeting Controller
 export { createMeetingController } from "./meeting-controller";
 export type { MeetingControllerDeps } from "./meeting-controller";
+
+// Recording Controller
+export { createRecordingController } from "./recording-controller";

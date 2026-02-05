@@ -92,6 +92,7 @@ export const AUDIO_CONFIG = {
   sampleRate: 16000,
   channelCount: 1,
   mimeType: "audio/webm;codecs=opus",
+  timesliceMs: 250,
 } as const;
 
 // ============================================================================

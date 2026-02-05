@@ -12,7 +12,7 @@ import type {
   ImageMessage,
   CameraFrame,
 } from "../types/messages";
-import type { MediaDevicesAdapter, StreamUtils } from "../adapters/types";
+import type { MediaDevicesAdapter, MediaRecorderAdapter, StreamUtils } from "../adapters/types";
 
 // ============================================================================
 // Media Stream Controller Types
@@ -211,6 +211,41 @@ export interface MeetingControllerEvents {
 }
 
 export type MeetingController = MeetingControllerState & MeetingControllerActions;
+
+// ============================================================================
+// Recording Controller Types
+// ============================================================================
+
+export interface RecordingContext {
+  audioStream: MediaStream | null;
+  hasPermission: boolean;
+  isConnected: boolean;
+  hasMeeting: boolean;
+}
+
+export interface RecordingControllerState {
+  isRecording: boolean;
+  isPendingStart: boolean;
+  error: string | null;
+}
+
+export interface RecordingControllerDeps {
+  mediaRecorder: MediaRecorderAdapter;
+}
+
+export interface RecordingControllerCallbacks {
+  onChunk: (data: ArrayBuffer) => void;
+  onSessionStart: () => void;
+  onSessionStop: () => void;
+  onStateChange: (state: RecordingControllerState) => void;
+}
+
+export interface RecordingControllerActions {
+  start(context: RecordingContext): void;
+  stop(): void;
+  onConditionsChanged(context: RecordingContext): void;
+  dispose(): void;
+}
 
 // ============================================================================
 // Utility Types
