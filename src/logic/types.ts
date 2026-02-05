@@ -10,6 +10,7 @@ import type {
   TranscriptSegment,
   AnalysisMessage,
   ImageMessage,
+  CameraFrame,
 } from "../types/messages";
 import type { MediaDevicesAdapter, StreamUtils } from "../adapters/types";
 
@@ -177,6 +178,9 @@ export interface MeetingControllerActions {
   stopMeeting(): void;
   requestMeetingList(): void;
   updateMeetingTitle(title: string): void;
+  startSession(): void;
+  stopSession(): void;
+  sendCameraFrame(data: CameraFrame): void;
 }
 
 export interface MeetingControllerCallbacks {

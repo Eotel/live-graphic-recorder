@@ -425,4 +425,54 @@ describe("createMeetingController", () => {
 
     expect(controller.getState().error).toBe("WebSocket connection error");
   });
+
+  test("startSession sends session:start message", () => {
+    const wsAdapter = createMockWsAdapter();
+    const onStateChange = mock(() => {});
+
+    const controller = createMeetingController({ wsAdapter }, { onStateChange });
+
+    controller.connect();
+    wsAdapter.lastInstance!.controls.simulateOpen();
+
+    controller.startSession();
+
+    const messages = wsAdapter.lastInstance!.controls.getSentMessages();
+    const parsed = JSON.parse(messages[0] as string);
+    expect(parsed.type).toBe("session:start");
+  });
+
+  test("stopSession sends session:stop message", () => {
+    const wsAdapter = createMockWsAdapter();
+    const onStateChange = mock(() => {});
+
+    const controller = createMeetingController({ wsAdapter }, { onStateChange });
+
+    controller.connect();
+    wsAdapter.lastInstance!.controls.simulateOpen();
+
+    controller.stopSession();
+
+    const messages = wsAdapter.lastInstance!.controls.getSentMessages();
+    const parsed = JSON.parse(messages[0] as string);
+    expect(parsed.type).toBe("session:stop");
+  });
+
+  test("sendCameraFrame sends camera:frame message with data", () => {
+    const wsAdapter = createMockWsAdapter();
+    const onStateChange = mock(() => {});
+
+    const controller = createMeetingController({ wsAdapter }, { onStateChange });
+
+    controller.connect();
+    wsAdapter.lastInstance!.controls.simulateOpen();
+
+    controller.sendCameraFrame({ base64: "abc123", timestamp: 1000 });
+
+    const messages = wsAdapter.lastInstance!.controls.getSentMessages();
+    const parsed = JSON.parse(messages[0] as string);
+    expect(parsed.type).toBe("camera:frame");
+    expect(parsed.data.base64).toBe("abc123");
+    expect(parsed.data.timestamp).toBe(1000);
+  });
 });

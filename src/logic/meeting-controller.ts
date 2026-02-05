@@ -5,7 +5,7 @@
  * Related: src/adapters/websocket.ts, src/hooks/useWebSocket.ts
  */
 
-import type { ServerMessage, TranscriptSegment } from "../types/messages";
+import type { ServerMessage, TranscriptSegment, CameraFrame } from "../types/messages";
 import type { WebSocketAdapter, WebSocketInstance, WebSocketReadyState } from "../adapters/types";
 import { WebSocketReadyState as ReadyState } from "../adapters/types";
 import type {
@@ -261,6 +261,18 @@ export function createMeetingController(
     });
   }
 
+  function startSession(): void {
+    sendMessage({ type: "session:start" });
+  }
+
+  function stopSession(): void {
+    sendMessage({ type: "session:stop" });
+  }
+
+  function sendCameraFrame(data: CameraFrame): void {
+    sendMessage({ type: "camera:frame", data });
+  }
+
   function setCallbacks(newCallbacks: MeetingControllerCallbacks): void {
     callbacksRef = newCallbacks;
   }
@@ -279,6 +291,9 @@ export function createMeetingController(
     stopMeeting,
     requestMeetingList,
     updateMeetingTitle,
+    startSession,
+    stopSession,
+    sendCameraFrame,
     dispose,
   };
 }
