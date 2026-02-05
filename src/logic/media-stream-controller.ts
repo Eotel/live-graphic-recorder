@@ -472,8 +472,13 @@ export function createMediaStreamController(
   function dispose(): void {
     isDisposed = true;
     currentOpId += 1;
+    videoSwitchOpId += 1;
     streamUtils.stopTracks(streamRef);
+    streamUtils.stopTracks(audioStreamRef);
+    streamUtils.stopTracks(videoStreamRef);
     streamRef = null;
+    audioStreamRef = null;
+    videoStreamRef = null;
   }
 
   // Initialize device list
