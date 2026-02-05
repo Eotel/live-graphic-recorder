@@ -6,7 +6,7 @@
  */
 
 import { useCallback, useEffect, useRef, useSyncExternalStore } from "react";
-import type { TranscriptSegment } from "../types/messages";
+import type { TranscriptSegment, CameraFrame } from "../types/messages";
 import type {
   MeetingControllerState,
   MeetingControllerCallbacks,
@@ -77,6 +77,21 @@ export interface UseMeetingControllerReturn extends MeetingControllerState {
    * Update the meeting title.
    */
   updateMeetingTitle: (title: string) => void;
+
+  /**
+   * Start the recording session.
+   */
+  startSession: () => void;
+
+  /**
+   * Stop the recording session.
+   */
+  stopSession: () => void;
+
+  /**
+   * Send a camera frame to the server.
+   */
+  sendCameraFrame: (data: CameraFrame) => void;
 }
 
 /**
@@ -183,6 +198,18 @@ export function useMeetingController(
     controllerRef.current?.updateMeetingTitle(title);
   }, []);
 
+  const startSession = useCallback(() => {
+    controllerRef.current?.startSession();
+  }, []);
+
+  const stopSession = useCallback(() => {
+    controllerRef.current?.stopSession();
+  }, []);
+
+  const sendCameraFrame = useCallback((data: CameraFrame) => {
+    controllerRef.current?.sendCameraFrame(data);
+  }, []);
+
   return {
     ...state,
     connect,
@@ -192,5 +219,8 @@ export function useMeetingController(
     stopMeeting,
     requestMeetingList,
     updateMeetingTitle,
+    startSession,
+    stopSession,
+    sendCameraFrame,
   };
 }
