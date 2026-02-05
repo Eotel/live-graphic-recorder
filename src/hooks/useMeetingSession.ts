@@ -1,23 +1,18 @@
 /**
  * Composite hook for managing a complete meeting session.
  *
- * This hook combines transcript store, session store, and WebSocket
+ * This hook combines transcript store, session store, and meeting controller
  * to provide a unified interface for the recording view.
  *
  * Design doc: plans/view-logic-separation-plan.md
- * Related: src/hooks/useTranscriptStore.ts, src/hooks/useSessionStore.ts, src/hooks/useWebSocket.ts
+ * Related: src/hooks/useTranscriptStore.ts, src/hooks/useSessionStore.ts, src/hooks/useMeetingController.ts
  */
 
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useMemo, useRef } from "react";
 import { useTranscriptStore } from "./useTranscriptStore";
 import { useSessionStore } from "./useSessionStore";
-import { useWebSocket } from "./useWebSocket";
-import type {
-  ClientMessage,
-  MeetingHistoryMessage,
-  SummaryPage,
-  TranscriptSegment,
-} from "../types/messages";
+import { useMeetingController } from "./useMeetingController";
+import type { CameraFrame, SummaryPage, TranscriptSegment } from "../types/messages";
 
 export interface UseMeetingSessionReturn {
   // Connection state
@@ -66,12 +61,14 @@ export interface UseMeetingSessionReturn {
   // Actions
   connect: () => void;
   disconnect: () => void;
-  sendMessage: (message: ClientMessage) => void;
   sendAudio: (data: ArrayBuffer) => void;
   startMeeting: (title?: string, meetingId?: string) => void;
   stopMeeting: () => void;
   requestMeetingList: () => void;
   updateMeetingTitle: (title: string) => void;
+  startSession: () => void;
+  stopSession: () => void;
+  sendCameraFrame: (data: CameraFrame) => void;
   resetSession: () => void;
 }
 
@@ -91,7 +88,7 @@ export function useMeetingSession(): UseMeetingSessionReturn {
     heat: 50,
   });
 
-  // WebSocket callbacks
+  // Meeting controller callbacks
   const handleTranscript = useCallback(
     (data: {
       text: string;
@@ -139,44 +136,34 @@ export function useMeetingSession(): UseMeetingSessionReturn {
   );
 
   const handleMeetingHistory = useCallback(
-    (data: MeetingHistoryMessage["data"]) => {
+    (data: {
+      transcripts: TranscriptSegment[];
+      analyses: Array<{
+        summary: string[];
+        topics: string[];
+        tags: string[];
+        flow: number;
+        heat: number;
+        timestamp?: number;
+      }>;
+      images: Array<{ url?: string; prompt: string; timestamp: number }>;
+      captures: Array<{ url: string; timestamp: number }>;
+      metaSummaries: Array<{
+        summary: string[];
+        themes: string[];
+        startTime: number;
+        endTime: number;
+      }>;
+    }) => {
       // Restore transcripts
-      transcriptStore.loadHistory(
-        data.transcripts.map((t) => ({
-          text: t.text,
-          timestamp: t.timestamp,
-          isFinal: t.isFinal,
-          speaker: t.speaker,
-          startTime: t.startTime,
-          isUtteranceEnd: t.isUtteranceEnd,
-        })),
-      );
+      transcriptStore.loadHistory(data.transcripts);
 
       // Restore session data
       sessionStore.loadHistory({
-        analyses: data.analyses.map((a) => ({
-          summary: a.summary,
-          topics: a.topics,
-          tags: a.tags,
-          flow: a.flow,
-          heat: a.heat,
-          timestamp: a.timestamp,
-        })),
-        images: data.images.map((img) => ({
-          url: img.url,
-          prompt: img.prompt,
-          timestamp: img.timestamp,
-        })),
-        captures: data.captures?.map((c) => ({
-          url: c.url,
-          timestamp: c.timestamp,
-        })),
-        metaSummaries: data.metaSummaries?.map((m) => ({
-          summary: m.summary,
-          themes: m.themes,
-          startTime: m.startTime,
-          endTime: m.endTime,
-        })),
+        analyses: data.analyses,
+        images: data.images,
+        captures: data.captures,
+        metaSummaries: data.metaSummaries,
       });
 
       // Update latest analysis metrics
@@ -195,8 +182,8 @@ export function useMeetingSession(): UseMeetingSessionReturn {
     [transcriptStore, sessionStore],
   );
 
-  // WebSocket connection
-  const ws = useWebSocket({
+  // Meeting controller (replaces useWebSocket)
+  const mc = useMeetingController({
     onTranscript: handleTranscript,
     onUtteranceEnd: handleUtteranceEnd,
     onAnalysis: handleAnalysis,
@@ -216,11 +203,15 @@ export function useMeetingSession(): UseMeetingSessionReturn {
     };
   }, [transcriptStore, sessionStore]);
 
-  // Compute summary pages from analyses
-  const summaryPages: SummaryPage[] = sessionStore.analyses.map((a) => ({
-    points: a.summary,
-    timestamp: a.timestamp ?? Date.now(),
-  }));
+  // Compute summary pages from analyses (memoized for stable identity)
+  const summaryPages: SummaryPage[] = useMemo(
+    () =>
+      sessionStore.analyses.map((a) => ({
+        points: a.summary,
+        timestamp: a.timestamp ?? Date.now(),
+      })),
+    [sessionStore.analyses],
+  );
 
   // Get latest analysis values (or defaults)
   const { topics, tags, flow, heat } =
@@ -229,18 +220,18 @@ export function useMeetingSession(): UseMeetingSessionReturn {
       : { topics: [], tags: [], flow: 50, heat: 50 };
 
   // Derived states
-  const isAnalyzing = ws.generationPhase === "analyzing";
-  const isGenerating = ws.generationPhase === "generating" || ws.generationPhase === "retrying";
+  const isAnalyzing = mc.generationPhase === "analyzing";
+  const isGenerating = mc.generationPhase === "generating" || mc.generationPhase === "retrying";
 
   return {
     // Connection state
-    isConnected: ws.isConnected,
-    sessionStatus: ws.sessionStatus,
-    generationPhase: ws.generationPhase,
-    error: ws.error,
+    isConnected: mc.isConnected,
+    sessionStatus: mc.sessionStatus,
+    generationPhase: mc.generationPhase,
+    error: mc.error,
 
     // Meeting state
-    meeting: ws.meeting,
+    meeting: mc.meeting,
 
     // Transcript state
     transcriptSegments: transcriptStore.segments,
@@ -261,14 +252,16 @@ export function useMeetingSession(): UseMeetingSessionReturn {
     isGenerating,
 
     // Actions
-    connect: ws.connect,
-    disconnect: ws.disconnect,
-    sendMessage: ws.sendMessage,
-    sendAudio: ws.sendAudio,
-    startMeeting: ws.startMeeting,
-    stopMeeting: ws.stopMeeting,
-    requestMeetingList: ws.requestMeetingList,
-    updateMeetingTitle: ws.updateMeetingTitle,
+    connect: mc.connect,
+    disconnect: mc.disconnect,
+    sendAudio: mc.sendAudio,
+    startMeeting: mc.startMeeting,
+    stopMeeting: mc.stopMeeting,
+    requestMeetingList: mc.requestMeetingList,
+    updateMeetingTitle: mc.updateMeetingTitle,
+    startSession: mc.startSession,
+    stopSession: mc.stopSession,
+    sendCameraFrame: mc.sendCameraFrame,
     resetSession,
   };
 }

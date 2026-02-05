@@ -70,6 +70,9 @@ describe("useMeetingSession", () => {
     expect(typeof result.current.stopMeeting).toBe("function");
     expect(typeof result.current.requestMeetingList).toBe("function");
     expect(typeof result.current.updateMeetingTitle).toBe("function");
+    expect(typeof result.current.startSession).toBe("function");
+    expect(typeof result.current.stopSession).toBe("function");
+    expect(typeof result.current.sendCameraFrame).toBe("function");
     expect(typeof result.current.resetSession).toBe("function");
   });
 
