@@ -151,9 +151,10 @@ export function getLatestTopics(session: SessionState): string[] {
 export function addCameraFrame(session: SessionState, frame: CameraFrame): SessionState {
   const frames = [...session.cameraFrames, frame];
   // Keep only the latest N frames (ring buffer)
-  const trimmedFrames = frames.length > CAMERA_FRAME_BUFFER_SIZE
-    ? frames.slice(frames.length - CAMERA_FRAME_BUFFER_SIZE)
-    : frames;
+  const trimmedFrames =
+    frames.length > CAMERA_FRAME_BUFFER_SIZE
+      ? frames.slice(frames.length - CAMERA_FRAME_BUFFER_SIZE)
+      : frames;
 
   return {
     ...session,

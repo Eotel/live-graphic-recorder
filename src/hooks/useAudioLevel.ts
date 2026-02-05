@@ -28,7 +28,7 @@ export interface UseAudioLevelResult {
  */
 export function useAudioLevel(
   stream: MediaStream | null,
-  options: UseAudioLevelOptions = {}
+  options: UseAudioLevelOptions = {},
 ): UseAudioLevelResult {
   const { threshold = 10, enabled = true } = options;
   const [isActive, setIsActive] = useState(false);

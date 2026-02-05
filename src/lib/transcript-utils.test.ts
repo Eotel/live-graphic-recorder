@@ -92,7 +92,14 @@ describe("groupByUtterance", () => {
 
   test("splits on utterance end marker", () => {
     const segments: TranscriptSegment[] = [
-      { text: "First sentence", timestamp: 1000, isFinal: true, speaker: 0, startTime: 0, isUtteranceEnd: true },
+      {
+        text: "First sentence",
+        timestamp: 1000,
+        isFinal: true,
+        speaker: 0,
+        startTime: 0,
+        isUtteranceEnd: true,
+      },
       { text: "Second sentence", timestamp: 3000, isFinal: true, speaker: 0, startTime: 2 },
     ];
 
@@ -129,7 +136,14 @@ describe("groupByUtterance", () => {
   test("handles multiple speakers with utterance ends", () => {
     const segments: TranscriptSegment[] = [
       { text: "Hello", timestamp: 1000, isFinal: true, speaker: 0, startTime: 0 },
-      { text: "everyone", timestamp: 2000, isFinal: true, speaker: 0, startTime: 1, isUtteranceEnd: true },
+      {
+        text: "everyone",
+        timestamp: 2000,
+        isFinal: true,
+        speaker: 0,
+        startTime: 1,
+        isUtteranceEnd: true,
+      },
       { text: "Hi there", timestamp: 3000, isFinal: true, speaker: 1, startTime: 2 },
       { text: "Back to me", timestamp: 4000, isFinal: true, speaker: 0, startTime: 3 },
     ];
@@ -198,12 +212,33 @@ describe("groupByUtterance", () => {
     const segments: TranscriptSegment[] = [
       // Speaker 0 - first utterance
       { text: "Good morning", timestamp: 1000, isFinal: true, speaker: 0, startTime: 0 },
-      { text: "everyone", timestamp: 2000, isFinal: true, speaker: 0, startTime: 1, isUtteranceEnd: true },
+      {
+        text: "everyone",
+        timestamp: 2000,
+        isFinal: true,
+        speaker: 0,
+        startTime: 1,
+        isUtteranceEnd: true,
+      },
       // Speaker 1 - response
-      { text: "Morning", timestamp: 3000, isFinal: true, speaker: 1, startTime: 2, isUtteranceEnd: true },
+      {
+        text: "Morning",
+        timestamp: 3000,
+        isFinal: true,
+        speaker: 1,
+        startTime: 2,
+        isUtteranceEnd: true,
+      },
       // Speaker 2 - joins
       { text: "Hi all", timestamp: 4000, isFinal: true, speaker: 2, startTime: 3 },
-      { text: "how are you", timestamp: 5000, isFinal: true, speaker: 2, startTime: 4, isUtteranceEnd: true },
+      {
+        text: "how are you",
+        timestamp: 5000,
+        isFinal: true,
+        speaker: 2,
+        startTime: 4,
+        isUtteranceEnd: true,
+      },
       // Speaker 0 - responds with interim
       { text: "I am doing", timestamp: 6000, isFinal: true, speaker: 0, startTime: 5 },
       { text: "well", timestamp: 7000, isFinal: false, speaker: 0, startTime: 6 },
@@ -212,9 +247,24 @@ describe("groupByUtterance", () => {
     const result = groupByUtterance(segments);
 
     expect(result).toHaveLength(4);
-    expect(result[0]).toEqual({ text: "Good morning everyone", speaker: 0, startTime: 0, isInterim: false });
+    expect(result[0]).toEqual({
+      text: "Good morning everyone",
+      speaker: 0,
+      startTime: 0,
+      isInterim: false,
+    });
     expect(result[1]).toEqual({ text: "Morning", speaker: 1, startTime: 2, isInterim: false });
-    expect(result[2]).toEqual({ text: "Hi all how are you", speaker: 2, startTime: 3, isInterim: false });
-    expect(result[3]).toEqual({ text: "I am doing well", speaker: 0, startTime: 5, isInterim: true });
+    expect(result[2]).toEqual({
+      text: "Hi all how are you",
+      speaker: 2,
+      startTime: 3,
+      isInterim: false,
+    });
+    expect(result[3]).toEqual({
+      text: "I am doing well",
+      speaker: 0,
+      startTime: 5,
+      isInterim: true,
+    });
   });
 });

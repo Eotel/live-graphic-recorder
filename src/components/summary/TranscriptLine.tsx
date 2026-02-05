@@ -51,7 +51,7 @@ export function TranscriptLine({
       className={cn(
         "flex items-start gap-2 text-sm leading-relaxed",
         isInterim && "text-muted-foreground/50",
-        className
+        className,
       )}
     >
       {/* Timestamp */}
@@ -69,9 +69,7 @@ export function TranscriptLine({
       )}
 
       {/* Text content */}
-      <span className={cn("flex-1", isInterim && "italic")}>
-        {text}
-      </span>
+      <span className={cn("flex-1", isInterim && "italic")}>{text}</span>
     </div>
   );
 }

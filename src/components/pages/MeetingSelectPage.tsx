@@ -130,11 +130,7 @@ export function MeetingSelectPage({
               >
                 Cancel
               </Button>
-              <Button
-                onClick={handleConfirmNewMeeting}
-                type="button"
-                className="flex-1"
-              >
+              <Button onClick={handleConfirmNewMeeting} type="button" className="flex-1">
                 Start
               </Button>
             </div>

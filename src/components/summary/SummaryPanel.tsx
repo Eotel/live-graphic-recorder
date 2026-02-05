@@ -63,7 +63,7 @@ export function SummaryPanel({
 
   const utteranceGroups = useMemo(
     () => groupByUtterance(segmentsWithInterim),
-    [segmentsWithInterim]
+    [segmentsWithInterim],
   );
 
   const hasPages = summaryPages.length > 0;
@@ -132,7 +132,9 @@ export function SummaryPanel({
 
       {/* Transcript Section - scrollable */}
       <div className="flex-1 min-h-0 flex flex-col">
-        <h3 className="flex-shrink-0 text-sm font-semibold text-muted-foreground mb-2">Live Transcript</h3>
+        <h3 className="flex-shrink-0 text-sm font-semibold text-muted-foreground mb-2">
+          Live Transcript
+        </h3>
         <div
           ref={containerRef}
           className="flex-1 min-h-0 overflow-y-auto rounded-md bg-muted/30 p-2"

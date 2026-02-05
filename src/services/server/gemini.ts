@@ -127,9 +127,10 @@ export function createGeminiService(): GeminiService {
 
         if (isRateLimitError(error)) {
           const parsedDelay = parseRetryDelay(error);
-          const backoffMs = parsedDelay !== null
-            ? parsedDelay * 1000
-            : GEMINI_CONFIG.initialBackoffMs * (attempt + 1);
+          const backoffMs =
+            parsedDelay !== null
+              ? parsedDelay * 1000
+              : GEMINI_CONFIG.initialBackoffMs * (attempt + 1);
 
           console.log(
             `[Gemini] Rate limited, retrying in ${backoffMs / 1000}s (attempt ${attempt + 1}/${maxRetries})`,

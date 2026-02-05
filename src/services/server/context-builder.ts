@@ -53,13 +53,9 @@ export async function buildHierarchicalContext(
   const imagesLimit = Math.max(0, RECENT_IMAGES_COUNT);
 
   const recentAnalyses =
-    analysesLimit > 0
-      ? persistence.loadRecentMeetingAnalyses(meetingId, analysesLimit)
-      : [];
+    analysesLimit > 0 ? persistence.loadRecentMeetingAnalyses(meetingId, analysesLimit) : [];
   const recentImageRecords =
-    imagesLimit > 0
-      ? persistence.loadRecentMeetingImages(meetingId, imagesLimit)
-      : [];
+    imagesLimit > 0 ? persistence.loadRecentMeetingImages(meetingId, imagesLimit) : [];
 
   // Load base64 for recent images with error handling
   const imageResults = await Promise.allSettled(
@@ -72,19 +68,14 @@ export async function buildHierarchicalContext(
 
   const recentImages: RecentImage[] = imageResults
     .filter(
-      (result): result is PromiseFulfilledResult<RecentImage> =>
-        result.status === "fulfilled",
+      (result): result is PromiseFulfilledResult<RecentImage> => result.status === "fulfilled",
     )
     .map((result) => result.value);
 
   // Log failed image loads for debugging
-  const failedImages = imageResults.filter(
-    (result) => result.status === "rejected",
-  );
+  const failedImages = imageResults.filter((result) => result.status === "rejected");
   if (failedImages.length > 0) {
-    console.warn(
-      `[ContextBuilder] Failed to load ${failedImages.length} image(s), skipping`,
-    );
+    console.warn(`[ContextBuilder] Failed to load ${failedImages.length} image(s), skipping`);
   }
 
   // Tier 2: Medium-term context
@@ -93,9 +84,7 @@ export async function buildHierarchicalContext(
   // Tier 3: Long-term context - extract unique themes with type safety
   const allThemes = metaSummaries.flatMap((ms) =>
     Array.isArray(ms.themes)
-      ? ms.themes.filter(
-          (t): t is string => typeof t === "string" && t.trim() !== "",
-        )
+      ? ms.themes.filter((t): t is string => typeof t === "string" && t.trim() !== "")
       : [],
   );
   const overallThemes = [...new Set(allThemes)];

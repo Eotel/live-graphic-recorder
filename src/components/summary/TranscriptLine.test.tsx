@@ -103,14 +103,7 @@ describe("TranscriptLine", () => {
 
   describe("combined display", () => {
     test("renders all elements together", () => {
-      render(
-        <TranscriptLine
-          text="Hello everyone"
-          speaker={1}
-          startTime={90}
-          isInterim={false}
-        />
-      );
+      render(<TranscriptLine text="Hello everyone" speaker={1} startTime={90} isInterim={false} />);
 
       expect(screen.getByText("1:30")).toBeDefined();
       expect(screen.getByText("Speaker 2:")).toBeDefined();
@@ -120,9 +113,7 @@ describe("TranscriptLine", () => {
 
   describe("className prop", () => {
     test("applies custom className", () => {
-      const { container } = render(
-        <TranscriptLine text="Hello" className="custom-class" />
-      );
+      const { container } = render(<TranscriptLine text="Hello" className="custom-class" />);
       const root = container.firstChild as HTMLElement;
       expect(root.className).toContain("custom-class");
     });

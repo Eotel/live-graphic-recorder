@@ -45,9 +45,7 @@ describe("AudioLevelIndicator", () => {
   });
 
   test("accepts custom className", () => {
-    const { container } = render(
-      <AudioLevelIndicator isActive={false} className="custom-class" />
-    );
+    const { container } = render(<AudioLevelIndicator isActive={false} className="custom-class" />);
     const wrapper = container.firstChild;
     expect((wrapper as HTMLElement)?.className).toContain("custom-class");
   });

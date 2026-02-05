@@ -104,9 +104,7 @@ describe("useAudioLevel", () => {
 
   test("returns isActive false when disabled", () => {
     const mockStream = { getAudioTracks: () => [{}] } as MediaStream;
-    const { result } = renderHook(() =>
-      useAudioLevel(mockStream, { enabled: false })
-    );
+    const { result } = renderHook(() => useAudioLevel(mockStream, { enabled: false }));
     expect(result.current.isActive).toBe(false);
   });
 
@@ -118,7 +116,7 @@ describe("useAudioLevel", () => {
     mockLevel = 5; // Below threshold
 
     const { result } = renderHook(() =>
-      useAudioLevel(mockStream, { threshold: 10, enabled: true })
+      useAudioLevel(mockStream, { threshold: 10, enabled: true }),
     );
 
     await flushFrames();
@@ -134,7 +132,7 @@ describe("useAudioLevel", () => {
     mockLevel = 50; // Above threshold
 
     const { result } = renderHook(() =>
-      useAudioLevel(mockStream, { threshold: 10, enabled: true })
+      useAudioLevel(mockStream, { threshold: 10, enabled: true }),
     );
 
     await flushFrames();
@@ -147,9 +145,7 @@ describe("useAudioLevel", () => {
       getAudioTracks: () => [{ enabled: true }],
     } as unknown as MediaStream;
 
-    const { unmount } = renderHook(() =>
-      useAudioLevel(mockStream, { enabled: true })
-    );
+    const { unmount } = renderHook(() => useAudioLevel(mockStream, { enabled: true }));
 
     await flushFrames();
 
@@ -167,7 +163,7 @@ describe("useAudioLevel", () => {
 
     // With threshold 20, should be active
     const { result: result1, unmount: unmount1 } = renderHook(() =>
-      useAudioLevel(mockStream, { threshold: 20, enabled: true })
+      useAudioLevel(mockStream, { threshold: 20, enabled: true }),
     );
 
     await flushFrames();
@@ -178,7 +174,7 @@ describe("useAudioLevel", () => {
 
     // With threshold 50, should not be active
     const { result: result2 } = renderHook(() =>
-      useAudioLevel(mockStream, { threshold: 50, enabled: true })
+      useAudioLevel(mockStream, { threshold: 50, enabled: true }),
     );
 
     await flushFrames();
@@ -190,9 +186,7 @@ describe("useAudioLevel", () => {
       getAudioTracks: () => [],
     } as unknown as MediaStream;
 
-    const { result } = renderHook(() =>
-      useAudioLevel(mockStream, { enabled: true })
-    );
+    const { result } = renderHook(() => useAudioLevel(mockStream, { enabled: true }));
 
     expect(result.current.isActive).toBe(false);
   });

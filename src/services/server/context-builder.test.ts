@@ -89,12 +89,7 @@ describe("buildHierarchicalContext", () => {
       );
     }
 
-    const context = await buildHierarchicalContext(
-      persistence,
-      meetingId,
-      "transcript",
-      [],
-    );
+    const context = await buildHierarchicalContext(persistence, meetingId, "transcript", []);
 
     expect(context.recentAnalyses).toHaveLength(3);
     // Should be the most recent 3
@@ -118,12 +113,7 @@ describe("buildHierarchicalContext", () => {
       if (i < 5) await Bun.sleep(2); // ensure unique filenames
     }
 
-    const context = await buildHierarchicalContext(
-      persistence,
-      meetingId,
-      "transcript",
-      [],
-    );
+    const context = await buildHierarchicalContext(persistence, meetingId, "transcript", []);
 
     expect(context.recentImages).toHaveLength(3);
     // Should be the most recent 3 with base64 content loaded
@@ -149,12 +139,7 @@ describe("buildHierarchicalContext", () => {
       representativeImageId: null,
     });
 
-    const context = await buildHierarchicalContext(
-      persistence,
-      meetingId,
-      "transcript",
-      [],
-    );
+    const context = await buildHierarchicalContext(persistence, meetingId, "transcript", []);
 
     expect(context.metaSummaries).toHaveLength(2);
     expect(context.metaSummaries[0]!.summary).toEqual(["Meta summary 1"]);
@@ -177,12 +162,7 @@ describe("buildHierarchicalContext", () => {
       representativeImageId: null,
     });
 
-    const context = await buildHierarchicalContext(
-      persistence,
-      meetingId,
-      "transcript",
-      [],
-    );
+    const context = await buildHierarchicalContext(persistence, meetingId, "transcript", []);
 
     // Should contain unique themes from all meta-summaries
     expect(context.overallThemes).toContain("Theme A");
@@ -220,12 +200,7 @@ describe("buildHierarchicalContext", () => {
       200,
     );
 
-    const context = await buildHierarchicalContext(
-      persistence,
-      meetingId,
-      "transcript",
-      [],
-    );
+    const context = await buildHierarchicalContext(persistence, meetingId, "transcript", []);
 
     expect(context.recentAnalyses).toHaveLength(2);
     // Should be ordered by timestamp
@@ -253,12 +228,7 @@ describe("buildHierarchicalContext", () => {
     const fileToDelete = imageRecords[0]!.filePath;
     rmSync(fileToDelete);
 
-    const context = await buildHierarchicalContext(
-      persistence,
-      meetingId,
-      "transcript",
-      [],
-    );
+    const context = await buildHierarchicalContext(persistence, meetingId, "transcript", []);
 
     // Should have 2 images instead of 3 (one failed to load)
     expect(context.recentImages).toHaveLength(2);
@@ -280,7 +250,9 @@ describe("buildHierarchicalContext", () => {
 
     // Manually insert a meta-summary with invalid themes via raw SQL
     // to simulate corrupted data
-    const db = (persistence as unknown as { db: { run: (sql: string, ...params: unknown[]) => void } }).db;
+    const db = (
+      persistence as unknown as { db: { run: (sql: string, ...params: unknown[]) => void } }
+    ).db;
     db.run(
       `INSERT INTO meta_summaries (id, meeting_id, start_time, end_time, summary_json, themes_json, representative_image_id, created_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -306,12 +278,7 @@ describe("buildHierarchicalContext", () => {
       Date.now(),
     );
 
-    const context = await buildHierarchicalContext(
-      persistence,
-      meetingId,
-      "transcript",
-      [],
-    );
+    const context = await buildHierarchicalContext(persistence, meetingId, "transcript", []);
 
     // Should only contain valid, non-empty themes
     expect(context.overallThemes).toContain("Valid Theme");
@@ -330,12 +297,7 @@ describe("buildHierarchicalContext", () => {
       representativeImageId: null,
     });
 
-    const context = await buildHierarchicalContext(
-      persistence,
-      meetingId,
-      "transcript",
-      [],
-    );
+    const context = await buildHierarchicalContext(persistence, meetingId, "transcript", []);
 
     expect(context.overallThemes).toEqual([]);
     expect(context.metaSummaries).toHaveLength(1);

@@ -6,11 +6,7 @@
  */
 
 import { describe, test, expect, mock, beforeEach, afterEach } from "bun:test";
-import {
-  parseRetryDelay,
-  isRateLimitError,
-  sleep,
-} from "./gemini";
+import { parseRetryDelay, isRateLimitError, sleep } from "./gemini";
 
 describe("GeminiService retry utilities", () => {
   describe("isRateLimitError", () => {

@@ -33,7 +33,9 @@ export function MeetingHeader({ title, onBack, isRecording, onUpdateTitle }: Mee
   const handleBack = () => {
     if (isRecording) {
       if (typeof globalThis.confirm === "function") {
-        const confirmed = globalThis.confirm("Recording in progress. Stop and return to meeting selection?");
+        const confirmed = globalThis.confirm(
+          "Recording in progress. Stop and return to meeting selection?",
+        );
         if (!confirmed) {
           return;
         }
