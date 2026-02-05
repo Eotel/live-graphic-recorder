@@ -15,6 +15,7 @@ export function createStreamUtils(): StreamUtils {
     stopTracks(stream: MediaStream | null): void {
       if (!stream) return;
       for (const track of stream.getTracks()) {
+        track.onended = null;
         track.stop();
       }
     },
@@ -43,5 +44,8 @@ export function createMockStreamUtils(overrides: Partial<StreamUtils> = {}): Str
  */
 export function stopTracks(stream: MediaStream | null): void {
   if (!stream) return;
-  stream.getTracks().forEach((track) => track.stop());
+  stream.getTracks().forEach((track) => {
+    track.onended = null;
+    track.stop();
+  });
 }
