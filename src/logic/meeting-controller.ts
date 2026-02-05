@@ -89,13 +89,19 @@ export function createMeetingController(
           callbacksRef.onImage?.(message.data);
           break;
 
-        case "session:status":
-          updateState({ sessionStatus: message.data.status });
+        case "session:status": {
+          const updates: Partial<MeetingControllerState> = {
+            sessionStatus: message.data.status,
+          };
           if (message.data.error) {
-            updateState({ error: message.data.error });
+            updates.error = message.data.error;
+          }
+          updateState(updates);
+          if (message.data.error) {
             callbacksRef.onError?.(message.data.error);
           }
           break;
+        }
 
         case "generation:status":
           updateState({ generationPhase: message.data.phase });
