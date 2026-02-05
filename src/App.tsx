@@ -23,8 +23,8 @@ import { ImageCarousel } from "@/components/graphics/ImageCarousel";
 import { MeetingSelectPage } from "@/components/pages/MeetingSelectPage";
 import { MeetingHeader } from "@/components/navigation/MeetingHeader";
 
-import { useMediaStream } from "@/hooks/useMediaStream";
-import { useRecording } from "@/hooks/useRecording";
+import { useMediaStreamController } from "@/hooks/useMediaStreamController";
+import { useRecordingController } from "@/hooks/useRecordingController";
 import { useCameraCapture } from "@/hooks/useCameraCapture";
 import { useElapsedTime } from "@/hooks/useElapsedTime";
 import { useMeetingSession } from "@/hooks/useMeetingSession";
@@ -36,29 +36,22 @@ export function App() {
   // View state for routing
   const [view, setView] = useState<View>("select");
 
-  // Media stream management
-  const {
-    stream,
-    audioStream,
-    videoRef,
-    error: mediaError,
-    isLoading: mediaLoading,
-    isSwitching,
-    hasPermission,
-    requestPermission,
-    audioDevices,
-    videoDevices,
-    selectedAudioDeviceId,
-    selectedVideoDeviceId,
-    setAudioDevice,
-    setVideoDevice,
-    sourceType,
-    switchSourceType,
-    switchVideoSource,
-  } = useMediaStream();
+  // Media stream management (controller-based)
+  const media = useMediaStreamController();
 
   // Meeting session management (WebSocket, transcripts, analyses, images)
   const session = useMeetingSession();
+
+  // Recording orchestration (controller-based)
+  const recording = useRecordingController({
+    audioStream: media.audioStream,
+    hasPermission: media.hasPermission,
+    isConnected: session.isConnected,
+    hasMeeting: session.meeting.meetingId !== null,
+    onChunk: session.sendAudio,
+    onSessionStart: session.startSession,
+    onSessionStop: session.stopSession,
+  });
 
   // Auto-connect WebSocket on mount
   useEffect(() => {
@@ -127,92 +120,42 @@ export function App() {
     }
   }, [session]);
 
-  // Recording orchestration (use audioStream for uninterrupted recording during video switch)
-  const {
-    isRecording,
-    error: recordingError,
-    startRecording,
-    stopRecording,
-  } = useRecording({
-    audioStream,
-    onAudioData: session.sendAudio,
-    onSessionStart: () => session.sendMessage({ type: "session:start" }),
-    onSessionStop: () => session.sendMessage({ type: "session:stop" }),
-  });
-
   // Elapsed time tracking
-  const { formattedTime: elapsedTime } = useElapsedTime({ enabled: isRecording });
+  const { formattedTime: elapsedTime } = useElapsedTime({ enabled: recording.isRecording });
 
   // Camera frame capture
   const onFrameCaptured = useCallback(
     (frame: CameraFrame) => {
-      session.sendMessage({ type: "camera:frame", data: frame });
+      session.sendCameraFrame(frame);
     },
     [session],
   );
 
   useCameraCapture({
-    videoRef,
-    isRecording,
+    videoRef: media.videoRef,
+    isRecording: recording.isRecording,
     onFrameCaptured,
   });
 
-  // Track pending start request
-  const pendingStartRef = useRef(false);
-
-  // Start recording when WebSocket connects
-  useEffect(() => {
-    if (session.isConnected && pendingStartRef.current) {
-      pendingStartRef.current = false;
-      if (hasPermission && audioStream) {
-        startRecording();
-      }
-    }
-  }, [session.isConnected, hasPermission, audioStream, startRecording]);
-
-  // Handle permission/stream loss (check audioStream since recording depends on it)
-  useEffect(() => {
-    if (hasPermission && audioStream) return;
-    pendingStartRef.current = false;
-    if (isRecording) {
-      stopRecording();
-    }
-  }, [hasPermission, audioStream, isRecording, stopRecording]);
-
   // Combined error state
-  const error = mediaError || session.error || recordingError;
+  const error = media.error || session.error || recording.error;
 
   // Handlers
   const handleRequestPermission = async () => {
-    await requestPermission();
+    await media.requestPermission();
   };
 
-  const handleStart = () => {
-    if (!hasPermission || !audioStream || !session.meeting.meetingId) {
-      return;
-    }
-
-    if (session.isConnected) {
-      startRecording();
-    } else {
-      pendingStartRef.current = true;
-      session.connect();
-    }
-  };
-
-  const handleStop = () => {
-    pendingStartRef.current = false;
-    stopRecording();
-  };
+  const handleStart = () => recording.start();
+  const handleStop = () => recording.stop();
 
   const handleBack = useCallback(() => {
-    if (isRecording) {
-      stopRecording();
+    if (recording.isRecording) {
+      recording.stop();
     }
     session.stopMeeting();
     session.resetSession();
     setView("select");
-  }, [isRecording, stopRecording, session]);
+  }, [recording, session]);
 
   // Show meeting selection page
   if (view === "select") {
@@ -236,7 +179,7 @@ export function App() {
             <MeetingHeader
               title={session.meeting.meetingTitle}
               onBack={handleBack}
-              isRecording={isRecording}
+              isRecording={recording.isRecording}
               onUpdateTitle={session.updateMeetingTitle}
             />
             <TopicIndicator topics={session.topics} />
@@ -265,23 +208,23 @@ export function App() {
         <div className="h-full flex flex-col">
           <div className="flex-shrink-0 mx-4 mt-4 mb-2 flex flex-col gap-3">
             <MediaSourceToggle
-              value={sourceType}
-              onChange={isRecording ? switchVideoSource : switchSourceType}
-              disabled={isSwitching}
-              isLoading={isSwitching}
+              value={media.sourceType}
+              onChange={recording.isRecording ? media.switchVideoSource : media.switchSourceType}
+              disabled={media.isSwitching}
+              isLoading={media.isSwitching}
             />
-            {hasPermission && (
+            {media.hasPermission && (
               <DeviceSelector
-                audioDevices={audioDevices}
-                videoDevices={videoDevices}
-                selectedAudioDeviceId={selectedAudioDeviceId}
-                selectedVideoDeviceId={selectedVideoDeviceId}
-                onAudioDeviceChange={setAudioDevice}
-                onVideoDeviceChange={setVideoDevice}
-                disabled={isSwitching}
-                stream={stream}
-                isRecording={isRecording}
-                sourceType={sourceType}
+                audioDevices={media.audioDevices}
+                videoDevices={media.videoDevices}
+                selectedAudioDeviceId={media.selectedAudioDeviceId}
+                selectedVideoDeviceId={media.selectedVideoDeviceId}
+                onAudioDeviceChange={media.setAudioDevice}
+                onVideoDeviceChange={media.setVideoDevice}
+                disabled={media.isSwitching}
+                stream={media.stream}
+                isRecording={recording.isRecording}
+                sourceType={media.sourceType}
               />
             )}
           </div>
@@ -289,10 +232,10 @@ export function App() {
             <ResizablePanel id="camera-panel" defaultSize={35} minSize={20} maxSize={70}>
               <div className="h-full flex flex-col px-4 pb-4">
                 <CameraPreview
-                  videoRef={videoRef}
-                  hasPermission={hasPermission}
-                  isRecording={isRecording}
-                  sourceType={sourceType}
+                  videoRef={media.videoRef}
+                  hasPermission={media.hasPermission}
+                  isRecording={recording.isRecording}
+                  sourceType={media.sourceType}
                   className="flex-1 min-h-0"
                 />
               </div>
@@ -314,11 +257,11 @@ export function App() {
       footer={
         <RecordingControls
           sessionStatus={session.sessionStatus}
-          isRecording={isRecording}
-          hasPermission={hasPermission}
-          isLoading={mediaLoading}
+          isRecording={recording.isRecording}
+          hasPermission={media.hasPermission}
+          isLoading={media.isLoading}
           error={error}
-          sourceType={sourceType}
+          sourceType={media.sourceType}
           elapsedTime={elapsedTime}
           hasMeeting={session.meeting.meetingId !== null}
           onRequestPermission={handleRequestPermission}
