@@ -8,6 +8,7 @@
 import type { ServerMessage, TranscriptSegment, CameraFrame } from "../types/messages";
 import type { WebSocketAdapter, WebSocketInstance, WebSocketReadyState } from "../adapters/types";
 import { WebSocketReadyState as ReadyState } from "../adapters/types";
+import { WS_CONFIG } from "../config/constants";
 import type {
   MeetingControllerState,
   MeetingControllerActions,
@@ -22,6 +23,13 @@ import type {
 
 export interface MeetingControllerDeps {
   wsAdapter: WebSocketAdapter;
+  reconnect?: {
+    enabled?: boolean;
+    connectTimeoutMs?: number;
+    initialBackoffMs?: number;
+    maxBackoffMs?: number;
+    jitterRatio?: number;
+  };
 }
 
 /**
@@ -34,8 +42,18 @@ export function createMeetingController(
 ): MeetingControllerActions & { getState: () => MeetingControllerState; dispose: () => void } {
   const { wsAdapter } = deps;
 
+  const reconnectConfig = {
+    enabled: deps.reconnect?.enabled ?? true,
+    connectTimeoutMs: deps.reconnect?.connectTimeoutMs ?? WS_CONFIG.reconnect.connectTimeoutMs,
+    initialBackoffMs: deps.reconnect?.initialBackoffMs ?? WS_CONFIG.reconnect.initialBackoffMs,
+    maxBackoffMs: deps.reconnect?.maxBackoffMs ?? WS_CONFIG.reconnect.maxBackoffMs,
+    jitterRatio: deps.reconnect?.jitterRatio ?? WS_CONFIG.reconnect.jitterRatio,
+  };
+
   let state: MeetingControllerState = {
     isConnected: false,
+    connectionState: "disconnected",
+    reconnectAttempt: 0,
     sessionStatus: "idle",
     generationPhase: "idle",
     error: null,
@@ -50,6 +68,10 @@ export function createMeetingController(
   let wsInstance: WebSocketInstance | null = null;
   let callbacksRef = callbacks;
   let isDisposed = false;
+  let isManualDisconnect = false;
+  let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+  let connectTimeoutTimer: ReturnType<typeof setTimeout> | null = null;
+  let reconnectAttempt = 0;
 
   function emit() {
     if (!isDisposed) {
@@ -181,8 +203,49 @@ export function createMeetingController(
     }
   }
 
+  function clearTimers(): void {
+    if (reconnectTimer) {
+      clearTimeout(reconnectTimer);
+      reconnectTimer = null;
+    }
+    if (connectTimeoutTimer) {
+      clearTimeout(connectTimeoutTimer);
+      connectTimeoutTimer = null;
+    }
+  }
+
+  function computeBackoffMs(attempt: number): number {
+    const base = reconnectConfig.initialBackoffMs * Math.pow(2, Math.max(0, attempt - 1));
+    const capped = Math.min(reconnectConfig.maxBackoffMs, base);
+    const jitter = capped * reconnectConfig.jitterRatio;
+    const delta = jitter > 0 ? (Math.random() * 2 - 1) * jitter : 0;
+    return Math.max(0, Math.round(capped + delta));
+  }
+
+  function scheduleReconnect(): void {
+    if (!reconnectConfig.enabled) return;
+    if (isDisposed || isManualDisconnect) return;
+
+    reconnectAttempt += 1;
+    updateState({
+      connectionState: "reconnecting",
+      reconnectAttempt,
+      isConnected: false,
+      sessionStatus: "idle",
+      generationPhase: "idle",
+    });
+
+    const delayMs = computeBackoffMs(reconnectAttempt);
+    clearTimers();
+    reconnectTimer = setTimeout(() => {
+      reconnectTimer = null;
+      connect();
+    }, delayMs);
+  }
+
   function connect(): void {
     if (isDisposed) return;
+    isManualDisconnect = false;
 
     // Prevent duplicate connections
     if (wsInstance) {
@@ -192,39 +255,79 @@ export function createMeetingController(
       }
     }
 
+    clearTimers();
+    updateState({
+      connectionState: reconnectAttempt > 0 ? "reconnecting" : "connecting",
+      reconnectAttempt,
+    });
+
     const wsUrl = wsAdapter.buildUrl("/ws/recording");
     wsInstance = wsAdapter.create(wsUrl);
 
     wsInstance.onOpen(() => {
       if (!isDisposed) {
-        updateState({ isConnected: true, error: null });
+        reconnectAttempt = 0;
+        clearTimers();
+        updateState({
+          isConnected: true,
+          connectionState: "connected",
+          reconnectAttempt: 0,
+          error: null,
+        });
       }
     });
 
     wsInstance.onClose(() => {
       if (!isDisposed) {
+        clearTimers();
+        wsInstance = null;
         updateState({
           isConnected: false,
+          connectionState: "disconnected",
+          reconnectAttempt,
           sessionStatus: "idle",
           generationPhase: "idle",
         });
+        scheduleReconnect();
       }
     });
 
     wsInstance.onError(() => {
       if (!isDisposed) {
-        updateState({ error: "WebSocket connection error" });
+        updateState({
+          error: "WebSocket connection error",
+        });
       }
     });
 
     wsInstance.onMessage(handleMessage);
+
+    if (reconnectConfig.connectTimeoutMs > 0) {
+      connectTimeoutTimer = setTimeout(() => {
+        connectTimeoutTimer = null;
+        if (isDisposed || isManualDisconnect) return;
+        if (wsInstance?.readyState === ReadyState.CONNECTING) {
+          wsInstance.close();
+        }
+      }, reconnectConfig.connectTimeoutMs);
+    }
   }
 
   function disconnect(): void {
+    isManualDisconnect = true;
+    clearTimers();
     if (wsInstance) {
       wsInstance.close();
       wsInstance = null;
     }
+    reconnectAttempt = 0;
+    updateState({
+      isConnected: false,
+      connectionState: "disconnected",
+      reconnectAttempt: 0,
+      sessionStatus: "idle",
+      generationPhase: "idle",
+    });
   }
 
   function sendMessage(message: object): void {
@@ -285,6 +388,7 @@ export function createMeetingController(
 
   function dispose(): void {
     isDisposed = true;
+    clearTimers();
     disconnect();
   }
 

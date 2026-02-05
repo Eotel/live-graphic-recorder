@@ -286,7 +286,9 @@ describe("createRecordingController", () => {
   });
 
   test("onChunk callback receives ArrayBuffer from MediaRecorder", async () => {
-    const onChunk = mock(() => {});
+    const onChunk = mock((chunk: ArrayBuffer) => {
+      void chunk;
+    });
     const { controller, mockRecorder } = createTestSetup({
       callbackOverrides: { onChunk },
     });

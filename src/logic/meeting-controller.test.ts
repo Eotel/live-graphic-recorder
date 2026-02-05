@@ -29,10 +29,15 @@ describe("createMeetingController", () => {
     const wsAdapter = createMockWsAdapter();
     const onStateChange = mock(() => {});
 
-    const controller = createMeetingController({ wsAdapter }, { onStateChange });
+    const controller = createMeetingController(
+      { wsAdapter, reconnect: { enabled: false, connectTimeoutMs: 0 } },
+      { onStateChange },
+    );
 
     const state = controller.getState();
     expect(state.isConnected).toBe(false);
+    expect(state.connectionState).toBe("disconnected");
+    expect(state.reconnectAttempt).toBe(0);
     expect(state.sessionStatus).toBe("idle");
     expect(state.generationPhase).toBe("idle");
     expect(state.error).toBeNull();
@@ -43,7 +48,10 @@ describe("createMeetingController", () => {
     const wsAdapter = createMockWsAdapter();
     const onStateChange = mock(() => {});
 
-    const controller = createMeetingController({ wsAdapter }, { onStateChange });
+    const controller = createMeetingController(
+      { wsAdapter, reconnect: { enabled: false, connectTimeoutMs: 0 } },
+      { onStateChange },
+    );
 
     controller.connect();
     expect(wsAdapter.lastInstance).not.toBeNull();
@@ -59,7 +67,10 @@ describe("createMeetingController", () => {
     const wsAdapter = createMockWsAdapter();
     const onStateChange = mock(() => {});
 
-    const controller = createMeetingController({ wsAdapter }, { onStateChange });
+    const controller = createMeetingController(
+      { wsAdapter, reconnect: { enabled: false, connectTimeoutMs: 0 } },
+      { onStateChange },
+    );
 
     controller.connect();
     wsAdapter.lastInstance!.controls.simulateOpen();
@@ -76,7 +87,10 @@ describe("createMeetingController", () => {
     wsAdapter.create = createSpy;
     const onStateChange = mock(() => {});
 
-    const controller = createMeetingController({ wsAdapter }, { onStateChange });
+    const controller = createMeetingController(
+      { wsAdapter, reconnect: { enabled: false, connectTimeoutMs: 0 } },
+      { onStateChange },
+    );
 
     controller.connect();
     wsAdapter.lastInstance!.controls.simulateOpen();
@@ -93,7 +107,11 @@ describe("createMeetingController", () => {
     const onStateChange = mock(() => {});
     const onTranscript = mock(() => {});
 
-    const controller = createMeetingController({ wsAdapter }, { onStateChange }, { onTranscript });
+    const controller = createMeetingController(
+      { wsAdapter, reconnect: { enabled: false, connectTimeoutMs: 0 } },
+      { onStateChange },
+      { onTranscript },
+    );
 
     controller.connect();
     wsAdapter.lastInstance!.controls.simulateOpen();
@@ -123,7 +141,11 @@ describe("createMeetingController", () => {
     const onStateChange = mock(() => {});
     const onAnalysis = mock(() => {});
 
-    const controller = createMeetingController({ wsAdapter }, { onStateChange }, { onAnalysis });
+    const controller = createMeetingController(
+      { wsAdapter, reconnect: { enabled: false, connectTimeoutMs: 0 } },
+      { onStateChange },
+      { onAnalysis },
+    );
 
     controller.connect();
     wsAdapter.lastInstance!.controls.simulateOpen();
@@ -154,7 +176,10 @@ describe("createMeetingController", () => {
     const wsAdapter = createMockWsAdapter();
     const onStateChange = mock(() => {});
 
-    const controller = createMeetingController({ wsAdapter }, { onStateChange });
+    const controller = createMeetingController(
+      { wsAdapter, reconnect: { enabled: false, connectTimeoutMs: 0 } },
+      { onStateChange },
+    );
 
     controller.connect();
     wsAdapter.lastInstance!.controls.simulateOpen();
@@ -173,7 +198,10 @@ describe("createMeetingController", () => {
     const wsAdapter = createMockWsAdapter();
     const onStateChange = mock(() => {});
 
-    const controller = createMeetingController({ wsAdapter }, { onStateChange });
+    const controller = createMeetingController(
+      { wsAdapter, reconnect: { enabled: false, connectTimeoutMs: 0 } },
+      { onStateChange },
+    );
 
     controller.connect();
     wsAdapter.lastInstance!.controls.simulateOpen();
@@ -225,7 +253,11 @@ describe("createMeetingController", () => {
     const onStateChange = mock(() => {});
     const onMeetingList = mock(() => {});
 
-    const controller = createMeetingController({ wsAdapter }, { onStateChange }, { onMeetingList });
+    const controller = createMeetingController(
+      { wsAdapter, reconnect: { enabled: false, connectTimeoutMs: 0 } },
+      { onStateChange },
+      { onMeetingList },
+    );
 
     controller.connect();
     wsAdapter.lastInstance!.controls.simulateOpen();
@@ -256,7 +288,11 @@ describe("createMeetingController", () => {
     const onStateChange = mock(() => {});
     const onError = mock(() => {});
 
-    const controller = createMeetingController({ wsAdapter }, { onStateChange }, { onError });
+    const controller = createMeetingController(
+      { wsAdapter, reconnect: { enabled: false, connectTimeoutMs: 0 } },
+      { onStateChange },
+      { onError },
+    );
 
     controller.connect();
     wsAdapter.lastInstance!.controls.simulateOpen();
@@ -276,7 +312,10 @@ describe("createMeetingController", () => {
     const wsAdapter = createMockWsAdapter();
     const onStateChange = mock(() => {});
 
-    const controller = createMeetingController({ wsAdapter }, { onStateChange });
+    const controller = createMeetingController(
+      { wsAdapter, reconnect: { enabled: false, connectTimeoutMs: 0 } },
+      { onStateChange },
+    );
 
     controller.connect();
     wsAdapter.lastInstance!.controls.simulateOpen();
@@ -296,7 +335,10 @@ describe("createMeetingController", () => {
     const wsAdapter = createMockWsAdapter();
     const onStateChange = mock(() => {});
 
-    const controller = createMeetingController({ wsAdapter }, { onStateChange });
+    const controller = createMeetingController(
+      { wsAdapter, reconnect: { enabled: false, connectTimeoutMs: 0 } },
+      { onStateChange },
+    );
 
     controller.connect();
     wsAdapter.lastInstance!.controls.simulateOpen();
@@ -328,7 +370,10 @@ describe("createMeetingController", () => {
     const wsAdapter = createMockWsAdapter();
     const onStateChange = mock(() => {});
 
-    const controller = createMeetingController({ wsAdapter }, { onStateChange });
+    const controller = createMeetingController(
+      { wsAdapter, reconnect: { enabled: false, connectTimeoutMs: 0 } },
+      { onStateChange },
+    );
 
     controller.connect();
     wsAdapter.lastInstance!.controls.simulateOpen();
@@ -345,7 +390,10 @@ describe("createMeetingController", () => {
     const wsAdapter = createMockWsAdapter();
     const onStateChange = mock(() => {});
 
-    const controller = createMeetingController({ wsAdapter }, { onStateChange });
+    const controller = createMeetingController(
+      { wsAdapter, reconnect: { enabled: false, connectTimeoutMs: 0 } },
+      { onStateChange },
+    );
 
     controller.connect();
     wsAdapter.lastInstance!.controls.simulateOpen();
@@ -361,7 +409,10 @@ describe("createMeetingController", () => {
     const wsAdapter = createMockWsAdapter();
     const onStateChange = mock(() => {});
 
-    const controller = createMeetingController({ wsAdapter }, { onStateChange });
+    const controller = createMeetingController(
+      { wsAdapter, reconnect: { enabled: false, connectTimeoutMs: 0 } },
+      { onStateChange },
+    );
 
     controller.connect();
     wsAdapter.lastInstance!.controls.simulateOpen();
@@ -378,7 +429,10 @@ describe("createMeetingController", () => {
     const wsAdapter = createMockWsAdapter();
     const onStateChange = mock(() => {});
 
-    const controller = createMeetingController({ wsAdapter }, { onStateChange });
+    const controller = createMeetingController(
+      { wsAdapter, reconnect: { enabled: false, connectTimeoutMs: 0 } },
+      { onStateChange },
+    );
 
     controller.connect();
     wsAdapter.lastInstance!.controls.simulateOpen();
@@ -402,7 +456,10 @@ describe("createMeetingController", () => {
     const wsAdapter = createMockWsAdapter();
     const onStateChange = mock(() => {});
 
-    const controller = createMeetingController({ wsAdapter }, { onStateChange });
+    const controller = createMeetingController(
+      { wsAdapter, reconnect: { enabled: false, connectTimeoutMs: 0 } },
+      { onStateChange },
+    );
 
     controller.connect();
     wsAdapter.lastInstance!.controls.simulateOpen();
@@ -418,7 +475,10 @@ describe("createMeetingController", () => {
     const wsAdapter = createMockWsAdapter();
     const onStateChange = mock(() => {});
 
-    const controller = createMeetingController({ wsAdapter }, { onStateChange });
+    const controller = createMeetingController(
+      { wsAdapter, reconnect: { enabled: false, connectTimeoutMs: 0 } },
+      { onStateChange },
+    );
 
     controller.connect();
     wsAdapter.lastInstance!.controls.simulateError();
@@ -430,7 +490,10 @@ describe("createMeetingController", () => {
     const wsAdapter = createMockWsAdapter();
     const onStateChange = mock(() => {});
 
-    const controller = createMeetingController({ wsAdapter }, { onStateChange });
+    const controller = createMeetingController(
+      { wsAdapter, reconnect: { enabled: false, connectTimeoutMs: 0 } },
+      { onStateChange },
+    );
 
     controller.connect();
     wsAdapter.lastInstance!.controls.simulateOpen();
@@ -446,7 +509,10 @@ describe("createMeetingController", () => {
     const wsAdapter = createMockWsAdapter();
     const onStateChange = mock(() => {});
 
-    const controller = createMeetingController({ wsAdapter }, { onStateChange });
+    const controller = createMeetingController(
+      { wsAdapter, reconnect: { enabled: false, connectTimeoutMs: 0 } },
+      { onStateChange },
+    );
 
     controller.connect();
     wsAdapter.lastInstance!.controls.simulateOpen();
@@ -462,7 +528,10 @@ describe("createMeetingController", () => {
     const wsAdapter = createMockWsAdapter();
     const onStateChange = mock(() => {});
 
-    const controller = createMeetingController({ wsAdapter }, { onStateChange });
+    const controller = createMeetingController(
+      { wsAdapter, reconnect: { enabled: false, connectTimeoutMs: 0 } },
+      { onStateChange },
+    );
 
     controller.connect();
     wsAdapter.lastInstance!.controls.simulateOpen();
@@ -474,5 +543,40 @@ describe("createMeetingController", () => {
     expect(parsed.type).toBe("camera:frame");
     expect(parsed.data.base64).toBe("abc123");
     expect(parsed.data.timestamp).toBe(1000);
+  });
+
+  test("reconnects after unexpected close when enabled", async () => {
+    const wsAdapter = createMockWsAdapter();
+    const createSpy = mock(wsAdapter.create);
+    wsAdapter.create = createSpy;
+    const onStateChange = mock(() => {});
+
+    const controller = createMeetingController(
+      {
+        wsAdapter,
+        reconnect: {
+          enabled: true,
+          connectTimeoutMs: 0,
+          initialBackoffMs: 1,
+          maxBackoffMs: 1,
+          jitterRatio: 0,
+        },
+      },
+      { onStateChange },
+    );
+
+    controller.connect();
+    wsAdapter.lastInstance!.controls.simulateOpen();
+    expect(controller.getState().isConnected).toBe(true);
+
+    wsAdapter.lastInstance!.controls.simulateClose();
+
+    await new Promise((r) => setTimeout(r, 10));
+
+    expect(createSpy.mock.calls.length).toBeGreaterThanOrEqual(2);
+    expect(controller.getState().connectionState).toBe("reconnecting");
+    expect(controller.getState().reconnectAttempt).toBe(1);
+
+    controller.dispose();
   });
 });

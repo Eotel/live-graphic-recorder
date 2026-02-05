@@ -82,6 +82,12 @@ export const WS_CONFIG = {
   pingInterval: 30000,
   /** Maximum pending audio chunks before Deepgram connection (prevents DoS) */
   maxPendingAudioChunks: 100,
+  reconnect: {
+    connectTimeoutMs: 4000,
+    initialBackoffMs: 250,
+    maxBackoffMs: 10000,
+    jitterRatio: 0.2,
+  },
 } as const;
 
 // ============================================================================

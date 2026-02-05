@@ -4,6 +4,7 @@
 
 import { describe, test, expect, mock, beforeEach, afterEach } from "bun:test";
 import { renderHook, act } from "@testing-library/react";
+import { StrictMode, createElement, useEffect } from "react";
 import { useMeetingSession } from "./useMeetingSession";
 
 // Mock WebSocket
@@ -150,5 +151,24 @@ describe("useMeetingSession", () => {
       expect(result.current.isAnalyzing).toBe(false);
       expect(result.current.isGenerating).toBe(true);
     }
+  });
+
+  test("auto-connect works under StrictMode", async () => {
+    const wrapper = ({ children }: { children: any }) => createElement(StrictMode, null, children);
+
+    const { result } = renderHook(
+      () => {
+        const session = useMeetingSession();
+        useEffect(() => {
+          session.connect();
+          // eslint-disable-next-line react-hooks/exhaustive-deps
+        }, []);
+        return session;
+      },
+      { wrapper },
+    );
+
+    await new Promise((r) => setTimeout(r, 20));
+    expect(result.current.isConnected).toBe(true);
   });
 });

@@ -106,8 +106,12 @@ export function useMeetingController(
 
   // Create controller with stable reference
   const controllerRef = useRef<ReturnType<typeof createMeetingController> | null>(null);
+  const mountedRef = useRef(false);
+  const pendingConnectRef = useRef(false);
   const stateRef = useRef<MeetingControllerState>({
     isConnected: false,
+    connectionState: "disconnected",
+    reconnectAttempt: 0,
     sessionStatus: "idle",
     generationPhase: "idle",
     error: null,
@@ -122,11 +126,9 @@ export function useMeetingController(
   // Subscribers for external store
   const subscribersRef = useRef<Set<() => void>>(new Set());
 
-  // Initialize controller once
-  if (!controllerRef.current) {
+  const createController = useCallback(() => {
     const wsAdapter = createWebSocketAdapter();
 
-    // Create proxy callbacks that delegate to ref
     const proxyCallbacks: MeetingControllerCallbacks = {
       onTranscript: (data) => callbacksRef.current.onTranscript?.(data),
       onAnalysis: (data) => callbacksRef.current.onAnalysis?.(data),
@@ -138,7 +140,7 @@ export function useMeetingController(
       onMeetingHistory: (data) => callbacksRef.current.onMeetingHistory?.(data),
     };
 
-    controllerRef.current = createMeetingController(
+    return createMeetingController(
       { wsAdapter },
       {
         onStateChange: (state) => {
@@ -148,7 +150,15 @@ export function useMeetingController(
       },
       proxyCallbacks,
     );
-  }
+  }, []);
+
+  const ensureController = useCallback(() => {
+    if (controllerRef.current) return controllerRef.current;
+    if (!mountedRef.current) return null;
+
+    controllerRef.current = createController();
+    return controllerRef.current;
+  }, [createController]);
 
   // Use sync external store for state updates
   const subscribe = useCallback((callback: () => void) => {
@@ -164,51 +174,91 @@ export function useMeetingController(
 
   // Cleanup on unmount
   useEffect(() => {
+    mountedRef.current = true;
+    ensureController();
+    if (pendingConnectRef.current) {
+      pendingConnectRef.current = false;
+      controllerRef.current?.connect();
+    }
     return () => {
+      mountedRef.current = false;
+      pendingConnectRef.current = false;
       controllerRef.current?.dispose();
+      controllerRef.current = null;
+      stateRef.current = {
+        isConnected: false,
+        connectionState: "disconnected",
+        reconnectAttempt: 0,
+        sessionStatus: "idle",
+        generationPhase: "idle",
+        error: null,
+        meeting: {
+          meetingId: null,
+          meetingTitle: null,
+          sessionId: null,
+          meetingList: [],
+        },
+      };
     };
-  }, []);
+  }, [ensureController]);
 
   // Create stable action callbacks
   const connect = useCallback(() => {
-    controllerRef.current?.connect();
-  }, []);
+    const controller = ensureController();
+    if (!controller) {
+      pendingConnectRef.current = true;
+      return;
+    }
+    controller.connect();
+  }, [ensureController]);
 
   const disconnect = useCallback(() => {
-    controllerRef.current?.disconnect();
-  }, []);
+    ensureController()?.disconnect();
+  }, [ensureController]);
 
-  const sendAudio = useCallback((data: ArrayBuffer) => {
-    controllerRef.current?.sendAudio(data);
-  }, []);
+  const sendAudio = useCallback(
+    (data: ArrayBuffer) => {
+      ensureController()?.sendAudio(data);
+    },
+    [ensureController],
+  );
 
-  const startMeeting = useCallback((title?: string, meetingId?: string) => {
-    controllerRef.current?.startMeeting(title, meetingId);
-  }, []);
+  const startMeeting = useCallback(
+    (title?: string, meetingId?: string) => {
+      ensureController()?.startMeeting(title, meetingId);
+    },
+    [ensureController],
+  );
 
   const stopMeeting = useCallback(() => {
-    controllerRef.current?.stopMeeting();
-  }, []);
+    ensureController()?.stopMeeting();
+  }, [ensureController]);
 
   const requestMeetingList = useCallback(() => {
-    controllerRef.current?.requestMeetingList();
-  }, []);
+    ensureController()?.requestMeetingList();
+  }, [ensureController]);
 
-  const updateMeetingTitle = useCallback((title: string) => {
-    controllerRef.current?.updateMeetingTitle(title);
-  }, []);
+  const updateMeetingTitle = useCallback(
+    (title: string) => {
+      ensureController()?.updateMeetingTitle(title);
+    },
+    [ensureController],
+  );
 
   const startSession = useCallback(() => {
-    controllerRef.current?.startSession();
-  }, []);
+    ensureController()?.startSession();
+  }, [ensureController]);
 
   const stopSession = useCallback(() => {
-    controllerRef.current?.stopSession();
-  }, []);
+    ensureController()?.stopSession();
+  }, [ensureController]);
 
-  const sendCameraFrame = useCallback((data: CameraFrame) => {
-    controllerRef.current?.sendCameraFrame(data);
-  }, []);
+  const sendCameraFrame = useCallback(
+    (data: CameraFrame) => {
+      ensureController()?.sendCameraFrame(data);
+    },
+    [ensureController],
+  );
 
   return {
     ...state,

@@ -164,6 +164,8 @@ export interface MeetingInfo {
 
 export interface MeetingControllerState {
   isConnected: boolean;
+  connectionState: "disconnected" | "connecting" | "connected" | "reconnecting";
+  reconnectAttempt: number;
   sessionStatus: "idle" | "recording" | "processing" | "error";
   generationPhase: "idle" | "analyzing" | "generating" | "retrying";
   error: string | null;

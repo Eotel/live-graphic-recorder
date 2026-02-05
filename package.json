@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "bun --hot src/index.ts",
     "dev:tunnel": "tailscale funnel 3000",
+    "tunnel": "tailscale funnel 3000",
     "start": "NODE_ENV=production bun src/index.ts",
     "build": "bun run build.ts",
     "build:ts": "tsgo --build",

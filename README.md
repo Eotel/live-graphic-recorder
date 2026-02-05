@@ -1,21 +1,37 @@
-# bun-react-tailwind-shadcn-template
+# Live Graphic Recorder
 
-To install dependencies:
+## セットアップ
+
+依存関係をインストール:
 
 ```bash
 bun install
 ```
 
-To start a development server:
+## 開発 (HMR)
 
 ```bash
 bun dev
 ```
 
-To run for production:
+## 本番 (production)
+
+HMR なしで起動（公開用途はこちら推奨）:
 
 ```bash
 bun start
 ```
 
-This project was created using `bun init` in bun v1.3.7. [Bun](https://bun.com) is a fast all-in-one JavaScript runtime.
+## Tailscale Funnel で公開
+
+別ターミナルで:
+
+```bash
+tailscale funnel 3000
+```
+
+確認:
+
+```bash
+curl -sS https://<your-host>/api/health
+```
