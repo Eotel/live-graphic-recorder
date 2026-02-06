@@ -81,9 +81,11 @@ export function useAudioUpload(options?: UseAudioUploadOptions): UseAudioUploadR
 
   const state = useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
 
+  // Cleanup on unmount (or StrictMode effect remount)
   useEffect(() => {
     return () => {
       controllerRef.current?.dispose();
+      controllerRef.current = null;
     };
   }, []);
 

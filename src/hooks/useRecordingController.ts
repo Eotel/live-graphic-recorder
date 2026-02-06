@@ -100,10 +100,11 @@ export function useRecordingController(
     });
   }, [audioStream, hasPermission, isConnected, hasMeeting]);
 
-  // Cleanup on unmount
+  // Cleanup on unmount (or StrictMode effect remount)
   useEffect(() => {
     return () => {
       controllerRef.current?.dispose();
+      controllerRef.current = null;
     };
   }, []);
 

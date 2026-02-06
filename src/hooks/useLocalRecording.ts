@@ -67,9 +67,11 @@ export function useLocalRecording(storageOverride?: OPFSStorageAdapter): UseLoca
 
   const state = useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
 
+  // Cleanup on unmount (or StrictMode effect remount)
   useEffect(() => {
     return () => {
       controllerRef.current?.dispose();
+      controllerRef.current = null;
     };
   }, []);
 
