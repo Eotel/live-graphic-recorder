@@ -5,6 +5,7 @@
 // Utility hooks
 export * from "./useAutoScroll";
 export * from "./useElapsedTime";
+export * from "./usePopoutWindow";
 
 // Controller-based hooks
 export * from "./useMediaStreamController";

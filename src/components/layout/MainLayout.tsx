@@ -6,6 +6,7 @@
  */
 
 import type { ReactNode } from "react";
+import type { PaneId } from "@/logic/pane-state-controller";
 import { cn } from "@/lib/utils";
 import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from "@/components/ui/resizable";
 
@@ -15,16 +16,65 @@ interface MainLayoutProps {
   rightPanel: ReactNode;
   footer: ReactNode;
   className?: string;
+  expandedPane?: PaneId | null;
+  cameraPanel?: ReactNode;
+  graphicsPanel?: ReactNode;
 }
 
-export function MainLayout({ header, leftPanel, rightPanel, footer, className }: MainLayoutProps) {
+export function MainLayout({
+  header,
+  leftPanel,
+  rightPanel,
+  footer,
+  className,
+  expandedPane,
+  cameraPanel,
+  graphicsPanel,
+}: MainLayoutProps) {
+  const isExpanded = expandedPane !== null && expandedPane !== undefined;
+
   return (
     <div className={cn("flex flex-col h-screen w-full", className)}>
       {/* Header */}
       <header className="flex-shrink-0 px-3 py-2 border-b border-border bg-card">{header}</header>
 
+      {/* Expanded pane - full size overlay (desktop only) */}
+      {isExpanded && (
+        <main className="flex-1 overflow-hidden hidden md:block">
+          <div
+            className={cn(
+              "h-full overflow-hidden bg-background p-4",
+              expandedPane !== "summary" && "hidden",
+            )}
+          >
+            {leftPanel}
+          </div>
+          <div
+            className={cn(
+              "h-full overflow-hidden bg-background p-4",
+              expandedPane !== "camera" && "hidden",
+            )}
+          >
+            {cameraPanel}
+          </div>
+          <div
+            className={cn(
+              "h-full overflow-hidden bg-background p-4",
+              expandedPane !== "graphics" && "hidden",
+            )}
+          >
+            {graphicsPanel}
+          </div>
+        </main>
+      )}
+
       {/* Main content - stacked on mobile, side-by-side with resize on md+ */}
-      <main className="flex-1 flex flex-col md:flex-row overflow-hidden">
+      <main
+        className={cn(
+          "flex-1 flex flex-col md:flex-row overflow-hidden",
+          isExpanded && "md:hidden",
+        )}
+      >
         {/* Mobile: stacked layout */}
         <div className="flex flex-col flex-1 md:hidden overflow-hidden">
           <div className="flex-1 overflow-hidden border-b border-border bg-background p-4">
