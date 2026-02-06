@@ -6,9 +6,7 @@
  */
 
 import { useState, useEffect, useMemo, useRef, type TouchEvent } from "react";
-import { ChevronLeft, ChevronRight } from "lucide-react";
 import { useAutoScroll } from "@/hooks/useAutoScroll";
-import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import type { TranscriptSegment, SummaryPage } from "@/types/messages";
 import { SummarySkeleton } from "./SummarySkeleton";
@@ -138,39 +136,16 @@ export function SummaryPanel({
               </li>
             ))}
           </ul>
-          {hasMultiplePages && (
-            <div className="mt-2">
-              <div className="inline-flex items-center gap-1 rounded-md border border-border/60 bg-muted/40 p-1">
-                <span className="px-1 text-xs font-medium leading-none tabular-nums text-muted-foreground">
-                  {currentIndex + 1}/{summaryPages.length}
-                </span>
-                <span className="h-4 w-px bg-border/70" aria-hidden="true" />
-                <Button
-                  variant="ghost"
-                  size="icon-sm"
-                  className="size-6 rounded-sm text-muted-foreground hover:text-foreground"
-                  onClick={goToPrevious}
-                  aria-label="Previous summary page"
-                >
-                  <ChevronLeft className="size-4" />
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="icon-sm"
-                  className="size-6 rounded-sm text-muted-foreground hover:text-foreground"
-                  onClick={goToNext}
-                  aria-label="Next summary page"
-                >
-                  <ChevronRight className="size-4" />
-                </Button>
-              </div>
-            </div>
-          )}
         </div>
       ) : null}
 
       {/* Transcript Section - scrollable */}
-      <div className="flex-1 min-h-0 flex flex-col">
+      <div
+        className={cn(
+          "flex-1 min-h-0 flex flex-col",
+          (showSkeleton || hasPages) && "border-t border-border pt-3",
+        )}
+      >
         <h3 className="flex-shrink-0 text-sm font-semibold text-muted-foreground mb-2">
           Live Transcript
         </h3>
