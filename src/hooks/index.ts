@@ -4,6 +4,7 @@
 
 // Utility hooks
 export * from "./useAutoScroll";
+export * from "./useAttachMediaStream";
 export * from "./useElapsedTime";
 export * from "./usePopoutWindow";
 

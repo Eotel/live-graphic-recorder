@@ -11,6 +11,7 @@ import type { MediaStreamControllerState } from "../logic/types";
 import { createMediaStreamController } from "../logic/media-stream-controller";
 import { createMediaDevicesAdapter } from "../adapters/media-devices";
 import { createStreamUtils } from "../adapters/stream-utils";
+import { useAttachMediaStream } from "./useAttachMediaStream";
 
 export interface UseMediaStreamControllerOptions {
   /**
@@ -119,21 +120,7 @@ export function useMediaStreamController(
 
   const state = useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
 
-  // Attach stream to video element when stream changes
-  useEffect(() => {
-    const video = videoRef.current;
-    if (!video) return;
-
-    video.srcObject = state.stream;
-    if (state.stream) {
-      void video.play().catch((err: unknown) => {
-        // NotAllowedError is expected when autoplay is blocked
-        if (err instanceof Error && err.name !== "NotAllowedError") {
-          console.warn("Video play failed:", err);
-        }
-      });
-    }
-  }, [state.stream]);
+  useAttachMediaStream(videoRef, state.stream);
 
   // Cleanup on unmount (or StrictMode effect remount)
   useEffect(() => {

@@ -1,0 +1,91 @@
+{
+  "name": "view-logic-refactor-swarm-20260206",
+  "goal": "View/Logic 分離のフェーズ1-3基盤を安全導入し、App.tsx を 200 行以下に縮小する",
+  "initial_coverage": "N/A",
+  "tasks": [
+    {
+      "task_id": "T01",
+      "agent": "A01",
+      "source": "src/app/view-model/app-store.ts",
+      "test_file": "src/app/view-model/app-store.test.ts",
+      "goal": "Zustand AppStore の state schema / action interface 骨格を導入",
+      "dependencies": [],
+      "requirements": [
+        "createAppStore() を公開する",
+        "state に auth, meeting, recording, media, upload, ui, derived を定義する",
+        "actions に initialize/selectMeeting/createMeeting/startRecording/stopRecording/logout/downloadReport/refreshMeetings/togglePaneMode を定義する"
+      ],
+      "commands": ["bun run typecheck"]
+    },
+    {
+      "task_id": "T02",
+      "agent": "A02",
+      "source": "src/app/usecases",
+      "test_file": "src/app/usecases/usecases.test.ts",
+      "goal": "meeting/recording/logout/report の usecase 関数を追加",
+      "dependencies": ["T01"],
+      "requirements": [
+        "createMeetingUsecase/selectMeetingUsecase/recordingLifecycleUsecase/logoutUsecase/downloadReportUsecase を作成",
+        "既存 logic/controller 型を壊さない",
+        "副作用実行は関数注入でテスト可能にする"
+      ],
+      "commands": ["bun run typecheck"]
+    },
+    {
+      "task_id": "T03",
+      "agent": "A03",
+      "source": "src/app/container/AppShell.tsx",
+      "test_file": "src/App.tsx",
+      "goal": "App 実装を AppShell に移し App.tsx をルート配線のみへ縮小",
+      "dependencies": ["T01", "T02"],
+      "requirements": [
+        "src/App.tsx を 200 行以下にする",
+        "UI 挙動は現行維持",
+        "既存 hook/controller を再利用する"
+      ],
+      "commands": ["bun run typecheck"]
+    },
+    {
+      "task_id": "T04",
+      "agent": "A04",
+      "source": "src/components/navigation/MeetingHeader.tsx",
+      "test_file": "src/components/navigation/MeetingHeader.test.tsx",
+      "goal": "MeetingHeader から confirm 判定を削除し onBackRequested へ変更",
+      "dependencies": ["T03"],
+      "requirements": [
+        "UI コンポーネントはイベント発火のみを担う",
+        "hasUnsavedRecording に依存しない",
+        "既存編集 UI 動作は維持"
+      ],
+      "commands": ["bun test src/components/navigation/MeetingHeader.test.tsx"]
+    },
+    {
+      "task_id": "T05",
+      "agent": "A05",
+      "source": "src/hooks/useAttachMediaStream.ts",
+      "test_file": "src/hooks/useMediaStreamController.test.ts",
+      "goal": "videoRef attach を専用 hook に分離",
+      "dependencies": [],
+      "requirements": [
+        "useAttachMediaStream(videoRef, stream) を追加",
+        "useMediaStreamController から view 寄り責務を分離",
+        "既存の permission/device 切替挙動を壊さない"
+      ],
+      "commands": ["bun test src/hooks/useMediaStreamController.test.ts"]
+    },
+    {
+      "task_id": "T06",
+      "agent": "A06",
+      "source": "src/hooks/useMeetingSession.ts",
+      "test_file": "src/hooks/useMeetingSession.test.ts",
+      "goal": "useMeetingSession を非推奨化し内部委譲可能な形へ整理",
+      "dependencies": ["T01", "T02"],
+      "requirements": [
+        "deprecation コメントを追加",
+        "既存返却 shape を維持",
+        "将来の app-store 委譲に向けた移行コメントを明示"
+      ],
+      "commands": ["bun test src/hooks/useMeetingSession.test.ts"]
+    }
+  ]
+}

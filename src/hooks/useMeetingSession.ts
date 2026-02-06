@@ -92,6 +92,9 @@ export interface UseMeetingSessionReturn {
 
 /**
  * Hook that provides complete meeting session management.
+ *
+ * @deprecated `src/app/view-model/app-store.ts` と `src/app/usecases/*` への移行を進めるため、
+ * 新規実装では container/view-model 経由のオーケストレーションを利用してください。
  */
 export function useMeetingSession(): UseMeetingSessionReturn {
   // Stores for managing state
