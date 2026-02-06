@@ -6,7 +6,7 @@
  */
 
 import { describe, test, expect, afterEach } from "bun:test";
-import { render, screen, cleanup } from "@testing-library/react";
+import { render, screen, cleanup, fireEvent } from "@testing-library/react";
 import { TranscriptLine } from "./TranscriptLine";
 
 describe("TranscriptLine", () => {
@@ -38,6 +38,11 @@ describe("TranscriptLine", () => {
       expect(screen.getByText("Speaker 3:")).toBeDefined();
     });
 
+    test("displays alias when speaker alias exists", () => {
+      render(<TranscriptLine text="Hello" speaker={1} speakerAliases={{ 1: "田中" }} />);
+      expect(screen.getByText("田中:")).toBeDefined();
+    });
+
     test("applies color class to speaker label", () => {
       render(<TranscriptLine text="Hello" speaker={0} />);
       const speakerLabel = screen.getByText("Speaker 1:");
@@ -61,6 +66,41 @@ describe("TranscriptLine", () => {
       const speakerLabel = screen.getByText("Speaker 9:");
       // Speaker 8 (index 8 % 8 = 0) should have same color as speaker 0
       expect(speakerLabel.className).toContain("text-blue-600");
+    });
+
+    test("allows inline speaker label edit and commits on Enter", () => {
+      const onSpeakerLabelEdit = (speaker: number, name: string) => edits.push({ speaker, name });
+      const edits: Array<{ speaker: number; name: string }> = [];
+
+      render(<TranscriptLine text="Hello" speaker={0} onSpeakerLabelEdit={onSpeakerLabelEdit} />);
+
+      fireEvent.click(screen.getByRole("button", { name: "Edit speaker 1 label" }));
+      const input = screen.getByRole("textbox", { name: "Edit speaker 1 label" });
+      fireEvent.change(input, { target: { value: "山田" } });
+      fireEvent.keyDown(input, { key: "Enter" });
+
+      expect(edits).toEqual([{ speaker: 0, name: "山田" }]);
+    });
+
+    test("submits empty name as alias removal", () => {
+      const onSpeakerLabelEdit = (speaker: number, name: string) => edits.push({ speaker, name });
+      const edits: Array<{ speaker: number; name: string }> = [];
+
+      render(
+        <TranscriptLine
+          text="Hello"
+          speaker={0}
+          speakerAliases={{ 0: "既存名" }}
+          onSpeakerLabelEdit={onSpeakerLabelEdit}
+        />,
+      );
+
+      fireEvent.click(screen.getByRole("button", { name: "Edit speaker 1 label" }));
+      const input = screen.getByRole("textbox", { name: "Edit speaker 1 label" });
+      fireEvent.change(input, { target: { value: "   " } });
+      fireEvent.keyDown(input, { key: "Enter" });
+
+      expect(edits).toEqual([{ speaker: 0, name: "" }]);
     });
   });
 

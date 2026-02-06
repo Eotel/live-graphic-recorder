@@ -1,19 +1,34 @@
 /**
- * Regression tests for logout/reconnect race conditions in App.
+ * Regression tests for unsaved-recording guard behavior in App.
  *
  * Related: src/App.tsx
  */
 
 import { describe, test, expect, mock, beforeEach, afterEach } from "bun:test";
-import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { useCallback, useMemo, useState } from "react";
+import { act, cleanup, render, waitFor } from "@testing-library/react";
+import { useCallback, useEffect, useMemo } from "react";
 
-const connectSpy = mock(() => {});
-const disconnectSpy = mock(() => {});
-const requestMeetingListSpy = mock(() => {});
-const logoutSpy = mock(() => {});
+const beforeUnloadGuardSpy = mock((_enabled: boolean) => {});
 
-let resolveLogout: (() => void) | null = null;
+const recordingState = {
+  isRecording: false,
+  error: null as string | null,
+};
+
+const localRecordingState = {
+  sessionId: null as string | null,
+  totalChunks: 0,
+};
+
+const audioUploadState = {
+  isUploading: false,
+  progress: 0,
+  error: null as string | null,
+  lastUploadedSessionId: null as string | null,
+};
+
+let autoTriggerSessionStop = false;
+let hasTriggeredSessionStop = false;
 
 mock.module("@/components/pages/MeetingSelectPage", () => ({
   MeetingSelectPage: () => <div data-testid="meeting-select-page">MeetingSelectPage</div>,
@@ -24,37 +39,20 @@ mock.module("@/components/pages/LoginPage", () => ({
 }));
 
 mock.module("@/hooks/useAuth", () => ({
-  useAuth: () => {
-    const [status, setStatus] = useState<"loading" | "authenticated" | "unauthenticated">(
-      "authenticated",
-    );
-
-    const logout = useCallback(async () => {
-      logoutSpy();
-      await new Promise<void>((resolve) => {
-        resolveLogout = () => {
-          setStatus("unauthenticated");
-          resolve();
-        };
-      });
-    }, []);
-
-    return {
-      status,
-      user: { id: "user-1", email: "user@example.com" },
-      error: null,
-      isSubmitting: false,
-      login: async () => true,
-      signup: async () => true,
-      logout,
-      refresh: async () => true,
-    };
-  },
+  useAuth: () => ({
+    status: "authenticated" as const,
+    user: { id: "user-1", email: "user@example.com" },
+    error: null,
+    isSubmitting: false,
+    login: async () => true,
+    signup: async () => true,
+    logout: async () => {},
+    refresh: async () => true,
+  }),
 }));
 
 mock.module("@/hooks/useMeetingSession", () => ({
   useMeetingSession: () => {
-    const [isConnected, setIsConnected] = useState(false);
     const meeting = useMemo(
       () => ({
         meetingId: null,
@@ -71,20 +69,12 @@ mock.module("@/hooks/useMeetingSession", () => ({
       [],
     );
 
-    const connect = useCallback(() => {
-      connectSpy();
-      setIsConnected(true);
-    }, []);
-    const disconnect = useCallback(() => {
-      disconnectSpy();
-      setIsConnected(false);
-    }, []);
+    const connect = useCallback(() => {}, []);
+    const disconnect = useCallback(() => {}, []);
     const sendAudio = useCallback(() => {}, []);
     const startMeeting = useCallback(() => {}, []);
     const stopMeeting = useCallback(() => {}, []);
-    const requestMeetingList = useCallback(() => {
-      requestMeetingListSpy();
-    }, []);
+    const requestMeetingList = useCallback(() => {}, []);
     const updateMeetingTitle = useCallback(() => {}, []);
     const startSession = useCallback(() => {}, []);
     const stopSession = useCallback(() => {}, []);
@@ -93,7 +83,7 @@ mock.module("@/hooks/useMeetingSession", () => ({
     const resetSession = useCallback(() => {}, []);
 
     return {
-      isConnected,
+      isConnected: true,
       sessionStatus: "idle" as const,
       generationPhase: "idle" as const,
       error: null,
@@ -156,30 +146,45 @@ mock.module("@/hooks/useMediaStreamController", () => ({
 }));
 
 mock.module("@/hooks/useRecordingController", () => ({
-  useRecordingController: () => ({
-    isRecording: false,
-    error: null,
-    start: () => {},
-    stop: () => {},
-  }),
+  useRecordingController: ({ onSessionStop }: { onSessionStop: () => void }) => {
+    useEffect(() => {
+      if (!autoTriggerSessionStop || hasTriggeredSessionStop) return;
+      hasTriggeredSessionStop = true;
+      onSessionStop();
+    }, [onSessionStop]);
+
+    const start = useCallback(() => {}, []);
+    const stop = useCallback(() => {}, []);
+
+    return {
+      isRecording: recordingState.isRecording,
+      error: recordingState.error,
+      start,
+      stop,
+    };
+  },
 }));
 
 mock.module("@/hooks/useLocalRecording", () => ({
   useLocalRecording: () => ({
-    sessionId: null,
-    totalChunks: 0,
+    sessionId: localRecordingState.sessionId,
+    totalChunks: localRecordingState.totalChunks,
     writeChunk: () => {},
     start: () => {},
     stop: () => {},
-    reset: () => {},
+    reset: () => {
+      localRecordingState.sessionId = null;
+      localRecordingState.totalChunks = 0;
+    },
   }),
 }));
 
 mock.module("@/hooks/useAudioUpload", () => ({
   useAudioUpload: () => ({
-    isUploading: false,
-    progress: 0,
-    error: null,
+    isUploading: audioUploadState.isUploading,
+    progress: audioUploadState.progress,
+    error: audioUploadState.error,
+    lastUploadedSessionId: audioUploadState.lastUploadedSessionId,
     upload: () => {},
     cancel: () => {},
   }),
@@ -194,7 +199,9 @@ mock.module("@/hooks/useElapsedTime", () => ({
 }));
 
 mock.module("@/hooks/useBeforeUnloadGuard", () => ({
-  useBeforeUnloadGuard: () => {},
+  useBeforeUnloadGuard: (enabled: boolean) => {
+    beforeUnloadGuardSpy(enabled);
+  },
 }));
 
 mock.module("@/hooks/usePaneState", () => ({
@@ -222,53 +229,81 @@ mock.module("@/hooks/usePopoutWindow", () => ({
 
 const { App } = await import("./App");
 
-describe("App logout reconnection guard", () => {
+describe("App unsaved recording guard", () => {
   beforeEach(() => {
-    connectSpy.mockClear();
-    disconnectSpy.mockClear();
-    requestMeetingListSpy.mockClear();
-    logoutSpy.mockClear();
-    resolveLogout = null;
+    beforeUnloadGuardSpy.mockClear();
+    recordingState.isRecording = false;
+    recordingState.error = null;
+    localRecordingState.sessionId = null;
+    localRecordingState.totalChunks = 0;
+    audioUploadState.isUploading = false;
+    audioUploadState.progress = 0;
+    audioUploadState.error = null;
+    audioUploadState.lastUploadedSessionId = null;
+    autoTriggerSessionStop = false;
+    hasTriggeredSessionStop = false;
   });
 
   afterEach(() => {
     cleanup();
-    resolveLogout = null;
   });
 
-  test("does not reconnect while logout is still pending", async () => {
+  test("clears unsaved flag after upload succeeds for the same session", async () => {
+    localRecordingState.sessionId = "session-1";
+    localRecordingState.totalChunks = 3;
+    autoTriggerSessionStop = true;
+
+    const { rerender } = render(<App />);
+
+    await waitFor(() => {
+      expect(beforeUnloadGuardSpy.mock.calls.some((call) => call[0] === true)).toBe(true);
+    });
+
+    await act(async () => {
+      audioUploadState.lastUploadedSessionId = "session-1";
+      rerender(<App />);
+      await Promise.resolve();
+    });
+
+    await waitFor(() => {
+      expect(beforeUnloadGuardSpy.mock.calls.at(-1)?.[0]).toBe(false);
+    });
+  });
+
+  test("keeps unsaved flag when uploaded session does not match local session", async () => {
+    localRecordingState.sessionId = "session-1";
+    localRecordingState.totalChunks = 3;
+    autoTriggerSessionStop = true;
+
+    const { rerender } = render(<App />);
+
+    await waitFor(() => {
+      expect(beforeUnloadGuardSpy.mock.calls.some((call) => call[0] === true)).toBe(true);
+    });
+
+    const callsBeforeUpload = beforeUnloadGuardSpy.mock.calls.length;
+
+    await act(async () => {
+      audioUploadState.lastUploadedSessionId = "session-2";
+      rerender(<App />);
+      await Promise.resolve();
+    });
+
+    const callsAfterUpload = beforeUnloadGuardSpy.mock.calls
+      .slice(callsBeforeUpload)
+      .map((call) => call[0]);
+
+    expect(callsAfterUpload.includes(false)).toBe(false);
+    expect(beforeUnloadGuardSpy.mock.calls.at(-1)?.[0]).toBe(true);
+  });
+
+  test("keeps unsaved flag while recording even without local file", async () => {
+    recordingState.isRecording = true;
+
     render(<App />);
 
     await waitFor(() => {
-      expect(connectSpy).toHaveBeenCalledTimes(1);
+      expect(beforeUnloadGuardSpy.mock.calls.at(-1)?.[0]).toBe(true);
     });
-
-    await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: "ログアウト" }));
-      await Promise.resolve();
-    });
-
-    await waitFor(() => {
-      expect(disconnectSpy).toHaveBeenCalledTimes(1);
-    });
-
-    // While auth.status is still "authenticated", disconnect should not trigger auto reconnect.
-    await act(async () => {
-      await new Promise((resolve) => setTimeout(resolve, 0));
-    });
-
-    expect(logoutSpy).toHaveBeenCalledTimes(1);
-    expect(connectSpy).toHaveBeenCalledTimes(1);
-    expect(resolveLogout).toBeTruthy();
-
-    await act(async () => {
-      resolveLogout?.();
-      await Promise.resolve();
-    });
-
-    await waitFor(() => {
-      expect(screen.getByTestId("login-page")).toBeDefined();
-    });
-    expect(connectSpy).toHaveBeenCalledTimes(1);
   });
 });

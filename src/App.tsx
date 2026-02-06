@@ -42,6 +42,7 @@ import { useElapsedTime } from "@/hooks/useElapsedTime";
 import { useBeforeUnloadGuard } from "@/hooks/useBeforeUnloadGuard";
 import { useAuth } from "@/hooks/useAuth";
 import { useMeetingSession } from "@/hooks/useMeetingSession";
+import { shouldAutoConnect } from "@/logic/connection-guards";
 import type { CameraFrame } from "@/types/messages";
 
 type View = "select" | "recording";
@@ -75,6 +76,7 @@ export function App() {
   latestMeetingListRef.current = session.meeting.meetingList;
   const latestSessionErrorRef = useRef(session.error);
   latestSessionErrorRef.current = session.error;
+  const isLogoutInProgressRef = useRef(false);
 
   // Pane expand/popout state
   const paneState = usePaneState();
@@ -211,10 +213,7 @@ export function App() {
 
   // Auto-connect WebSocket after authentication
   useEffect(() => {
-    if (auth.status !== "authenticated") {
-      return;
-    }
-    if (!session.isConnected) {
+    if (shouldAutoConnect(auth.status, session.isConnected, isLogoutInProgressRef.current)) {
       session.connect();
     }
   }, [auth.status, session.connect, session.isConnected]);
@@ -333,6 +332,15 @@ export function App() {
 
   // Elapsed time tracking
   const { formattedTime: elapsedTime } = useElapsedTime({ enabled: recording.isRecording });
+
+  useEffect(() => {
+    if (!hasLocalFile) return;
+    const localSessionId = localRecording.sessionId;
+    if (!localSessionId) return;
+    if (audioUpload.lastUploadedSessionId !== localSessionId) return;
+    setHasLocalFile(false);
+  }, [audioUpload.lastUploadedSessionId, hasLocalFile, localRecording.sessionId]);
+
   const hasUnsavedRecording =
     recording.isRecording || (hasLocalFile && localRecording.sessionId !== null);
   useBeforeUnloadGuard(hasUnsavedRecording);
@@ -423,6 +431,10 @@ export function App() {
   }, [recording, session]);
 
   const handleLogout = useCallback(async () => {
+    if (isLogoutInProgressRef.current) {
+      return;
+    }
+    isLogoutInProgressRef.current = true;
     if (recording.isRecording) {
       recording.stop();
     }
@@ -440,6 +452,7 @@ export function App() {
 
   useEffect(() => {
     if (auth.status === "authenticated") return;
+    isLogoutInProgressRef.current = false;
     clearMeetingListRequestTimeout();
     setIsMeetingListLoading(false);
     setMeetingListError(null);

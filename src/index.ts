@@ -858,6 +858,10 @@ const server = Bun.serve<WSContext>({
             handleMeetingUpdate(ws, ctx, parsed.data);
             break;
 
+          case "meeting:speaker-alias:update":
+            handleSpeakerAliasUpdate(ws, ctx, parsed.data);
+            break;
+
           case "session:start":
             await handleSessionStart(ws, ctx);
             break;
@@ -917,6 +921,33 @@ function captureToUrl(meetingId: string, captureId: number): string {
   return `/api/meetings/${meetingId}/captures/${captureId}`;
 }
 
+function speakerAliasArrayToMap(
+  aliases: Array<{ speaker: number; displayName: string }>,
+): Record<string, string> {
+  const result: Record<string, string> = {};
+  for (const alias of aliases) {
+    if (!Number.isInteger(alias.speaker) || alias.speaker < 0) continue;
+    const displayName = alias.displayName.trim();
+    if (!displayName) continue;
+    result[String(alias.speaker)] = displayName;
+  }
+  return result;
+}
+
+function sendSpeakerAliases(
+  ws: ServerWebSocket<WSContext>,
+  meetingId: string,
+  userId: string,
+): void {
+  const aliases = persistence.loadSpeakerAliases(meetingId, userId);
+  send(ws, {
+    type: "meeting:speaker-alias",
+    data: {
+      speakerAliases: speakerAliasArrayToMap(aliases),
+    },
+  });
+}
+
 /**
  * Send meeting history data to the client when joining an existing meeting.
  */
@@ -932,6 +963,7 @@ function sendMeetingHistory(
     const images = persistence.loadMeetingImages(meetingId, userId);
     const captures = persistence.loadMeetingCaptures(meetingId, userId);
     const metaSummaries = persistence.loadMetaSummaries(meetingId, userId);
+    const speakerAliases = persistence.loadSpeakerAliases(meetingId, userId);
 
     const historyMessage: MeetingHistoryMessage = {
       type: "meeting:history",
@@ -967,6 +999,7 @@ function sendMeetingHistory(
           startTime: ms.startTime,
           endTime: ms.endTime,
         })),
+        speakerAliases: speakerAliasArrayToMap(speakerAliases),
       },
     };
 
@@ -1111,6 +1144,58 @@ function handleMeetingUpdate(
       data: { message: "Failed to update meeting" },
     });
   }
+}
+
+function handleSpeakerAliasUpdate(
+  ws: ServerWebSocket<WSContext>,
+  ctx: WSContext,
+  data: { speaker?: unknown; displayName?: unknown },
+): void {
+  if (!ctx.meetingId) {
+    send(ws, {
+      type: "error",
+      data: { message: "No active meeting to update", code: "NO_ACTIVE_MEETING" },
+    });
+    return;
+  }
+
+  const speaker = Number(data.speaker);
+  if (!Number.isInteger(speaker) || speaker < 0) {
+    send(ws, {
+      type: "error",
+      data: { message: "Invalid speaker index", code: "INVALID_SPEAKER" },
+    });
+    return;
+  }
+
+  if (typeof data.displayName !== "string") {
+    send(ws, {
+      type: "error",
+      data: { message: "Invalid display name", code: "INVALID_DISPLAY_NAME" },
+    });
+    return;
+  }
+
+  const displayName = data.displayName.trim();
+  if (displayName) {
+    const upserted = persistence.upsertSpeakerAlias(
+      ctx.meetingId,
+      speaker,
+      displayName,
+      ctx.userId,
+    );
+    if (!upserted) {
+      send(ws, {
+        type: "error",
+        data: { message: "Meeting not found", code: "MEETING_NOT_FOUND" },
+      });
+      return;
+    }
+  } else {
+    persistence.deleteSpeakerAlias(ctx.meetingId, speaker, ctx.userId);
+  }
+
+  sendSpeakerAliases(ws, ctx.meetingId, ctx.userId);
 }
 
 async function handleSessionStart(ws: ServerWebSocket<WSContext>, ctx: WSContext): Promise<void> {

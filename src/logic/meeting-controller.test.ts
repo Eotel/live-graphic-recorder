@@ -317,6 +317,75 @@ describe("createMeetingController", () => {
     expect(onMeetingList).toHaveBeenCalled();
   });
 
+  test("handles meeting:history message with speaker aliases", () => {
+    const wsAdapter = createMockWsAdapter();
+    const onStateChange = mock(() => {});
+    const onMeetingHistory = mock(() => {});
+
+    const controller = createMeetingController(
+      { wsAdapter, reconnect: { enabled: false, connectTimeoutMs: 0 } },
+      { onStateChange },
+      { onMeetingHistory },
+    );
+
+    controller.connect();
+    wsAdapter.lastInstance!.controls.simulateOpen();
+
+    wsAdapter.lastInstance!.controls.simulateMessage(
+      JSON.stringify({
+        type: "meeting:history",
+        data: {
+          transcripts: [],
+          analyses: [],
+          images: [],
+          captures: [],
+          metaSummaries: [],
+          speakerAliases: {
+            0: "田中",
+            1: "佐藤",
+          },
+        },
+      }),
+    );
+
+    expect(onMeetingHistory).toHaveBeenCalledWith({
+      transcripts: [],
+      analyses: [],
+      images: [],
+      captures: [],
+      metaSummaries: [],
+      speakerAliases: { 0: "田中", 1: "佐藤" },
+    });
+  });
+
+  test("handles meeting:speaker-alias message", () => {
+    const wsAdapter = createMockWsAdapter();
+    const onStateChange = mock(() => {});
+    const onSpeakerAliases = mock(() => {});
+
+    const controller = createMeetingController(
+      { wsAdapter, reconnect: { enabled: false, connectTimeoutMs: 0 } },
+      { onStateChange },
+      { onSpeakerAliases },
+    );
+
+    controller.connect();
+    wsAdapter.lastInstance!.controls.simulateOpen();
+
+    wsAdapter.lastInstance!.controls.simulateMessage(
+      JSON.stringify({
+        type: "meeting:speaker-alias",
+        data: {
+          speakerAliases: {
+            0: "山田",
+          },
+        },
+      }),
+    );
+
+    expect(onSpeakerAliases).toHaveBeenCalledWith({ 0: "山田" });
+  });
+
   test("handles error message", () => {
     const wsAdapter = createMockWsAdapter();
     const onStateChange = mock(() => {});
@@ -457,6 +526,27 @@ describe("createMeetingController", () => {
     const parsed = JSON.parse(messages[0] as string);
     expect(parsed.type).toBe("meeting:update");
     expect(parsed.data.title).toBe("New Title");
+  });
+
+  test("updateSpeakerAlias sends message", () => {
+    const wsAdapter = createMockWsAdapter();
+    const onStateChange = mock(() => {});
+
+    const controller = createMeetingController(
+      { wsAdapter, reconnect: { enabled: false, connectTimeoutMs: 0 } },
+      { onStateChange },
+    );
+
+    controller.connect();
+    wsAdapter.lastInstance!.controls.simulateOpen();
+
+    controller.updateSpeakerAlias(2, "高橋");
+
+    const messages = wsAdapter.lastInstance!.controls.getSentMessages();
+    const parsed = JSON.parse(messages[0] as string);
+    expect(parsed.type).toBe("meeting:speaker-alias:update");
+    expect(parsed.data.speaker).toBe(2);
+    expect(parsed.data.displayName).toBe("高橋");
   });
 
   test("dispose disconnects and prevents further state changes", () => {

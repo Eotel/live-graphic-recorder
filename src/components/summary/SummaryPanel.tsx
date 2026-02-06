@@ -21,6 +21,8 @@ interface SummaryPanelProps {
   interimText: string | null;
   interimSpeaker?: number;
   interimStartTime?: number;
+  speakerAliases?: Record<number, string>;
+  onSpeakerLabelEdit?: (speaker: number, displayName: string) => void;
   isAnalyzing?: boolean;
   className?: string;
 }
@@ -31,6 +33,8 @@ export function SummaryPanel({
   interimText,
   interimSpeaker,
   interimStartTime,
+  speakerAliases = {},
+  onSpeakerLabelEdit,
   isAnalyzing = false,
   className,
 }: SummaryPanelProps) {
@@ -151,6 +155,8 @@ export function SummaryPanel({
                   text={group.text}
                   speaker={group.speaker}
                   startTime={group.startTime}
+                  speakerAliases={speakerAliases}
+                  onSpeakerLabelEdit={onSpeakerLabelEdit}
                   isInterim={group.isInterim}
                 />
               ))}

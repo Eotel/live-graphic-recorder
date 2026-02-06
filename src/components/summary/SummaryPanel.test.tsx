@@ -119,6 +119,23 @@ describe("SummaryPanel", () => {
 
       expect(screen.getByText("Speaker 1:")).toBeDefined();
     });
+
+    test("displays speaker aliases when provided", () => {
+      const segments: TranscriptSegment[] = [
+        { text: "Hello", timestamp: 1000, isFinal: true, speaker: 0, startTime: 0 },
+      ];
+
+      render(
+        <SummaryPanel
+          summaryPages={[]}
+          transcriptSegments={segments}
+          interimText={null}
+          speakerAliases={{ 0: "田中" }}
+        />,
+      );
+
+      expect(screen.getByText("田中:")).toBeDefined();
+    });
   });
 
   describe("summary pages", () => {

@@ -85,6 +85,14 @@ describe("buildMeetingReportZip", () => {
         },
       ],
       loadMetaSummaries: () => [],
+      loadSpeakerAliases: () => [
+        {
+          meetingId,
+          speaker: 1,
+          displayName: "田中",
+          updatedAt: 1700000006000,
+        },
+      ],
     };
 
     try {
@@ -102,11 +110,14 @@ describe("buildMeetingReportZip", () => {
       expect(files["media/README.md"]).toBeDefined();
 
       const reportJson = JSON.parse(strFromU8(files["report.json"]!)) as any;
+      const reportMd = strFromU8(files["report.md"]!);
       expect(reportJson.meeting.id).toBe(meetingId);
       expect(reportJson.meeting.sessionCount).toBe(2);
       expect(reportJson.transcript.utterances.length).toBe(1);
       expect(reportJson.transcript.utterances[0].text).toBe("こんにちは 世界");
       expect(reportJson.aggregates.topics[0]).toEqual({ name: "AI", count: 2 });
+      expect(reportJson.speakerAliases).toEqual({ 1: "田中" });
+      expect(reportMd).toContain("**田中**");
 
       expect(files["media/images/1.png"]).toBeDefined();
       expect(files["media/captures/2.jpg"]).toBeUndefined();
@@ -138,6 +149,7 @@ describe("buildMeetingReportZip", () => {
       loadMeetingImages: () => [{ id: 1, filePath: imagePath, prompt: "p", timestamp: 1 }],
       loadMeetingCaptures: () => [],
       loadMetaSummaries: () => [],
+      loadSpeakerAliases: () => [],
     };
 
     try {
@@ -176,6 +188,7 @@ describe("buildMeetingReportZip", () => {
       loadMeetingImages: () => [{ id: 1, filePath: imagePath, prompt: "p", timestamp: 1 }],
       loadMeetingCaptures: () => [],
       loadMetaSummaries: () => [],
+      loadSpeakerAliases: () => [],
     };
 
     try {
@@ -225,6 +238,7 @@ describe("buildMeetingReportZip", () => {
       loadMeetingImages: () => [],
       loadMeetingCaptures: () => [{ id: 2, filePath: capturePath, timestamp: 1 }],
       loadMetaSummaries: () => [],
+      loadSpeakerAliases: () => [],
     };
 
     try {
@@ -264,6 +278,7 @@ describe("buildMeetingReportZip", () => {
       loadMeetingImages: () => [{ id: 1, filePath: imagePath, prompt: "p", timestamp: 1 }],
       loadMeetingCaptures: () => [],
       loadMetaSummaries: () => [],
+      loadSpeakerAliases: () => [],
     };
 
     const readAll = async (stream: ReadableStream<Uint8Array>) => {

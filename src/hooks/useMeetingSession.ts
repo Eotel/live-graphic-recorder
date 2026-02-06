@@ -45,6 +45,7 @@ export interface UseMeetingSessionReturn {
   interimText: string;
   interimSpeaker: number | undefined;
   interimStartTime: number | undefined;
+  speakerAliases: Record<number, string>;
 
   // Session state
   summaryPages: SummaryPage[];
@@ -81,6 +82,7 @@ export interface UseMeetingSessionReturn {
   stopMeeting: () => void;
   requestMeetingList: () => void;
   updateMeetingTitle: (title: string) => void;
+  updateSpeakerAlias: (speaker: number, displayName: string) => void;
   startSession: () => void;
   stopSession: () => void;
   sendCameraFrame: (data: CameraFrame) => void;
@@ -170,9 +172,11 @@ export function useMeetingSession(): UseMeetingSessionReturn {
         startTime: number;
         endTime: number;
       }>;
+      speakerAliases: Record<number, string>;
     }) => {
       // Restore transcripts
       transcriptStore.loadHistory(data.transcripts);
+      transcriptStore.setSpeakerAliases(data.speakerAliases);
 
       // Restore session data
       sessionStore.loadHistory({
@@ -198,6 +202,13 @@ export function useMeetingSession(): UseMeetingSessionReturn {
     [transcriptStore, sessionStore],
   );
 
+  const handleSpeakerAliases = useCallback(
+    (speakerAliases: Record<number, string>) => {
+      transcriptStore.setSpeakerAliases(speakerAliases);
+    },
+    [transcriptStore],
+  );
+
   // Meeting controller (replaces useWebSocket)
   const mc = useMeetingController({
     onTranscript: handleTranscript,
@@ -205,6 +216,7 @@ export function useMeetingSession(): UseMeetingSessionReturn {
     onAnalysis: handleAnalysis,
     onImage: handleImage,
     onMeetingHistory: handleMeetingHistory,
+    onSpeakerAliases: handleSpeakerAliases,
   });
 
   // Reset session data
@@ -254,6 +266,7 @@ export function useMeetingSession(): UseMeetingSessionReturn {
     interimText: transcriptStore.interimText,
     interimSpeaker: transcriptStore.interimSpeaker,
     interimStartTime: transcriptStore.interimStartTime,
+    speakerAliases: transcriptStore.speakerAliases,
 
     // Session state
     summaryPages,
@@ -277,6 +290,7 @@ export function useMeetingSession(): UseMeetingSessionReturn {
     stopMeeting: mc.stopMeeting,
     requestMeetingList: mc.requestMeetingList,
     updateMeetingTitle: mc.updateMeetingTitle,
+    updateSpeakerAlias: mc.updateSpeakerAlias,
     startSession: mc.startSession,
     stopSession: mc.stopSession,
     sendCameraFrame: mc.sendCameraFrame,

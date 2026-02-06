@@ -66,6 +66,12 @@ export interface PersistenceLike {
     representativeImageId: string | null;
     createdAt: number;
   }>;
+  loadSpeakerAliases: (meetingId: string) => Array<{
+    meetingId: string;
+    speaker: number;
+    displayName: string;
+    updatedAt: number;
+  }>;
 }
 
 export interface MeetingReportZipOptions {
@@ -95,6 +101,7 @@ export interface MeetingReportJson {
       text: string;
     }>;
   };
+  speakerAliases: Record<string, string>;
   summary: {
     latestAnalysis: {
       summary: string[];
@@ -292,6 +299,20 @@ function buildUtterances(
   return utterances;
 }
 
+function resolveSpeakerLabel(
+  speaker: number | undefined,
+  speakerAliases: Record<string, string>,
+): string {
+  if (speaker === undefined) {
+    return "Speaker ?";
+  }
+  const alias = speakerAliases[String(speaker)]?.trim();
+  if (alias) {
+    return alias;
+  }
+  return `Speaker ${speaker + 1}`;
+}
+
 function renderMediaReadme(report: MeetingReportJson): string {
   const lines: string[] = [];
   lines.push("# media について");
@@ -431,7 +452,7 @@ function renderMarkdown(report: MeetingReportJson): string {
     lines.push("- （なし）");
   } else {
     for (const u of report.transcript.utterances) {
-      const who = u.speaker !== undefined ? `Speaker ${u.speaker}` : "Speaker ?";
+      const who = resolveSpeakerLabel(u.speaker, report.speakerAliases);
       lines.push(`- **${who}** (${formatDateTimeJst(u.startTimestamp)}): ${u.text}`);
     }
   }
@@ -648,6 +669,14 @@ async function prepareMeetingReportZip(
   const images = persistence.loadMeetingImages(meetingId);
   const captures = includeCaptures ? persistence.loadMeetingCaptures(meetingId) : [];
   const metaSummaries = persistence.loadMetaSummaries(meetingId);
+  const speakerAliases = persistence.loadSpeakerAliases(meetingId);
+  const speakerAliasMap: Record<string, string> = {};
+  for (const alias of speakerAliases) {
+    if (!Number.isInteger(alias.speaker) || alias.speaker < 0) continue;
+    const displayName = alias.displayName.trim();
+    if (!displayName) continue;
+    speakerAliasMap[String(alias.speaker)] = displayName;
+  }
 
   const mediaEntries: MediaEntry[] = [];
   const reportMissing: MeetingReportJson["missingMedia"] = [];
@@ -762,6 +791,7 @@ async function prepareMeetingReportZip(
       sessionCount: sessions.length,
     },
     transcript: { utterances },
+    speakerAliases: speakerAliasMap,
     summary: {
       latestAnalysis: latestAnalysis
         ? {

@@ -55,6 +55,7 @@ describe("useMeetingSession", () => {
     expect(result.current.sessionStatus).toBe("idle");
     expect(result.current.generationPhase).toBe("idle");
     expect(result.current.transcriptSegments).toEqual([]);
+    expect(result.current.speakerAliases).toEqual({});
     expect(result.current.summaryPages).toEqual([]);
     expect(result.current.images).toEqual([]);
     expect(result.current.flow).toBe(50);
@@ -71,6 +72,7 @@ describe("useMeetingSession", () => {
     expect(typeof result.current.stopMeeting).toBe("function");
     expect(typeof result.current.requestMeetingList).toBe("function");
     expect(typeof result.current.updateMeetingTitle).toBe("function");
+    expect(typeof result.current.updateSpeakerAlias).toBe("function");
     expect(typeof result.current.startSession).toBe("function");
     expect(typeof result.current.stopSession).toBe("function");
     expect(typeof result.current.sendCameraFrame).toBe("function");
@@ -112,6 +114,35 @@ describe("useMeetingSession", () => {
     });
 
     expect(result.current.transcriptSegments).toEqual([]);
+    expect(result.current.speakerAliases).toEqual({});
+  });
+
+  test("applies speaker aliases from meeting history", async () => {
+    const { result } = renderHook(() => useMeetingSession());
+
+    act(() => {
+      result.current.connect();
+    });
+    await new Promise((r) => setTimeout(r, 10));
+
+    const ws = MockWebSocket.instances[0];
+    if (ws) {
+      act(() => {
+        ws.simulateMessage({
+          type: "meeting:history",
+          data: {
+            transcripts: [],
+            analyses: [],
+            images: [],
+            captures: [],
+            metaSummaries: [],
+            speakerAliases: { 0: "田中" },
+          },
+        });
+      });
+    }
+
+    expect(result.current.speakerAliases).toEqual({ 0: "田中" });
   });
 
   test("isAnalyzing and isGenerating derived states", async () => {

@@ -5,6 +5,7 @@
  * Related: src/lib/transcript-utils.ts, src/components/summary/SummaryPanel.tsx
  */
 
+import { useEffect, useState } from "react";
 import { cn } from "@/lib/utils";
 import { formatTime } from "@/lib/transcript-utils";
 
@@ -12,6 +13,8 @@ interface TranscriptLineProps {
   text: string;
   speaker?: number;
   startTime?: number;
+  speakerAliases?: Record<number, string>;
+  onSpeakerLabelEdit?: (speaker: number, displayName: string) => void;
   isInterim?: boolean;
   className?: string;
 }
@@ -39,12 +42,38 @@ export function TranscriptLine({
   text,
   speaker,
   startTime,
+  speakerAliases = {},
+  onSpeakerLabelEdit,
   isInterim = false,
   className,
 }: TranscriptLineProps) {
   const hasSpeaker = speaker !== undefined;
   const hasTime = startTime !== undefined;
   const speakerColor = hasSpeaker ? getSpeakerColor(speaker) : "";
+  const speakerAlias = hasSpeaker ? (speakerAliases[speaker] ?? "") : "";
+  const displayName = hasSpeaker ? speakerAlias || `Speaker ${speaker + 1}` : "";
+  const [isEditingLabel, setIsEditingLabel] = useState(false);
+  const [draftLabel, setDraftLabel] = useState(speakerAlias);
+
+  useEffect(() => {
+    if (!isEditingLabel) {
+      setDraftLabel(speakerAlias);
+    }
+  }, [speaker, speakerAlias, isEditingLabel]);
+
+  function commitSpeakerLabelEdit(): void {
+    if (!hasSpeaker || !onSpeakerLabelEdit) {
+      setIsEditingLabel(false);
+      return;
+    }
+    onSpeakerLabelEdit(speaker, draftLabel.trim());
+    setIsEditingLabel(false);
+  }
+
+  function cancelSpeakerLabelEdit(): void {
+    setDraftLabel(speakerAlias);
+    setIsEditingLabel(false);
+  }
 
   return (
     <div
@@ -63,9 +92,47 @@ export function TranscriptLine({
 
       {/* Speaker label */}
       {hasSpeaker && (
-        <span className={cn("flex-shrink-0 font-medium text-xs", speakerColor)}>
-          Speaker {speaker + 1}:
-        </span>
+        <>
+          {isEditingLabel && onSpeakerLabelEdit ? (
+            <input
+              value={draftLabel}
+              onChange={(e) => setDraftLabel(e.target.value)}
+              onBlur={commitSpeakerLabelEdit}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  commitSpeakerLabelEdit();
+                } else if (e.key === "Escape") {
+                  e.preventDefault();
+                  cancelSpeakerLabelEdit();
+                }
+              }}
+              className={cn(
+                "flex-shrink-0 h-6 w-28 rounded border border-border bg-background px-1.5 text-xs font-medium",
+                speakerColor,
+              )}
+              aria-label={`Edit speaker ${speaker + 1} label`}
+              placeholder={`Speaker ${speaker + 1}`}
+              autoFocus
+            />
+          ) : onSpeakerLabelEdit ? (
+            <button
+              type="button"
+              onClick={() => setIsEditingLabel(true)}
+              className={cn(
+                "flex-shrink-0 font-medium text-xs text-left hover:underline focus:outline-none focus-visible:ring-1 focus-visible:ring-ring rounded-sm",
+                speakerColor,
+              )}
+              aria-label={`Edit speaker ${speaker + 1} label`}
+            >
+              {displayName}:
+            </button>
+          ) : (
+            <span className={cn("flex-shrink-0 font-medium text-xs", speakerColor)}>
+              {displayName}:
+            </span>
+          )}
+        </>
       )}
 
       {/* Text content */}
