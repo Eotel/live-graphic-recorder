@@ -1,15 +1,27 @@
 import { UPLOAD_CONFIG } from "@/config/constants";
-import { isValidUUID } from "@/server/domain/common/id";
-import { buildContentDispositionAttachment } from "@/server/domain/http/content-disposition";
-import { parseContentLengthHeader } from "@/server/domain/http/content-length";
 import type { AuthService } from "@/server/application/auth";
+import {
+  badRequest,
+  internalServerError,
+  notFound,
+  payloadTooLarge,
+  unsupportedMediaType,
+} from "@/server/presentation/http/errors";
+import { requireAuthUser, requireOwnedMeeting } from "@/server/presentation/http/guards";
 import { serveMediaFile } from "@/server/presentation/http/media-file";
-import { buildMeetingReportZipStream, ReportSizeLimitError } from "@/services/server/report";
-import type { PersistenceService } from "@/services/server/persistence";
+import {
+  requireIntParam,
+  requirePathMatch,
+  requireUuidParam,
+} from "@/server/presentation/http/params";
 import {
   AudioUploadTooLargeError,
   EmptyAudioUploadError,
 } from "@/services/server/db/storage/file-storage";
+import { buildMeetingReportZipStream, ReportSizeLimitError } from "@/services/server/report";
+import type { PersistenceService } from "@/services/server/persistence";
+import { buildContentDispositionAttachment } from "@/server/domain/http/content-disposition";
+import { parseContentLengthHeader } from "@/server/domain/http/content-length";
 
 interface CreateMeetingRoutesInput {
   persistence: PersistenceService;
@@ -17,30 +29,76 @@ interface CreateMeetingRoutesInput {
   mediaBasePath: string;
 }
 
+const IMAGE_PATH_PATTERN = /^\/api\/meetings\/([^/]+)\/images\/(\d+)$/;
+const CAPTURE_PATH_PATTERN = /^\/api\/meetings\/([^/]+)\/captures\/(\d+)$/;
+const AUDIO_UPLOAD_PATH_PATTERN = /^\/api\/meetings\/([^/]+)\/audio$/;
+const AUDIO_DOWNLOAD_PATH_PATTERN = /^\/api\/meetings\/([^/]+)\/audio\/(\d+)$/;
+const REPORT_PATH_PATTERN = /^\/api\/meetings\/([^/]+)\/report\.zip$/;
+
+function extractPathParams(pathname: string, pattern: RegExp): RegExpMatchArray | Response {
+  return requirePathMatch(pathname, pattern);
+}
+
+function extractMeetingId(pathname: string, pattern: RegExp): string | Response {
+  const match = extractPathParams(pathname, pattern);
+  if (match instanceof Response) {
+    return match;
+  }
+  return requireUuidParam(match[1], "meeting ID");
+}
+
+function extractMeetingAndNumericId(
+  pathname: string,
+  pattern: RegExp,
+  numericLabel: string,
+):
+  | {
+      meetingId: string;
+      numericId: number;
+    }
+  | Response {
+  const match = extractPathParams(pathname, pattern);
+  if (match instanceof Response) {
+    return match;
+  }
+
+  const meetingId = requireUuidParam(match[1], "meeting ID");
+  if (meetingId instanceof Response) {
+    return meetingId;
+  }
+
+  const numericId = requireIntParam(match[2], numericLabel);
+  if (numericId instanceof Response) {
+    return numericId;
+  }
+
+  return {
+    meetingId,
+    numericId,
+  };
+}
+
 export function createMeetingRoutes(input: CreateMeetingRoutesInput): Record<string, unknown> {
   return {
     "/api/meetings/:meetingId/images/:imageId": async (req: Request) => {
-      const auth = input.auth.requireAuthenticatedUser(req);
+      const auth = requireAuthUser(input.auth, req);
       if (auth instanceof Response) {
         return auth;
       }
 
       const url = new URL(req.url);
-      const match = url.pathname.match(/^\/api\/meetings\/([^/]+)\/images\/(\d+)$/);
-      if (!match) {
-        return new Response("Bad Request", { status: 400 });
+      const params = extractMeetingAndNumericId(url.pathname, IMAGE_PATH_PATTERN, "image ID");
+      if (params instanceof Response) {
+        return params;
       }
 
-      const [, meetingId, imageIdStr] = match;
-      const imageId = Number.parseInt(imageIdStr!, 10);
-
-      if (!meetingId || !isValidUUID(meetingId)) {
-        return new Response("Invalid meeting ID", { status: 400 });
-      }
-
-      const image = input.persistence.getImageByIdAndMeetingId(imageId, meetingId, auth.userId);
+      const image = input.persistence.getImageByIdAndMeetingId(
+        params.numericId,
+        params.meetingId,
+        auth.userId,
+      );
       if (!image) {
-        return new Response("Not Found", { status: 404 });
+        return notFound();
       }
 
       return serveMediaFile(
@@ -51,31 +109,24 @@ export function createMeetingRoutes(input: CreateMeetingRoutesInput): Record<str
     },
 
     "/api/meetings/:meetingId/captures/:captureId": async (req: Request) => {
-      const auth = input.auth.requireAuthenticatedUser(req);
+      const auth = requireAuthUser(input.auth, req);
       if (auth instanceof Response) {
         return auth;
       }
 
       const url = new URL(req.url);
-      const match = url.pathname.match(/^\/api\/meetings\/([^/]+)\/captures\/(\d+)$/);
-      if (!match) {
-        return new Response("Bad Request", { status: 400 });
-      }
-
-      const [, meetingId, captureIdStr] = match;
-      const captureId = Number.parseInt(captureIdStr!, 10);
-
-      if (!meetingId || !isValidUUID(meetingId)) {
-        return new Response("Invalid meeting ID", { status: 400 });
+      const params = extractMeetingAndNumericId(url.pathname, CAPTURE_PATH_PATTERN, "capture ID");
+      if (params instanceof Response) {
+        return params;
       }
 
       const capture = input.persistence.getCaptureByIdAndMeetingId(
-        captureId,
-        meetingId,
+        params.numericId,
+        params.meetingId,
         auth.userId,
       );
       if (!capture) {
-        return new Response("Not Found", { status: 404 });
+        return notFound();
       }
 
       return serveMediaFile(
@@ -87,30 +138,25 @@ export function createMeetingRoutes(input: CreateMeetingRoutesInput): Record<str
 
     "/api/meetings/:meetingId/audio": {
       POST: async (req: Request) => {
-        const auth = input.auth.requireAuthenticatedUser(req);
+        const auth = requireAuthUser(input.auth, req);
         if (auth instanceof Response) {
           return auth;
         }
 
         const url = new URL(req.url);
-        const match = url.pathname.match(/^\/api\/meetings\/([^/]+)\/audio$/);
-        if (!match) {
-          return new Response("Bad Request", { status: 400 });
+        const meetingId = extractMeetingId(url.pathname, AUDIO_UPLOAD_PATH_PATTERN);
+        if (meetingId instanceof Response) {
+          return meetingId;
         }
 
-        const [, meetingId] = match;
-        if (!meetingId || !isValidUUID(meetingId)) {
-          return new Response("Invalid meeting ID", { status: 400 });
-        }
-
-        const meeting = input.persistence.getMeeting(meetingId, auth.userId);
-        if (!meeting) {
-          return new Response("Meeting not found", { status: 404 });
+        const ownedMeeting = requireOwnedMeeting(input.persistence, meetingId, auth.userId);
+        if (ownedMeeting instanceof Response) {
+          return ownedMeeting;
         }
 
         const contentType = req.headers.get("content-type");
         if (!contentType || !contentType.includes("audio/webm")) {
-          return new Response("Content-Type must be audio/webm", { status: 415 });
+          return unsupportedMediaType("Content-Type must be audio/webm");
         }
 
         const maxAudioSize = UPLOAD_CONFIG.maxAudioUploadBytes;
@@ -118,83 +164,80 @@ export function createMeetingRoutes(input: CreateMeetingRoutesInput): Record<str
         if (contentLengthHeader) {
           const contentLength = parseContentLengthHeader(contentLengthHeader);
           if (contentLength === null) {
-            return new Response("Invalid Content-Length header", { status: 400 });
+            return badRequest("Invalid Content-Length header");
           }
           if (contentLength > maxAudioSize) {
-            return new Response("File too large", { status: 413 });
+            return payloadTooLarge("File too large");
           }
         }
 
         const sessionId = req.headers.get("x-session-id");
         if (!sessionId || !/^[a-zA-Z0-9_-]+$/.test(sessionId)) {
-          return new Response("Invalid or missing X-Session-Id header", { status: 400 });
+          return badRequest("Invalid or missing X-Session-Id header");
         }
 
         const persistedSession = input.persistence.getSessionByIdAndMeetingId(
           sessionId,
-          meetingId,
+          ownedMeeting.id,
           auth.userId,
         );
         if (!persistedSession) {
-          return new Response("Session not found", { status: 404 });
+          return notFound("Session not found");
         }
 
         if (!req.body) {
-          return new Response("Empty body", { status: 400 });
+          return badRequest("Empty body");
         }
 
         try {
           const recording = await input.persistence.persistAudioRecordingFromStream(
             sessionId,
-            meetingId,
+            ownedMeeting.id,
             req.body,
             maxAudioSize,
           );
 
           return Response.json({
             id: recording.id,
-            url: `/api/meetings/${meetingId}/audio/${recording.id}`,
+            url: `/api/meetings/${ownedMeeting.id}/audio/${recording.id}`,
           });
         } catch (error) {
           if (error instanceof EmptyAudioUploadError) {
-            return new Response("Empty body", { status: 400 });
+            return badRequest("Empty body");
           }
           if (error instanceof AudioUploadTooLargeError) {
-            return new Response("File too large", { status: 413 });
+            return payloadTooLarge("File too large");
           }
 
           console.error("[API] Failed to save audio:", error);
-          return new Response("Failed to save audio recording", { status: 500 });
+          return internalServerError("Failed to save audio recording");
         }
       },
     },
 
     "/api/meetings/:meetingId/audio/:audioId": async (req: Request) => {
-      const auth = input.auth.requireAuthenticatedUser(req);
+      const auth = requireAuthUser(input.auth, req);
       if (auth instanceof Response) {
         return auth;
       }
 
       const url = new URL(req.url);
-      const match = url.pathname.match(/^\/api\/meetings\/([^/]+)\/audio\/(\d+)$/);
-      if (!match) {
-        return new Response("Bad Request", { status: 400 });
-      }
-
-      const [, meetingId, audioIdStr] = match;
-      const audioId = Number.parseInt(audioIdStr!, 10);
-
-      if (!meetingId || !isValidUUID(meetingId)) {
-        return new Response("Invalid meeting ID", { status: 400 });
+      const params = extractMeetingAndNumericId(
+        url.pathname,
+        AUDIO_DOWNLOAD_PATH_PATTERN,
+        "audio ID",
+      );
+      if (params instanceof Response) {
+        return params;
       }
 
       const recording = input.persistence.getAudioRecordingByIdAndMeetingId(
-        audioId,
-        meetingId,
+        params.numericId,
+        params.meetingId,
         auth.userId,
       );
       if (!recording) {
-        return new Response("Not Found", { status: 404 });
+        return notFound();
       }
 
       return serveMediaFile(
@@ -205,25 +248,20 @@ export function createMeetingRoutes(input: CreateMeetingRoutesInput): Record<str
     },
 
     "/api/meetings/:meetingId/report.zip": async (req: Request) => {
-      const auth = input.auth.requireAuthenticatedUser(req);
+      const auth = requireAuthUser(input.auth, req);
       if (auth instanceof Response) {
         return auth;
       }
 
       const url = new URL(req.url);
-      const match = url.pathname.match(/^\/api\/meetings\/([^/]+)\/report\.zip$/);
-      if (!match) {
-        return new Response("Bad Request", { status: 400 });
-      }
-      const [, meetingId] = match;
-
-      if (!meetingId || !isValidUUID(meetingId)) {
-        return new Response("Invalid meeting ID", { status: 400 });
+      const meetingId = extractMeetingId(url.pathname, REPORT_PATH_PATTERN);
+      if (meetingId instanceof Response) {
+        return meetingId;
       }
 
-      const meeting = input.persistence.getMeeting(meetingId, auth.userId);
-      if (!meeting) {
-        return new Response("Meeting not found", { status: 404 });
+      const ownedMeeting = requireOwnedMeeting(input.persistence, meetingId, auth.userId);
+      if (ownedMeeting instanceof Response) {
+        return ownedMeeting;
       }
 
       try {
@@ -234,7 +272,7 @@ export function createMeetingRoutes(input: CreateMeetingRoutesInput): Record<str
 
         const { stream, filename, mediaBundle } = await buildMeetingReportZipStream(
           input.persistence,
-          meetingId,
+          ownedMeeting.id,
           {
             includeMedia,
             includeCaptures,
@@ -253,12 +291,12 @@ export function createMeetingRoutes(input: CreateMeetingRoutesInput): Record<str
       } catch (error) {
         if (error instanceof ReportSizeLimitError) {
           console.warn(
-            `[API] Report too large for meeting ${meetingId}: ${error.totalBytes} > ${error.maxBytes}`,
+            `[API] Report too large for meeting ${ownedMeeting.id}: ${error.totalBytes} > ${error.maxBytes}`,
           );
-          return new Response("Report too large to bundle media", { status: 413 });
+          return payloadTooLarge("Report too large to bundle media");
         }
         console.error("[API] Failed to generate report:", error);
-        return new Response("Failed to generate report", { status: 500 });
+        return internalServerError("Failed to generate report");
       }
     },
   };
