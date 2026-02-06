@@ -339,19 +339,21 @@ export function App() {
       rightPanel={
         <div className="h-full flex flex-col">
           <div className="flex-shrink-0 mx-4 mt-4 mb-2 flex flex-col gap-3">
-            <MediaSourceToggle
-              value={media.sourceType}
-              onChange={recording.isRecording ? media.switchVideoSource : media.switchSourceType}
-              disabled={media.isSwitching}
-              isLoading={media.isSwitching}
-            />
-            <ImageModelToggle
-              value={session.imageModel.preset}
-              model={session.imageModel.model}
-              onChange={session.setImageModelPreset}
-              proAvailable={Boolean(session.imageModel.available.pro)}
-              disabled={session.isGenerating}
-            />
+            <div className="flex flex-wrap items-center gap-3">
+              <MediaSourceToggle
+                value={media.sourceType}
+                onChange={recording.isRecording ? media.switchVideoSource : media.switchSourceType}
+                disabled={media.isSwitching}
+                isLoading={media.isSwitching}
+              />
+              <ImageModelToggle
+                value={session.imageModel.preset}
+                model={session.imageModel.model}
+                onChange={session.setImageModelPreset}
+                proAvailable={Boolean(session.imageModel.available.pro)}
+                disabled={session.isGenerating}
+              />
+            </div>
             {media.hasPermission && (
               <DeviceSelector
                 audioDevices={media.audioDevices}
