@@ -11,6 +11,7 @@ import "./index.css";
 import { MainLayout } from "@/components/layout/MainLayout";
 import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from "@/components/ui/resizable";
 import { RecordingControls } from "@/components/recording/RecordingControls";
+import { CloudSaveButton } from "@/components/recording/CloudSaveButton";
 import { CameraPreview } from "@/components/recording/CameraPreview";
 import { DeviceSelector } from "@/components/recording/DeviceSelector";
 import { MediaSourceToggle } from "@/components/recording/MediaSourceToggle";
@@ -25,6 +26,8 @@ import { MeetingHeader } from "@/components/navigation/MeetingHeader";
 
 import { useMediaStreamController } from "@/hooks/useMediaStreamController";
 import { useRecordingController } from "@/hooks/useRecordingController";
+import { useLocalRecording } from "@/hooks/useLocalRecording";
+import { useAudioUpload } from "@/hooks/useAudioUpload";
 import { useCameraCapture } from "@/hooks/useCameraCapture";
 import { useElapsedTime } from "@/hooks/useElapsedTime";
 import { useMeetingSession } from "@/hooks/useMeetingSession";
@@ -42,15 +45,52 @@ export function App() {
   // Meeting session management (WebSocket, transcripts, analyses, images)
   const session = useMeetingSession();
 
+  // Local audio recording to OPFS
+  const localRecording = useLocalRecording();
+  const [hasLocalFile, setHasLocalFile] = useState(false);
+
+  // Audio upload to server
+  const audioUpload = useAudioUpload();
+
+  // `onChunk` は `useRecordingController` に渡され、録音中に安定した参照である必要がある。
+  // 一方で `localRecording` は hook の再生成などで参照が変わり得るため、依存配列に入れてしまうと
+  // callback が差し替わって副作用を誘発しやすい。最新の `localRecording` を参照できるよう ref 経由にする
+  // ことで、React の依存追跡を迂回しつつ stale closure を防ぐ。
+  const localRecordingRef = useRef(localRecording);
+  localRecordingRef.current = localRecording;
+
   // Recording orchestration (controller-based)
+  const onChunk = useCallback(
+    (data: ArrayBuffer) => {
+      session.sendAudio(data);
+      localRecordingRef.current.writeChunk(data);
+    },
+    [session],
+  );
+
+  const onSessionStart = useCallback(() => {
+    session.startSession();
+    setHasLocalFile(false);
+    const sessionId = session.meeting.sessionId;
+    if (sessionId) {
+      localRecordingRef.current.start(sessionId);
+    }
+  }, [session]);
+
+  const onSessionStop = useCallback(() => {
+    session.stopSession();
+    localRecordingRef.current.stop();
+    setHasLocalFile(true);
+  }, [session]);
+
   const recording = useRecordingController({
     audioStream: media.audioStream,
     hasPermission: media.hasPermission,
     isConnected: session.isConnected,
     hasMeeting: session.meeting.meetingId !== null,
-    onChunk: session.sendAudio,
-    onSessionStart: session.startSession,
-    onSessionStop: session.stopSession,
+    onChunk,
+    onSessionStart,
+    onSessionStop,
   });
 
   // Auto-connect WebSocket on mount
@@ -147,6 +187,17 @@ export function App() {
 
   const handleStart = () => recording.start();
   const handleStop = () => recording.stop();
+
+  const handleUpload = useCallback(
+    (sid: string, mid: string) => {
+      audioUpload.upload(sid, mid);
+    },
+    [audioUpload],
+  );
+
+  const handleCancelUpload = useCallback(() => {
+    audioUpload.cancel();
+  }, [audioUpload]);
 
   const handleBack = useCallback(() => {
     if (recording.isRecording) {
@@ -255,19 +306,32 @@ export function App() {
         </div>
       }
       footer={
-        <RecordingControls
-          sessionStatus={session.sessionStatus}
-          isRecording={recording.isRecording}
-          hasPermission={media.hasPermission}
-          isLoading={media.isLoading}
-          error={error}
-          sourceType={media.sourceType}
-          elapsedTime={elapsedTime}
-          hasMeeting={session.meeting.meetingId !== null}
-          onRequestPermission={handleRequestPermission}
-          onStart={handleStart}
-          onStop={handleStop}
-        />
+        <div className="flex flex-col items-center gap-3">
+          <RecordingControls
+            sessionStatus={session.sessionStatus}
+            isRecording={recording.isRecording}
+            hasPermission={media.hasPermission}
+            isLoading={media.isLoading}
+            error={error}
+            sourceType={media.sourceType}
+            elapsedTime={elapsedTime}
+            hasMeeting={session.meeting.meetingId !== null}
+            onRequestPermission={handleRequestPermission}
+            onStart={handleStart}
+            onStop={handleStop}
+          />
+          <CloudSaveButton
+            sessionId={localRecording.sessionId}
+            meetingId={session.meeting.meetingId}
+            isRecording={recording.isRecording}
+            isUploading={audioUpload.isUploading}
+            progress={audioUpload.progress}
+            error={audioUpload.error}
+            hasLocalRecording={hasLocalFile && localRecording.sessionId !== null}
+            onUpload={handleUpload}
+            onCancel={handleCancelUpload}
+          />
+        </div>
       }
     />
   );
