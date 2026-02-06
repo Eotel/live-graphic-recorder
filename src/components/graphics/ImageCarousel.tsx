@@ -85,7 +85,7 @@ export function ImageCarousel({
       {showSkeleton ? (
         <ImageSkeleton isRetrying={isRetrying} />
       ) : (
-        <div className="relative flex-1 min-h-0 bg-muted rounded-lg overflow-hidden">
+        <div className="group relative flex-1 min-h-0 bg-muted rounded-lg overflow-hidden">
           {hasImages && currentImage ? (
             <>
               {loadErrors.has(clampedIndex) || !getImageSrc(currentImage) ? (
@@ -101,14 +101,12 @@ export function ImageCarousel({
                   onError={() => handleImageError(clampedIndex)}
                 />
               )}
-
-              {/* Navigation arrows */}
               {images.length > 1 && (
                 <>
                   <Button
                     variant="ghost"
                     size="icon"
-                    className="absolute left-2 top-1/2 -translate-y-1/2 bg-black/30 hover:bg-black/50 text-white"
+                    className="absolute left-2 top-1/2 -translate-y-1/2 bg-black/30 hover:bg-black/50 text-white opacity-0 pointer-events-none transition-opacity group-hover:opacity-100 group-hover:pointer-events-auto focus-visible:opacity-100 focus-visible:pointer-events-auto"
                     onClick={goToPrevious}
                     aria-label="Previous image"
                   >
@@ -117,7 +115,7 @@ export function ImageCarousel({
                   <Button
                     variant="ghost"
                     size="icon"
-                    className="absolute right-2 top-1/2 -translate-y-1/2 bg-black/30 hover:bg-black/50 text-white"
+                    className="absolute right-2 top-1/2 -translate-y-1/2 bg-black/30 hover:bg-black/50 text-white opacity-0 pointer-events-none transition-opacity group-hover:opacity-100 group-hover:pointer-events-auto focus-visible:opacity-100 focus-visible:pointer-events-auto"
                     onClick={goToNext}
                     aria-label="Next image"
                   >
@@ -125,11 +123,6 @@ export function ImageCarousel({
                   </Button>
                 </>
               )}
-
-              {/* Image counter */}
-              <div className="absolute bottom-2 left-1/2 -translate-x-1/2 bg-black/50 text-white text-xs px-2 py-1 rounded-full">
-                {clampedIndex + 1} / {images.length}
-              </div>
             </>
           ) : (
             <div className="absolute inset-0 flex flex-col items-center justify-center text-muted-foreground">
