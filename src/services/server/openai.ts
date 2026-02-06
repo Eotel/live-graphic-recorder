@@ -76,7 +76,15 @@ If recent graphic recording images are provided, ensure visual continuity and bu
 
 The image prompt should be descriptive and suitable for AI image generation.
 Focus on visual metaphors and symbols that represent the key concepts.
-Keep the language in the same language as the transcript.`;
+When writing imagePrompt, describe: (1) central scene, (2) key metaphors/symbols, (3) layout/composition, (4) short text labels.
+Keep imagePrompt concise but specific (roughly 40-140 words).
+Keep the language in the same language as the transcript.
+
+Few-shot examples for imagePrompt style:
+- Transcript gist: "Budget cuts and hiring freeze were discussed, with a decision to protect core product work."
+  Good imagePrompt: "A hand-drawn graphic recording on whiteboard texture: a central shield labeled 'Core Product' protecting a small team icon, while a red budget meter drops and a paused hiring gate icon sits to the side. Branching notes show trade-offs, timeline arrows, and decision stamps. Warm earth-tone markers, clean sketch lines, and short labels for risks, decisions, and next actions."
+- Transcript gist: "来月リリースに向けて、品質課題とテスト自動化の優先順位を決めた。"
+  Good imagePrompt: "ホワイトボード風の手描きグラフィックレコーディング。中央に『来月リリース』の旗、左右に『品質課題』の警告アイコンと『テスト自動化』の歯車・チェックリスト。矢印で優先順位を示し、下部に短い注釈（対応順・担当・期限）を配置。暖色系マーカーで見出しを強調し、マインドマップ構成で全体像を整理する。";`;
 
 const ANALYSIS_RESULT_SCHEMA = {
   type: "object",
@@ -84,28 +92,40 @@ const ANALYSIS_RESULT_SCHEMA = {
     summary: {
       type: "array",
       items: { type: "string" },
+      minItems: 2,
+      maxItems: 7,
       description: "3-5 key summary points",
     },
     topics: {
       type: "array",
       items: { type: "string" },
+      minItems: 1,
+      maxItems: 5,
       description: "1-3 main topics being discussed",
     },
     tags: {
       type: "array",
       items: { type: "string" },
+      minItems: 2,
+      maxItems: 8,
       description: "3-5 relevant hashtags",
     },
     flow: {
       type: "number",
+      minimum: 0,
+      maximum: 100,
       description: "How smoothly the conversation is progressing (0-100)",
     },
     heat: {
       type: "number",
+      minimum: 0,
+      maximum: 100,
       description: "How engaged/energetic the discussion is (0-100)",
     },
     imagePrompt: {
       type: "string",
+      minLength: 12,
+      maxLength: 800,
       description: "A prompt for creating a graphic recording image",
     },
   },
@@ -125,7 +145,12 @@ Focus on:
 - Noting any significant transitions in discussion
 - Capturing the overall narrative arc of this meeting segment
 
-Keep the language in the same language as the input summaries.`;
+Keep the language in the same language as the input summaries.
+
+Few-shot style guide:
+- If multiple summaries repeat "migration delay", "QA bottleneck", and "release risk",
+  good themes include abstractions such as "Delivery risk management" and "Quality process improvements"
+  instead of copying raw sentences.`;
 
 const META_SUMMARY_RESULT_SCHEMA = {
   type: "object",
@@ -133,11 +158,15 @@ const META_SUMMARY_RESULT_SCHEMA = {
     summary: {
       type: "array",
       items: { type: "string" },
+      minItems: 2,
+      maxItems: 7,
       description: "3-5 consolidated summary points",
     },
     themes: {
       type: "array",
       items: { type: "string" },
+      minItems: 1,
+      maxItems: 6,
       description: "2-4 main themes from this period",
     },
   },

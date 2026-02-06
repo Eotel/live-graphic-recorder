@@ -37,15 +37,14 @@ export interface GeminiService {
   generateImage: (prompt: string, options?: GeminiServiceOptions) => Promise<GeneratedImage>;
 }
 
-const GRAPHIC_RECORDING_STYLE_PREFIX = `Create a professional graphic recording illustration with the following characteristics:
-- Hand-drawn sketch style with clean lines
-- Uses simple icons and symbols
-- Includes text labels and annotations
-- Color palette: warm earth tones with accent colors
-- Visual metaphors and mind-map style layout
-- Whiteboard/paper texture background
+const GRAPHIC_RECORDING_STYLE_PREFIX = `Create a single polished graphic recording illustration that visualizes the content brief below.
+Render it as a hand-drawn marker sketch on a whiteboard/paper texture with clean lines, simple icons, short annotations, and a warm earth-tone palette with selective accents.
+Use clear visual metaphors, a mind-map style composition, and legible text labels in the same language as the content brief.
+Prioritize narrative continuity and concept clarity over decorative detail, and avoid photorealistic style.
+Return image output only.
 
-Content to illustrate: `;
+Content brief:
+`;
 
 /**
  * Sleep for a given number of milliseconds.
@@ -111,6 +110,7 @@ export function createGeminiService(options: CreateGeminiServiceOptions = {}): G
       model,
       contents: fullPrompt,
       config: {
+        responseModalities: ["IMAGE"],
         imageConfig: {
           aspectRatio: GEMINI_CONFIG.aspectRatio,
         },

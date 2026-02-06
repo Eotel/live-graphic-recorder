@@ -139,6 +139,58 @@ describe("OpenAIService", () => {
       });
     });
 
+    test("should include few-shot guidance in analysis instructions", async () => {
+      const service = createOpenAIService();
+      await service.analyzeTranscript({
+        transcript: "Test transcript",
+      });
+
+      const callArgs = mockCreateCalls[0] as {
+        instructions: string;
+      };
+
+      expect(callArgs.instructions).toContain("Few-shot examples for imagePrompt style");
+      expect(callArgs.instructions).toContain("roughly 40-140 words");
+    });
+
+    test("should use relaxed bounds in analysis schema", async () => {
+      const service = createOpenAIService();
+      await service.analyzeTranscript({
+        transcript: "Test transcript",
+      });
+
+      const callArgs = mockCreateCalls[0] as {
+        text: {
+          format: {
+            schema: {
+              properties: {
+                summary: { minItems: number; maxItems: number };
+                topics: { minItems: number; maxItems: number };
+                tags: { minItems: number; maxItems: number };
+                flow: { minimum: number; maximum: number };
+                heat: { minimum: number; maximum: number };
+                imagePrompt: { minLength: number; maxLength: number };
+              };
+            };
+          };
+        };
+      };
+
+      const schema = callArgs.text.format.schema;
+      expect(schema.properties.summary.minItems).toBe(2);
+      expect(schema.properties.summary.maxItems).toBe(7);
+      expect(schema.properties.topics.minItems).toBe(1);
+      expect(schema.properties.topics.maxItems).toBe(5);
+      expect(schema.properties.tags.minItems).toBe(2);
+      expect(schema.properties.tags.maxItems).toBe(8);
+      expect(schema.properties.flow.minimum).toBe(0);
+      expect(schema.properties.flow.maximum).toBe(100);
+      expect(schema.properties.heat.minimum).toBe(0);
+      expect(schema.properties.heat.maximum).toBe(100);
+      expect(schema.properties.imagePrompt.minLength).toBe(12);
+      expect(schema.properties.imagePrompt.maxLength).toBe(800);
+    });
+
     test("should include previousTopics in input text", async () => {
       const service = createOpenAIService();
       await service.analyzeTranscript({
@@ -463,6 +515,59 @@ describe("OpenAIService", () => {
       expect(callArgs.model).toBe("gpt-5.2");
       expect(callArgs.instructions).toContain("synthesizing");
       expect(callArgs.text.format.name).toBe("meta_summary_result");
+    });
+
+    test("should use relaxed bounds in meta summary schema", async () => {
+      mockCreate.mockImplementationOnce((params: unknown) => {
+        mockCreateCalls.push(params);
+        return Promise.resolve({
+          ...createMockResponse(),
+          output: [
+            {
+              type: "message" as const,
+              id: "msg_test",
+              status: "completed",
+              role: "assistant" as const,
+              content: [
+                {
+                  type: "output_text" as const,
+                  text: JSON.stringify({
+                    summary: ["Consolidated point 1", "Consolidated point 2"],
+                    themes: ["Theme A"],
+                  }),
+                  annotations: [],
+                },
+              ],
+            },
+          ],
+        });
+      });
+
+      const service = createOpenAIService();
+      await service.generateMetaSummary({
+        analyses: [{ summary: ["Point 1"], topics: ["Topic 1"], timestamp: 1000 }],
+        startTime: 1000,
+        endTime: 2000,
+      });
+
+      const callArgs = mockCreateCalls[0] as {
+        text: {
+          format: {
+            schema: {
+              properties: {
+                summary: { minItems: number; maxItems: number };
+                themes: { minItems: number; maxItems: number };
+              };
+            };
+          };
+        };
+      };
+      const schema = callArgs.text.format.schema;
+
+      expect(schema.properties.summary.minItems).toBe(2);
+      expect(schema.properties.summary.maxItems).toBe(7);
+      expect(schema.properties.themes.minItems).toBe(1);
+      expect(schema.properties.themes.maxItems).toBe(6);
     });
 
     test("should include analyses in input text", async () => {
