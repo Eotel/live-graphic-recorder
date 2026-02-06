@@ -26,6 +26,7 @@ import { FlowMeter } from "@/components/metrics/FlowMeter";
 import { HeatMeter } from "@/components/metrics/HeatMeter";
 import { ImageCarousel } from "@/components/graphics/ImageCarousel";
 import { ImageModelToggle } from "@/components/graphics/ImageModelToggle";
+import { LoginPage } from "@/components/pages/LoginPage";
 import { MeetingSelectPage } from "@/components/pages/MeetingSelectPage";
 import { MeetingHeader } from "@/components/navigation/MeetingHeader";
 
@@ -38,12 +39,18 @@ import { useLocalRecording } from "@/hooks/useLocalRecording";
 import { useAudioUpload } from "@/hooks/useAudioUpload";
 import { useCameraCapture } from "@/hooks/useCameraCapture";
 import { useElapsedTime } from "@/hooks/useElapsedTime";
+import { useBeforeUnloadGuard } from "@/hooks/useBeforeUnloadGuard";
+import { useAuth } from "@/hooks/useAuth";
 import { useMeetingSession } from "@/hooks/useMeetingSession";
 import type { CameraFrame } from "@/types/messages";
 
 type View = "select" | "recording";
+const MEETING_LIST_REQUEST_TIMEOUT_MS = 10000;
+const MEETING_LIST_TIMEOUT_MESSAGE = "Failed to load past meetings. Please try again.";
 
 export function App() {
+  const auth = useAuth();
+
   // View state for routing
   const [view, setView] = useState<View>("select");
   const [isDownloadingReport, setIsDownloadingReport] = useState(false);
@@ -59,6 +66,15 @@ export function App() {
   // Local audio recording to OPFS
   const localRecording = useLocalRecording();
   const [hasLocalFile, setHasLocalFile] = useState(false);
+  const [isMeetingListLoading, setIsMeetingListLoading] = useState(false);
+  const [meetingListError, setMeetingListError] = useState<string | null>(null);
+  const meetingListRequestTimeoutRef = useRef<number | null>(null);
+  const meetingListSnapshotRef = useRef(session.meeting.meetingList);
+  const meetingListErrorBaselineRef = useRef<string | null>(null);
+  const latestMeetingListRef = useRef(session.meeting.meetingList);
+  latestMeetingListRef.current = session.meeting.meetingList;
+  const latestSessionErrorRef = useRef(session.error);
+  latestSessionErrorRef.current = session.error;
 
   // Audio upload to server
   const audioUpload = useAudioUpload();
@@ -161,23 +177,51 @@ export function App() {
     onSessionStop,
   });
 
-  // Auto-connect WebSocket on mount
+  const clearMeetingListRequestTimeout = useCallback(() => {
+    if (meetingListRequestTimeoutRef.current !== null) {
+      window.clearTimeout(meetingListRequestTimeoutRef.current);
+      meetingListRequestTimeoutRef.current = null;
+    }
+  }, []);
+
+  const finishMeetingListLoad = useCallback(() => {
+    clearMeetingListRequestTimeout();
+    setIsMeetingListLoading(false);
+  }, [clearMeetingListRequestTimeout]);
+
+  const startMeetingListLoad = useCallback(() => {
+    clearMeetingListRequestTimeout();
+    meetingListSnapshotRef.current = latestMeetingListRef.current;
+    meetingListErrorBaselineRef.current = latestSessionErrorRef.current;
+    setIsMeetingListLoading(true);
+    setMeetingListError(null);
+    meetingListRequestTimeoutRef.current = window.setTimeout(() => {
+      meetingListRequestTimeoutRef.current = null;
+      setIsMeetingListLoading(false);
+      setMeetingListError(MEETING_LIST_TIMEOUT_MESSAGE);
+    }, MEETING_LIST_REQUEST_TIMEOUT_MS);
+  }, [clearMeetingListRequestTimeout]);
+
+  // Auto-connect WebSocket after authentication
   useEffect(() => {
+    if (auth.status !== "authenticated") {
+      return;
+    }
     if (!session.isConnected) {
       session.connect();
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [auth.status, session.connect, session.isConnected]);
 
   useEffect(() => {
     return () => {
+      clearMeetingListRequestTimeout();
       if (reportDownloadUnlockTimerRef.current !== null) {
         window.clearTimeout(reportDownloadUnlockTimerRef.current);
         reportDownloadUnlockTimerRef.current = null;
       }
       reportDownloadLockRef.current = false;
     };
-  }, []);
+  }, [clearMeetingListRequestTimeout]);
 
   // Track pending meeting action (waiting for WebSocket connection)
   const pendingMeetingActionRef = useRef<{
@@ -188,11 +232,14 @@ export function App() {
 
   // Handle connection established
   useEffect(() => {
+    if (auth.status !== "authenticated") return;
     if (!session.isConnected) return;
 
     const pending = pendingMeetingActionRef.current;
     if (pending) {
       pendingMeetingActionRef.current = null;
+      finishMeetingListLoad();
+      setMeetingListError(null);
       setHasLocalFile(false);
       localRecordingRef.current.reset();
       if (pending.type === "new") {
@@ -204,8 +251,34 @@ export function App() {
       return;
     }
 
+    if (view !== "select") return;
+    startMeetingListLoad();
     session.requestMeetingList();
-  }, [session.isConnected, session]);
+  }, [
+    auth.status,
+    finishMeetingListLoad,
+    session.isConnected,
+    session.requestMeetingList,
+    session.startMeeting,
+    startMeetingListLoad,
+    view,
+  ]);
+
+  useEffect(() => {
+    if (!isMeetingListLoading) return;
+    if (session.meeting.meetingList === meetingListSnapshotRef.current) return;
+    finishMeetingListLoad();
+    setMeetingListError(null);
+  }, [finishMeetingListLoad, isMeetingListLoading, session.meeting.meetingList]);
+
+  useEffect(() => {
+    if (view !== "select") return;
+    if (!isMeetingListLoading) return;
+    if (!session.error) return;
+    if (session.error === meetingListErrorBaselineRef.current) return;
+    finishMeetingListLoad();
+    setMeetingListError(session.error);
+  }, [finishMeetingListLoad, isMeetingListLoading, session.error, view]);
 
   // Meeting handlers for MeetingSelectPage
   const handleNewMeeting = useCallback(
@@ -215,12 +288,14 @@ export function App() {
         session.connect();
         return;
       }
+      finishMeetingListLoad();
+      setMeetingListError(null);
       setHasLocalFile(false);
       localRecordingRef.current.reset();
       session.startMeeting(title);
       setView("recording");
     },
-    [session],
+    [finishMeetingListLoad, session],
   );
 
   const handleSelectMeeting = useCallback(
@@ -230,22 +305,30 @@ export function App() {
         session.connect();
         return;
       }
+      finishMeetingListLoad();
+      setMeetingListError(null);
       setHasLocalFile(false);
       localRecordingRef.current.reset();
       session.startMeeting(undefined, meetingId);
       setView("recording");
     },
-    [session],
+    [finishMeetingListLoad, session],
   );
 
   const handleRefreshMeetings = useCallback(() => {
+    startMeetingListLoad();
     if (session.isConnected) {
       session.requestMeetingList();
+      return;
     }
-  }, [session]);
+    session.connect();
+  }, [session.connect, session.isConnected, session.requestMeetingList, startMeetingListLoad]);
 
   // Elapsed time tracking
   const { formattedTime: elapsedTime } = useElapsedTime({ enabled: recording.isRecording });
+  const hasUnsavedRecording =
+    recording.isRecording || (hasLocalFile && localRecording.sessionId !== null);
+  useBeforeUnloadGuard(hasUnsavedRecording);
 
   // Camera frame capture
   const onFrameCaptured = useCallback(
@@ -332,16 +415,68 @@ export function App() {
     setView("select");
   }, [recording, session]);
 
+  const handleLogout = useCallback(async () => {
+    if (recording.isRecording) {
+      recording.stop();
+    }
+    clearMeetingListRequestTimeout();
+    setIsMeetingListLoading(false);
+    setMeetingListError(null);
+    setHasLocalFile(false);
+    localRecordingRef.current.reset();
+    pendingMeetingActionRef.current = null;
+    session.disconnect();
+    session.resetSession();
+    setView("select");
+    await auth.logout();
+  }, [auth.logout, clearMeetingListRequestTimeout, recording, session]);
+
+  useEffect(() => {
+    if (auth.status === "authenticated") return;
+    clearMeetingListRequestTimeout();
+    setIsMeetingListLoading(false);
+    setMeetingListError(null);
+  }, [auth.status, clearMeetingListRequestTimeout]);
+
+  if (auth.status === "loading") {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background text-muted-foreground">
+        認証状態を確認中...
+      </div>
+    );
+  }
+
+  if (auth.status !== "authenticated") {
+    return (
+      <LoginPage
+        isSubmitting={auth.isSubmitting}
+        error={auth.error}
+        onLogin={auth.login}
+        onSignup={auth.signup}
+      />
+    );
+  }
+
   // Show meeting selection page
   if (view === "select") {
     return (
-      <MeetingSelectPage
-        meetings={session.meeting.meetingList}
-        isLoading={!session.isConnected}
-        onNewMeeting={handleNewMeeting}
-        onSelectMeeting={handleSelectMeeting}
-        onRefresh={handleRefreshMeetings}
-      />
+      <div className="relative">
+        <div className="absolute right-4 top-4 z-20">
+          <Button variant="outline" size="sm" type="button" onClick={handleLogout}>
+            ログアウト
+          </Button>
+        </div>
+        <MeetingSelectPage
+          meetings={session.meeting.meetingList}
+          isLoading={isMeetingListLoading}
+          isConnected={session.isConnected}
+          errorMessage={meetingListError}
+          onNewMeeting={handleNewMeeting}
+          onSelectMeeting={handleSelectMeeting}
+          onRefresh={handleRefreshMeetings}
+          onRetry={handleRefreshMeetings}
+        />
+      </div>
     );
   }
 
@@ -356,12 +491,15 @@ export function App() {
               <MeetingHeader
                 title={session.meeting.meetingTitle}
                 onBack={handleBack}
-                isRecording={recording.isRecording}
+                hasUnsavedRecording={hasUnsavedRecording}
                 onUpdateTitle={session.updateMeetingTitle}
               />
               <TopicIndicator topics={session.topics} />
             </div>
             <div className="flex items-center gap-6">
+              <Button variant="outline" size="sm" type="button" onClick={handleLogout}>
+                ログアウト
+              </Button>
               <Button
                 variant="outline"
                 size="sm"

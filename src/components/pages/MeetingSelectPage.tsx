@@ -12,9 +12,12 @@ import type { MeetingInfo } from "@/types/messages";
 export interface MeetingSelectPageProps {
   meetings?: MeetingInfo[] | null;
   isLoading: boolean;
+  isConnected?: boolean;
+  errorMessage?: string | null;
   onNewMeeting: (title?: string) => void;
   onSelectMeeting: (meetingId: string) => void;
   onRefresh: () => void;
+  onRetry?: () => void;
 }
 
 function normalizeTimestamp(timestamp: number): number {
@@ -57,11 +60,17 @@ function formatDate(timestamp: number | null | undefined): string {
 export function MeetingSelectPage({
   meetings,
   isLoading,
+  isConnected = true,
+  errorMessage = null,
   onNewMeeting,
   onSelectMeeting,
   onRefresh,
+  onRetry,
 }: MeetingSelectPageProps) {
   const meetingList = meetings ?? [];
+  const showInitialLoading = isLoading && meetingList.length === 0;
+  const showInlineLoading = isLoading && meetingList.length > 0;
+  const retryAction = onRetry ?? onRefresh;
   const [showTitleDialog, setShowTitleDialog] = useState(false);
   const [titleInput, setTitleInput] = useState("");
   const titleInputRef = useRef<HTMLInputElement>(null);
@@ -161,14 +170,38 @@ export function MeetingSelectPage({
               size="sm"
               onClick={onRefresh}
               type="button"
-              disabled={isLoading}
               aria-label="Refresh"
             >
               ↻
             </Button>
           </div>
 
-          {isLoading ? (
+          {errorMessage && (
+            <div className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2">
+              <p className="text-xs text-destructive">{errorMessage}</p>
+              <Button
+                variant="outline"
+                size="sm"
+                type="button"
+                onClick={retryAction}
+                className="mt-2 h-7 px-2 text-xs"
+              >
+                Retry
+              </Button>
+            </div>
+          )}
+
+          {!errorMessage && !isConnected && (
+            <p className="text-xs text-muted-foreground">
+              Connection is unstable. You can refresh to retry.
+            </p>
+          )}
+
+          {showInlineLoading && (
+            <p className="text-xs text-muted-foreground text-center">Updating past meetings...</p>
+          )}
+
+          {showInitialLoading ? (
             <p className="text-sm text-muted-foreground text-center py-8">Loading...</p>
           ) : meetingList.length === 0 ? (
             <p className="text-sm text-muted-foreground text-center py-8">No past meetings</p>

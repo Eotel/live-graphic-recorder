@@ -242,6 +242,21 @@ describe("MeetingSelectPage", () => {
     expect(screen.getByText(/loading/i)).toBeDefined();
   });
 
+  test("keeps meeting list visible while loading if meetings already exist", () => {
+    render(
+      <MeetingSelectPage
+        meetings={mockMeetings}
+        isLoading={true}
+        onNewMeeting={mock(() => {})}
+        onSelectMeeting={mock(() => {})}
+        onRefresh={mock(() => {})}
+      />,
+    );
+
+    expect(screen.getByText("Team Standup")).toBeDefined();
+    expect(screen.getByText(/updating past meetings/i)).toBeDefined();
+  });
+
   test("displays 'Untitled Meeting' for meetings without title", () => {
     const meetingsWithoutTitle: MeetingInfo[] = [
       {
@@ -282,6 +297,60 @@ describe("MeetingSelectPage", () => {
     fireEvent.click(screen.getByRole("button", { name: /refresh/i }));
 
     expect(onRefresh).toHaveBeenCalledTimes(1);
+  });
+
+  test("allows refresh while loading", () => {
+    const onRefresh = mock(() => {});
+
+    render(
+      <MeetingSelectPage
+        meetings={mockMeetings}
+        isLoading={true}
+        onNewMeeting={mock(() => {})}
+        onSelectMeeting={mock(() => {})}
+        onRefresh={onRefresh}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /refresh/i }));
+
+    expect(onRefresh).toHaveBeenCalledTimes(1);
+  });
+
+  test("shows error and calls onRetry when retry button is clicked", () => {
+    const onRetry = mock(() => {});
+
+    render(
+      <MeetingSelectPage
+        meetings={[]}
+        isLoading={false}
+        errorMessage="Failed to load past meetings."
+        onNewMeeting={mock(() => {})}
+        onSelectMeeting={mock(() => {})}
+        onRefresh={mock(() => {})}
+        onRetry={onRetry}
+      />,
+    );
+
+    expect(screen.getByText(/failed to load past meetings/i)).toBeDefined();
+    fireEvent.click(screen.getByRole("button", { name: /retry/i }));
+
+    expect(onRetry).toHaveBeenCalledTimes(1);
+  });
+
+  test("shows connection warning when disconnected without explicit error", () => {
+    render(
+      <MeetingSelectPage
+        meetings={[]}
+        isLoading={false}
+        isConnected={false}
+        onNewMeeting={mock(() => {})}
+        onSelectMeeting={mock(() => {})}
+        onRefresh={mock(() => {})}
+      />,
+    );
+
+    expect(screen.getByText(/connection is unstable/i)).toBeDefined();
   });
 
   test("handles null meetings prop as empty list", () => {
