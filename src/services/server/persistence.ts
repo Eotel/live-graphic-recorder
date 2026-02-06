@@ -13,7 +13,10 @@ import { runMigrations } from "./db/migrations";
 import {
   createMeeting as createMeetingRepo,
   findMeetingById,
+  findMeetingByIdAndOwner,
   findAllMeetings,
+  findAllMeetingsByOwner,
+  assignUnownedMeetingsToOwner,
   updateMeeting,
   type Meeting,
 } from "./db/repository/meeting";
@@ -59,6 +62,19 @@ import {
   findAudioRecordingByIdAndMeetingId,
   type PersistedAudioRecording,
 } from "./db/repository/audio";
+import {
+  createUser as createUserRepo,
+  findUserByEmail as findUserByEmailRepo,
+  findUserById as findUserByIdRepo,
+  type PersistedUser,
+} from "./db/repository/user";
+import {
+  createRefreshToken as createRefreshTokenRepo,
+  findActiveRefreshTokenByHash as findActiveRefreshTokenByHashRepo,
+  revokeRefreshToken as revokeRefreshTokenRepo,
+  revokeAllRefreshTokensForUser as revokeAllRefreshTokensForUserRepo,
+  type PersistedRefreshToken,
+} from "./db/repository/refresh-token";
 import { FileStorageService } from "./db/storage/file-storage";
 
 // Keep sessionId format consistent with FileStorageService.
@@ -90,6 +106,8 @@ export type {
   PersistedGeneratedImage,
   PersistedCameraCapture,
   PersistedAudioRecording,
+  PersistedUser,
+  PersistedRefreshToken,
 };
 
 export class PersistenceService {
@@ -105,28 +123,90 @@ export class PersistenceService {
     this.storage = new FileStorageService(mediaPath);
   }
 
+  private isMeetingOwnedByUser(meetingId: string, userId?: string): boolean {
+    if (!userId) {
+      return true;
+    }
+    return findMeetingByIdAndOwner(this.db, meetingId, userId) !== null;
+  }
+
   // ============================================================================
   // Meeting Operations
   // ============================================================================
 
-  createMeeting(title?: string): Meeting {
-    return createMeetingRepo(this.db, { title });
+  createMeeting(title?: string, ownerUserId?: string): Meeting {
+    return createMeetingRepo(this.db, { title, ownerUserId: ownerUserId ?? null });
   }
 
-  getMeeting(meetingId: string): Meeting | null {
+  getMeeting(meetingId: string, ownerUserId?: string): Meeting | null {
+    if (ownerUserId) {
+      return findMeetingByIdAndOwner(this.db, meetingId, ownerUserId);
+    }
     return findMeetingById(this.db, meetingId);
   }
 
-  listMeetings(limit?: number): Meeting[] {
+  listMeetings(limit?: number, ownerUserId?: string): Meeting[] {
+    if (ownerUserId) {
+      return findAllMeetingsByOwner(this.db, ownerUserId, limit);
+    }
     return findAllMeetings(this.db, limit);
   }
 
-  endMeeting(meetingId: string): void {
+  endMeeting(meetingId: string, ownerUserId?: string): boolean {
+    const target = this.getMeeting(meetingId, ownerUserId);
+    if (!target) {
+      return false;
+    }
     updateMeeting(this.db, meetingId, { endedAt: Date.now() });
+    return true;
   }
 
-  updateMeetingTitle(meetingId: string, title: string): void {
+  updateMeetingTitle(meetingId: string, title: string, ownerUserId?: string): boolean {
+    const target = this.getMeeting(meetingId, ownerUserId);
+    if (!target) {
+      return false;
+    }
     updateMeeting(this.db, meetingId, { title });
+    return true;
+  }
+
+  claimLegacyMeetingsForUser(ownerUserId: string): number {
+    return assignUnownedMeetingsToOwner(this.db, ownerUserId);
+  }
+
+  // ============================================================================
+  // User/Auth Operations
+  // ============================================================================
+
+  createUser(email: string, passwordHash: string): PersistedUser {
+    return createUserRepo(this.db, { email, passwordHash });
+  }
+
+  getUserByEmail(email: string): PersistedUser | null {
+    return findUserByEmailRepo(this.db, email);
+  }
+
+  getUserById(userId: string): PersistedUser | null {
+    return findUserByIdRepo(this.db, userId);
+  }
+
+  createRefreshToken(userId: string, tokenHash: string, expiresAt: number): PersistedRefreshToken {
+    return createRefreshTokenRepo(this.db, { userId, tokenHash, expiresAt });
+  }
+
+  getActiveRefreshTokenByHash(
+    tokenHash: string,
+    now: number = Date.now(),
+  ): PersistedRefreshToken | null {
+    return findActiveRefreshTokenByHashRepo(this.db, tokenHash, now);
+  }
+
+  revokeRefreshToken(tokenId: string): void {
+    revokeRefreshTokenRepo(this.db, tokenId);
+  }
+
+  revokeAllRefreshTokensForUser(userId: string): void {
+    revokeAllRefreshTokensForUserRepo(this.db, userId);
   }
 
   // ============================================================================
@@ -145,7 +225,14 @@ export class PersistenceService {
    * Get a session by ID with meeting ownership validation.
    * Returns null if the session doesn't exist or doesn't belong to the meeting.
    */
-  getSessionByIdAndMeetingId(sessionId: string, meetingId: string): PersistedSession | null {
+  getSessionByIdAndMeetingId(
+    sessionId: string,
+    meetingId: string,
+    ownerUserId?: string,
+  ): PersistedSession | null {
+    if (!this.isMeetingOwnedByUser(meetingId, ownerUserId)) {
+      return null;
+    }
     const session = findSessionById(this.db, sessionId);
     if (!session || session.meetingId !== meetingId) {
       return null;
@@ -191,7 +278,10 @@ export class PersistenceService {
     return findTranscriptSegmentsBySessionId(this.db, sessionId);
   }
 
-  loadMeetingTranscript(meetingId: string): PersistedTranscriptSegment[] {
+  loadMeetingTranscript(meetingId: string, ownerUserId?: string): PersistedTranscriptSegment[] {
+    if (!this.isMeetingOwnedByUser(meetingId, ownerUserId)) {
+      return [];
+    }
     const sessions = findSessionsByMeetingId(this.db, meetingId);
     const allTranscripts: PersistedTranscriptSegment[] = [];
 
@@ -268,7 +358,14 @@ export class PersistenceService {
    * Get an image by ID with meeting ownership validation.
    * Returns null if the image doesn't exist or doesn't belong to the meeting.
    */
-  getImageByIdAndMeetingId(imageId: number, meetingId: string): PersistedGeneratedImage | null {
+  getImageByIdAndMeetingId(
+    imageId: number,
+    meetingId: string,
+    ownerUserId?: string,
+  ): PersistedGeneratedImage | null {
+    if (!this.isMeetingOwnedByUser(meetingId, ownerUserId)) {
+      return null;
+    }
     return findGeneratedImageByIdAndMeetingId(this.db, imageId, meetingId);
   }
 
@@ -293,7 +390,14 @@ export class PersistenceService {
    * Get a capture by ID with meeting ownership validation.
    * Returns null if the capture doesn't exist or doesn't belong to the meeting.
    */
-  getCaptureByIdAndMeetingId(captureId: number, meetingId: string): PersistedCameraCapture | null {
+  getCaptureByIdAndMeetingId(
+    captureId: number,
+    meetingId: string,
+    ownerUserId?: string,
+  ): PersistedCameraCapture | null {
+    if (!this.isMeetingOwnedByUser(meetingId, ownerUserId)) {
+      return null;
+    }
     return findCameraCapturByIdAndMeetingId(this.db, captureId, meetingId);
   }
 
@@ -315,10 +419,33 @@ export class PersistenceService {
     });
   }
 
+  async persistAudioRecordingFromStream(
+    sessionId: string,
+    meetingId: string,
+    stream: ReadableStream<Uint8Array>,
+    maxBytes: number,
+  ): Promise<PersistedAudioRecording> {
+    const { filePath, fileSizeBytes } = await this.storage.saveAudioFileFromStream(
+      sessionId,
+      stream,
+      maxBytes,
+    );
+    return createAudioRecording(this.db, {
+      sessionId,
+      meetingId,
+      filePath,
+      fileSizeBytes,
+    });
+  }
+
   getAudioRecordingByIdAndMeetingId(
     audioId: number,
     meetingId: string,
+    ownerUserId?: string,
   ): PersistedAudioRecording | null {
+    if (!this.isMeetingOwnedByUser(meetingId, ownerUserId)) {
+      return null;
+    }
     return findAudioRecordingByIdAndMeetingId(this.db, audioId, meetingId);
   }
 
@@ -337,11 +464,17 @@ export class PersistenceService {
     });
   }
 
-  loadMetaSummaries(meetingId: string): PersistedMetaSummary[] {
+  loadMetaSummaries(meetingId: string, ownerUserId?: string): PersistedMetaSummary[] {
+    if (!this.isMeetingOwnedByUser(meetingId, ownerUserId)) {
+      return [];
+    }
     return findMetaSummariesByMeetingId(this.db, meetingId);
   }
 
-  getLatestMetaSummary(meetingId: string): PersistedMetaSummary | null {
+  getLatestMetaSummary(meetingId: string, ownerUserId?: string): PersistedMetaSummary | null {
+    if (!this.isMeetingOwnedByUser(meetingId, ownerUserId)) {
+      return null;
+    }
     return findLatestMetaSummaryByMeetingId(this.db, meetingId);
   }
 
@@ -349,7 +482,10 @@ export class PersistenceService {
   // Meeting-Level Data Aggregation
   // ============================================================================
 
-  loadMeetingAnalyses(meetingId: string): PersistedAnalysis[] {
+  loadMeetingAnalyses(meetingId: string, ownerUserId?: string): PersistedAnalysis[] {
+    if (!this.isMeetingOwnedByUser(meetingId, ownerUserId)) {
+      return [];
+    }
     const sessions = findSessionsByMeetingId(this.db, meetingId);
     const allAnalyses: PersistedAnalysis[] = [];
 
@@ -361,12 +497,19 @@ export class PersistenceService {
     return allAnalyses.sort((a, b) => a.timestamp - b.timestamp);
   }
 
-  loadRecentMeetingAnalyses(meetingId: string, limit: number): PersistedAnalysis[] {
-    const allAnalyses = this.loadMeetingAnalyses(meetingId);
+  loadRecentMeetingAnalyses(
+    meetingId: string,
+    limit: number,
+    ownerUserId?: string,
+  ): PersistedAnalysis[] {
+    const allAnalyses = this.loadMeetingAnalyses(meetingId, ownerUserId);
     return allAnalyses.slice(-limit);
   }
 
-  loadMeetingImages(meetingId: string): PersistedGeneratedImage[] {
+  loadMeetingImages(meetingId: string, ownerUserId?: string): PersistedGeneratedImage[] {
+    if (!this.isMeetingOwnedByUser(meetingId, ownerUserId)) {
+      return [];
+    }
     const sessions = findSessionsByMeetingId(this.db, meetingId);
     const allImages: PersistedGeneratedImage[] = [];
 
@@ -378,12 +521,19 @@ export class PersistenceService {
     return allImages.sort((a, b) => a.timestamp - b.timestamp);
   }
 
-  loadRecentMeetingImages(meetingId: string, limit: number): PersistedGeneratedImage[] {
-    const allImages = this.loadMeetingImages(meetingId);
+  loadRecentMeetingImages(
+    meetingId: string,
+    limit: number,
+    ownerUserId?: string,
+  ): PersistedGeneratedImage[] {
+    const allImages = this.loadMeetingImages(meetingId, ownerUserId);
     return allImages.slice(-limit);
   }
 
-  loadMeetingCaptures(meetingId: string): PersistedCameraCapture[] {
+  loadMeetingCaptures(meetingId: string, ownerUserId?: string): PersistedCameraCapture[] {
+    if (!this.isMeetingOwnedByUser(meetingId, ownerUserId)) {
+      return [];
+    }
     const sessions = findSessionsByMeetingId(this.db, meetingId);
     const allCaptures: PersistedCameraCapture[] = [];
 

@@ -8,7 +8,7 @@
 import { type ServerWebSocket, type Server } from "bun";
 import { resolve, relative, isAbsolute } from "node:path";
 import index from "./index.html";
-import { DB_CONFIG, WS_CONFIG } from "@/config/constants";
+import { DB_CONFIG, WS_CONFIG, UPLOAD_CONFIG } from "@/config/constants";
 import type {
   ClientMessage,
   ServerMessage,
@@ -40,11 +40,27 @@ import {
 import { createAnalysisService, type AnalysisService } from "./services/server/analysis";
 import { PersistenceService } from "./services/server/persistence";
 import { buildMeetingReportZipStream, ReportSizeLimitError } from "./services/server/report";
+import { canBufferPendingAudio } from "./services/server/pending-audio-guard";
 import {
   shouldTriggerMetaSummary,
   generateAndPersistMetaSummary,
 } from "./services/server/meta-summary";
+import {
+  AudioUploadTooLargeError,
+  EmptyAudioUploadError,
+} from "./services/server/db/storage/file-storage";
 import type { OpenAIService } from "./services/server/openai";
+import { parseAllowedOrigins, validateWebSocketOrigin } from "./services/server/ws-origin";
+import {
+  buildSetCookie,
+  createAccessToken,
+  createRefreshToken,
+  hashToken,
+  normalizeEmail,
+  parseCookies,
+  validatePasswordComplexity,
+  verifyToken,
+} from "./services/server/auth";
 import type { ImageModelPreset, ImageModelStatusMessage } from "./types/messages";
 
 // Initialize persistence service
@@ -99,6 +115,7 @@ async function checkAndGenerateMetaSummary(
 
 // Session context per WebSocket connection
 interface WSContext {
+  userId: string;
   sessionId: string;
   meetingId: string | null;
   session: SessionState;
@@ -108,6 +125,7 @@ interface WSContext {
   imageModelPreset: ImageModelPreset;
   // Buffer for audio data received before Deepgram is ready
   pendingAudio: (ArrayBuffer | Buffer)[];
+  pendingAudioBytes: number;
   // UtteranceEnd can arrive before the final transcript is persisted; buffer and apply later.
   pendingUtteranceEndCount: number;
 }
@@ -144,9 +162,176 @@ function sanitizeErrorMessage(error: unknown): string {
   return msg.length > 200 ? msg.slice(0, 200) + "..." : msg;
 }
 
+function parseContentLengthHeader(value: string): number | null {
+  const trimmed = value.trim();
+  if (!/^\d+$/.test(trimmed)) {
+    return null;
+  }
+  return Number.parseInt(trimmed, 10);
+}
+
 // Server configuration
 const PORT = Number(process.env["PORT"]) || 3000;
 const HOST = process.env["HOST"] || "127.0.0.1";
+const WS_ALLOWED_ORIGINS = parseAllowedOrigins(process.env["WS_ALLOWED_ORIGINS"]);
+const AUTH_JWT_SECRET = process.env["AUTH_JWT_SECRET"];
+const ACCESS_TOKEN_COOKIE = "access_token";
+const REFRESH_TOKEN_COOKIE = "refresh_token";
+const ACCESS_TOKEN_TTL_SEC = 15 * 60;
+const REFRESH_TOKEN_TTL_SEC = 30 * 24 * 60 * 60;
+
+if (!AUTH_JWT_SECRET && process.env["NODE_ENV"] === "production") {
+  throw new Error("AUTH_JWT_SECRET must be set in production");
+}
+
+const AUTH_SECRET = AUTH_JWT_SECRET || "dev-insecure-auth-secret-change-me-immediately";
+
+if (!AUTH_JWT_SECRET) {
+  console.warn("[Auth] AUTH_JWT_SECRET is not set. Using an insecure development fallback secret.");
+}
+
+interface AuthUser {
+  userId: string;
+}
+
+interface AuthRequestBody {
+  email?: unknown;
+  password?: unknown;
+}
+
+function shouldUseSecureCookies(req: Request): boolean {
+  const url = new URL(req.url);
+  if (url.protocol === "https:") {
+    return true;
+  }
+  const forwardedProto = req.headers.get("x-forwarded-proto");
+  if (forwardedProto && forwardedProto.split(",")[0]?.trim() === "https") {
+    return true;
+  }
+  return process.env["NODE_ENV"] === "production";
+}
+
+function unauthorizedResponse(message = "Unauthorized"): Response {
+  return new Response(message, { status: 401 });
+}
+
+async function parseAuthRequestBody(req: Request): Promise<{
+  email: string;
+  password: string;
+} | null> {
+  let body: AuthRequestBody;
+  try {
+    body = (await req.json()) as AuthRequestBody;
+  } catch {
+    return null;
+  }
+
+  if (typeof body.email !== "string" || typeof body.password !== "string") {
+    return null;
+  }
+
+  const email = normalizeEmail(body.email);
+  if (!email || !email.includes("@")) {
+    return null;
+  }
+
+  return {
+    email,
+    password: body.password,
+  };
+}
+
+function getAuthenticatedUser(req: Request): AuthUser | null {
+  const cookies = parseCookies(req.headers.get("cookie"));
+  const accessToken = cookies[ACCESS_TOKEN_COOKIE];
+  if (!accessToken) {
+    return null;
+  }
+
+  const payload = verifyToken(accessToken, AUTH_SECRET);
+  if (!payload || payload.type !== "access") {
+    return null;
+  }
+
+  return { userId: payload.sub };
+}
+
+function requireAuthenticatedUser(req: Request): AuthUser | Response {
+  const auth = getAuthenticatedUser(req);
+  if (!auth) {
+    return unauthorizedResponse();
+  }
+  return auth;
+}
+
+function setAuthCookies(
+  headers: Headers,
+  req: Request,
+  accessToken: string,
+  refreshToken: string,
+): void {
+  const secure = shouldUseSecureCookies(req);
+  headers.append(
+    "Set-Cookie",
+    buildSetCookie(ACCESS_TOKEN_COOKIE, accessToken, {
+      httpOnly: true,
+      secure,
+      sameSite: "Lax",
+      path: "/",
+      maxAge: ACCESS_TOKEN_TTL_SEC,
+    }),
+  );
+  headers.append(
+    "Set-Cookie",
+    buildSetCookie(REFRESH_TOKEN_COOKIE, refreshToken, {
+      httpOnly: true,
+      secure,
+      sameSite: "Lax",
+      path: "/api/auth",
+      maxAge: REFRESH_TOKEN_TTL_SEC,
+    }),
+  );
+}
+
+function clearAuthCookies(headers: Headers, req: Request): void {
+  const secure = shouldUseSecureCookies(req);
+  headers.append(
+    "Set-Cookie",
+    buildSetCookie(ACCESS_TOKEN_COOKIE, "", {
+      httpOnly: true,
+      secure,
+      sameSite: "Lax",
+      path: "/",
+      maxAge: 0,
+    }),
+  );
+  headers.append(
+    "Set-Cookie",
+    buildSetCookie(REFRESH_TOKEN_COOKIE, "", {
+      httpOnly: true,
+      secure,
+      sameSite: "Lax",
+      path: "/api/auth",
+      maxAge: 0,
+    }),
+  );
+}
+
+function issueSessionTokens(req: Request, userId: string): Headers {
+  const headers = new Headers({ "Content-Type": "application/json" });
+  const accessToken = createAccessToken(userId, AUTH_SECRET, ACCESS_TOKEN_TTL_SEC);
+  const refresh = createRefreshToken(userId, AUTH_SECRET, REFRESH_TOKEN_TTL_SEC);
+  persistence.createRefreshToken(userId, hashToken(refresh.token), refresh.expiresAtMs);
+  setAuthCookies(headers, req, accessToken, refresh.token);
+  return headers;
+}
+
+function buildAuthUserResponse(
+  userId: string,
+  email: string,
+): { user: { id: string; email: string } } {
+  return { user: { id: userId, email } };
+}
 
 // Resolved media path for security validation
 const MEDIA_BASE_PATH = resolve(DB_CONFIG.defaultMediaPath);
@@ -222,7 +407,140 @@ const server = Bun.serve<WSContext>({
     "/api/health": {
       GET: () => Response.json({ status: "ok", timestamp: Date.now() }),
     },
+    "/api/auth/signup": {
+      POST: async (req: Request) => {
+        const parsed = await parseAuthRequestBody(req);
+        if (!parsed) {
+          return new Response("Invalid request body", { status: 400 });
+        }
+
+        const passwordValidation = validatePasswordComplexity(parsed.password);
+        if (!passwordValidation.valid) {
+          return new Response(passwordValidation.reason ?? "Invalid password", { status: 400 });
+        }
+
+        const existing = persistence.getUserByEmail(parsed.email);
+        if (existing) {
+          return new Response("Email already in use", { status: 409 });
+        }
+
+        try {
+          const passwordHash = await Bun.password.hash(parsed.password);
+          const user = persistence.createUser(parsed.email, passwordHash);
+          persistence.claimLegacyMeetingsForUser(user.id);
+
+          const headers = issueSessionTokens(req, user.id);
+          return new Response(JSON.stringify(buildAuthUserResponse(user.id, user.email)), {
+            status: 201,
+            headers,
+          });
+        } catch (error) {
+          console.error("[Auth] Failed to sign up:", error);
+          return new Response("Failed to create user", { status: 500 });
+        }
+      },
+    },
+    "/api/auth/login": {
+      POST: async (req: Request) => {
+        const parsed = await parseAuthRequestBody(req);
+        if (!parsed) {
+          return new Response("Invalid request body", { status: 400 });
+        }
+
+        const user = persistence.getUserByEmail(parsed.email);
+        if (!user) {
+          return new Response("Invalid credentials", { status: 401 });
+        }
+
+        const ok = await Bun.password.verify(parsed.password, user.passwordHash);
+        if (!ok) {
+          return new Response("Invalid credentials", { status: 401 });
+        }
+
+        persistence.claimLegacyMeetingsForUser(user.id);
+        const headers = issueSessionTokens(req, user.id);
+        return new Response(JSON.stringify(buildAuthUserResponse(user.id, user.email)), {
+          status: 200,
+          headers,
+        });
+      },
+    },
+    "/api/auth/refresh": {
+      POST: (req: Request) => {
+        const cookies = parseCookies(req.headers.get("cookie"));
+        const refreshToken = cookies[REFRESH_TOKEN_COOKIE];
+        if (!refreshToken) {
+          const headers = new Headers();
+          clearAuthCookies(headers, req);
+          return new Response("Unauthorized", { status: 401, headers });
+        }
+
+        const payload = verifyToken(refreshToken, AUTH_SECRET);
+        if (!payload || payload.type !== "refresh") {
+          const headers = new Headers();
+          clearAuthCookies(headers, req);
+          return new Response("Unauthorized", { status: 401, headers });
+        }
+
+        const stored = persistence.getActiveRefreshTokenByHash(hashToken(refreshToken));
+        if (!stored || stored.userId !== payload.sub) {
+          const headers = new Headers();
+          clearAuthCookies(headers, req);
+          return new Response("Unauthorized", { status: 401, headers });
+        }
+
+        persistence.revokeRefreshToken(stored.id);
+        const user = persistence.getUserById(stored.userId);
+        if (!user) {
+          const headers = new Headers();
+          clearAuthCookies(headers, req);
+          return new Response("Unauthorized", { status: 401, headers });
+        }
+
+        const headers = issueSessionTokens(req, user.id);
+        return new Response(JSON.stringify(buildAuthUserResponse(user.id, user.email)), {
+          status: 200,
+          headers,
+        });
+      },
+    },
+    "/api/auth/logout": {
+      POST: (req: Request) => {
+        const cookies = parseCookies(req.headers.get("cookie"));
+        const refreshToken = cookies[REFRESH_TOKEN_COOKIE];
+        if (refreshToken) {
+          const stored = persistence.getActiveRefreshTokenByHash(hashToken(refreshToken));
+          if (stored) {
+            persistence.revokeRefreshToken(stored.id);
+          }
+        }
+
+        const headers = new Headers({ "Content-Type": "application/json" });
+        clearAuthCookies(headers, req);
+        return new Response(JSON.stringify({ ok: true }), { status: 200, headers });
+      },
+    },
+    "/api/auth/me": {
+      GET: (req: Request) => {
+        const auth = requireAuthenticatedUser(req);
+        if (auth instanceof Response) {
+          return auth;
+        }
+
+        const user = persistence.getUserById(auth.userId);
+        if (!user) {
+          return unauthorizedResponse();
+        }
+
+        return Response.json(buildAuthUserResponse(user.id, user.email));
+      },
+    },
     "/api/meetings/:meetingId/images/:imageId": async (req: Request) => {
+      const auth = requireAuthenticatedUser(req);
+      if (auth instanceof Response) {
+        return auth;
+      }
+
       const url = new URL(req.url);
       const match = url.pathname.match(/^\/api\/meetings\/([^/]+)\/images\/(\d+)$/);
       if (!match) {
@@ -237,7 +555,7 @@ const server = Bun.serve<WSContext>({
       }
 
       // Get image with meeting ownership validation
-      const image = persistence.getImageByIdAndMeetingId(imageId, meetingId);
+      const image = persistence.getImageByIdAndMeetingId(imageId, meetingId, auth.userId);
       if (!image) {
         return new Response("Not Found", { status: 404 });
       }
@@ -245,6 +563,11 @@ const server = Bun.serve<WSContext>({
       return serveMediaFile("images", image.filePath.replace(/^.*\/images\//, ""));
     },
     "/api/meetings/:meetingId/captures/:captureId": async (req: Request) => {
+      const auth = requireAuthenticatedUser(req);
+      if (auth instanceof Response) {
+        return auth;
+      }
+
       const url = new URL(req.url);
       const match = url.pathname.match(/^\/api\/meetings\/([^/]+)\/captures\/(\d+)$/);
       if (!match) {
@@ -259,7 +582,7 @@ const server = Bun.serve<WSContext>({
       }
 
       // Get capture with meeting ownership validation
-      const capture = persistence.getCaptureByIdAndMeetingId(captureId, meetingId);
+      const capture = persistence.getCaptureByIdAndMeetingId(captureId, meetingId, auth.userId);
       if (!capture) {
         return new Response("Not Found", { status: 404 });
       }
@@ -268,6 +591,11 @@ const server = Bun.serve<WSContext>({
     },
     "/api/meetings/:meetingId/audio": {
       POST: async (req: Request) => {
+        const auth = requireAuthenticatedUser(req);
+        if (auth instanceof Response) {
+          return auth;
+        }
+
         const url = new URL(req.url);
         const match = url.pathname.match(/^\/api\/meetings\/([^/]+)\/audio$/);
         if (!match) {
@@ -280,7 +608,7 @@ const server = Bun.serve<WSContext>({
         }
 
         // Verify meeting exists
-        const meeting = persistence.getMeeting(meetingId);
+        const meeting = persistence.getMeeting(meetingId, auth.userId);
         if (!meeting) {
           return new Response("Meeting not found", { status: 404 });
         }
@@ -291,11 +619,17 @@ const server = Bun.serve<WSContext>({
           return new Response("Content-Type must be audio/webm", { status: 415 });
         }
 
-        // Check file size (100 MB limit)
-        const MAX_AUDIO_SIZE = 100 * 1024 * 1024;
-        const contentLength = req.headers.get("content-length");
-        if (contentLength && parseInt(contentLength, 10) > MAX_AUDIO_SIZE) {
-          return new Response("File too large", { status: 413 });
+        // Check file size (2 GB limit). Content-Length is optional; actual stream size is enforced.
+        const maxAudioSize = UPLOAD_CONFIG.maxAudioUploadBytes;
+        const contentLengthHeader = req.headers.get("content-length");
+        if (contentLengthHeader) {
+          const contentLength = parseContentLengthHeader(contentLengthHeader);
+          if (contentLength === null) {
+            return new Response("Invalid Content-Length header", { status: 400 });
+          }
+          if (contentLength > maxAudioSize) {
+            return new Response("File too large", { status: 413 });
+          }
         }
 
         // Get session ID from header
@@ -305,33 +639,49 @@ const server = Bun.serve<WSContext>({
         }
 
         // Verify session exists and belongs to meeting
-        const persistedSession = persistence.getSessionByIdAndMeetingId(sessionId, meetingId);
+        const persistedSession = persistence.getSessionByIdAndMeetingId(
+          sessionId,
+          meetingId,
+          auth.userId,
+        );
         if (!persistedSession) {
           return new Response("Session not found", { status: 404 });
         }
 
-        try {
-          const buffer = await req.arrayBuffer();
-          if (buffer.byteLength === 0) {
-            return new Response("Empty body", { status: 400 });
-          }
-          if (buffer.byteLength > MAX_AUDIO_SIZE) {
-            return new Response("File too large", { status: 413 });
-          }
+        if (!req.body) {
+          return new Response("Empty body", { status: 400 });
+        }
 
-          const recording = await persistence.persistAudioRecording(sessionId, meetingId, buffer);
+        try {
+          const recording = await persistence.persistAudioRecordingFromStream(
+            sessionId,
+            meetingId,
+            req.body,
+            maxAudioSize,
+          );
 
           return Response.json({
             id: recording.id,
             url: `/api/meetings/${meetingId}/audio/${recording.id}`,
           });
         } catch (error) {
+          if (error instanceof EmptyAudioUploadError) {
+            return new Response("Empty body", { status: 400 });
+          }
+          if (error instanceof AudioUploadTooLargeError) {
+            return new Response("File too large", { status: 413 });
+          }
           console.error("[API] Failed to save audio:", error);
           return new Response("Failed to save audio recording", { status: 500 });
         }
       },
     },
     "/api/meetings/:meetingId/audio/:audioId": async (req: Request) => {
+      const auth = requireAuthenticatedUser(req);
+      if (auth instanceof Response) {
+        return auth;
+      }
+
       const url = new URL(req.url);
       const match = url.pathname.match(/^\/api\/meetings\/([^/]+)\/audio\/(\d+)$/);
       if (!match) {
@@ -344,7 +694,11 @@ const server = Bun.serve<WSContext>({
         return new Response("Invalid meeting ID", { status: 400 });
       }
 
-      const recording = persistence.getAudioRecordingByIdAndMeetingId(audioId, meetingId);
+      const recording = persistence.getAudioRecordingByIdAndMeetingId(
+        audioId,
+        meetingId,
+        auth.userId,
+      );
       if (!recording) {
         return new Response("Not Found", { status: 404 });
       }
@@ -352,6 +706,11 @@ const server = Bun.serve<WSContext>({
       return serveMediaFile("audio", recording.filePath.replace(/^.*\/audio\//, ""));
     },
     "/api/meetings/:meetingId/report.zip": async (req: Request) => {
+      const auth = requireAuthenticatedUser(req);
+      if (auth instanceof Response) {
+        return auth;
+      }
+
       const url = new URL(req.url);
       const match = url.pathname.match(/^\/api\/meetings\/([^/]+)\/report\.zip$/);
       if (!match) {
@@ -364,7 +723,7 @@ const server = Bun.serve<WSContext>({
       }
 
       // Verify meeting exists
-      const meeting = persistence.getMeeting(meetingId);
+      const meeting = persistence.getMeeting(meetingId, auth.userId);
       if (!meeting) {
         return new Response("Meeting not found", { status: 404 });
       }
@@ -404,9 +763,23 @@ const server = Bun.serve<WSContext>({
       }
     },
     "/ws/recording": (req: Request, server: Server<WSContext>) => {
+      const originValidationResult = validateWebSocketOrigin(req, WS_ALLOWED_ORIGINS);
+      if (!originValidationResult.ok) {
+        console.warn(
+          `[WS] Rejected upgrade by Origin validation (${originValidationResult.reason}): origin=${req.headers.get("origin") ?? "(missing)"}, url=${req.url}`,
+        );
+        return new Response("Forbidden", { status: 403 });
+      }
+
+      const auth = requireAuthenticatedUser(req);
+      if (auth instanceof Response) {
+        return auth;
+      }
+
       const sessionId = generateSessionId();
       const success = server.upgrade(req, {
         data: {
+          userId: auth.userId,
           sessionId,
           meetingId: null,
           session: createSession(sessionId),
@@ -415,6 +788,7 @@ const server = Bun.serve<WSContext>({
           checkInterval: null,
           imageModelPreset: "flash",
           pendingAudio: [],
+          pendingAudioBytes: 0,
           pendingUtteranceEndCount: 0,
         } satisfies WSContext,
       });
@@ -441,12 +815,26 @@ const server = Bun.serve<WSContext>({
       if (message instanceof ArrayBuffer || message instanceof Buffer) {
         if (ctx.deepgram?.isConnected()) {
           ctx.deepgram.sendAudio(message);
-        } else if (ctx.pendingAudio.length < WS_CONFIG.maxPendingAudioChunks) {
-          // Buffer audio until Deepgram is ready (preserves WebM header)
-          // Limit buffer size to prevent memory exhaustion
-          ctx.pendingAudio.push(message);
+        } else {
+          const incomingBytes = message.byteLength;
+          const guardResult = canBufferPendingAudio({
+            incomingBytes,
+            pendingChunks: ctx.pendingAudio.length,
+            pendingBytes: ctx.pendingAudioBytes,
+            limits: WS_CONFIG,
+          });
+
+          if (guardResult.canBuffer) {
+            // Buffer audio until Deepgram is ready (preserves WebM header)
+            ctx.pendingAudio.push(message);
+            ctx.pendingAudioBytes += incomingBytes;
+          } else {
+            console.warn(
+              `[WS] Dropped pending audio chunk (${guardResult.reason}): session=${ctx.sessionId}, bytes=${incomingBytes}`,
+            );
+          }
         }
-        // Drop audio if buffer is full to prevent DoS
+        // Drop audio if limits are exceeded to prevent DoS
         return;
       }
 
@@ -533,14 +921,18 @@ function captureToUrl(meetingId: string, captureId: number): string {
 /**
  * Send meeting history data to the client when joining an existing meeting.
  */
-function sendMeetingHistory(ws: ServerWebSocket<WSContext>, meetingId: string): void {
+function sendMeetingHistory(
+  ws: ServerWebSocket<WSContext>,
+  meetingId: string,
+  userId: string,
+): void {
   try {
     // Load all historical data
-    const transcripts = persistence.loadMeetingTranscript(meetingId);
-    const analyses = persistence.loadMeetingAnalyses(meetingId);
-    const images = persistence.loadMeetingImages(meetingId);
-    const captures = persistence.loadMeetingCaptures(meetingId);
-    const metaSummaries = persistence.loadMetaSummaries(meetingId);
+    const transcripts = persistence.loadMeetingTranscript(meetingId, userId);
+    const analyses = persistence.loadMeetingAnalyses(meetingId, userId);
+    const images = persistence.loadMeetingImages(meetingId, userId);
+    const captures = persistence.loadMeetingCaptures(meetingId, userId);
+    const metaSummaries = persistence.loadMetaSummaries(meetingId, userId);
 
     const historyMessage: MeetingHistoryMessage = {
       type: "meeting:history",
@@ -613,7 +1005,7 @@ function handleMeetingStart(
       }
 
       // Join existing meeting
-      const existing = persistence.getMeeting(data.meetingId);
+      const existing = persistence.getMeeting(data.meetingId, ctx.userId);
       if (!existing) {
         send(ws, {
           type: "error",
@@ -626,7 +1018,7 @@ function handleMeetingStart(
       isExistingMeeting = true;
     } else {
       // Create new meeting
-      const meeting = persistence.createMeeting(data.title);
+      const meeting = persistence.createMeeting(data.title, ctx.userId);
       meetingId = meeting.id;
       title = meeting.title ?? undefined;
     }
@@ -643,7 +1035,7 @@ function handleMeetingStart(
 
     // Send historical data for existing meetings
     if (isExistingMeeting) {
-      sendMeetingHistory(ws, meetingId);
+      sendMeetingHistory(ws, meetingId, ctx.userId);
     }
 
     console.log(`[WS] Meeting started: ${meetingId}, session: ${ctx.sessionId}`);
@@ -658,14 +1050,14 @@ function handleMeetingStart(
 
 function handleMeetingStop(ws: ServerWebSocket<WSContext>, ctx: WSContext): void {
   if (ctx.meetingId) {
-    persistence.endMeeting(ctx.meetingId);
+    persistence.endMeeting(ctx.meetingId, ctx.userId);
     console.log(`[WS] Meeting ended: ${ctx.meetingId}`);
     ctx.meetingId = null;
   }
 }
 
 function handleMeetingListRequest(ws: ServerWebSocket<WSContext>): void {
-  const meetings = persistence.listMeetings(50);
+  const meetings = persistence.listMeetings(50, ws.data.userId);
   send(ws, {
     type: "meeting:list",
     data: {
@@ -694,7 +1086,14 @@ function handleMeetingUpdate(
   }
 
   try {
-    persistence.updateMeetingTitle(ctx.meetingId, data.title);
+    const updated = persistence.updateMeetingTitle(ctx.meetingId, data.title, ctx.userId);
+    if (!updated) {
+      send(ws, {
+        type: "error",
+        data: { message: "Meeting not found", code: "MEETING_NOT_FOUND" },
+      });
+      return;
+    }
 
     send(ws, {
       type: "meeting:status",
@@ -863,6 +1262,7 @@ async function handleSessionStart(ws: ServerWebSocket<WSContext>, ctx: WSContext
         ctx.deepgram.sendAudio(audio);
       }
       ctx.pendingAudio.length = 0;
+      ctx.pendingAudioBytes = 0;
     }
 
     ctx.session = startSession(ctx.session);

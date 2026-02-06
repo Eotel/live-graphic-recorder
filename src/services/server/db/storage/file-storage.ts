@@ -12,6 +12,25 @@ import { DB_CONFIG } from "@/config/constants";
 // Pattern for valid session IDs (UUID format or session-timestamp-random format)
 const VALID_SESSION_ID_PATTERN = /^[a-zA-Z0-9_-]+$/;
 
+export class AudioUploadTooLargeError extends Error {
+  readonly maxBytes: number;
+  readonly actualBytes: number;
+
+  constructor(maxBytes: number, actualBytes: number) {
+    super("File too large");
+    this.name = "AudioUploadTooLargeError";
+    this.maxBytes = maxBytes;
+    this.actualBytes = actualBytes;
+  }
+}
+
+export class EmptyAudioUploadError extends Error {
+  constructor() {
+    super("Empty body");
+    this.name = "EmptyAudioUploadError";
+  }
+}
+
 export class FileStorageService {
   private readonly basePath: string;
   private readonly resolvedBasePath: string;
@@ -129,6 +148,86 @@ export class FileStorageService {
     await Bun.write(filePath, buffer);
 
     return { filePath };
+  }
+
+  /**
+   * Save an audio stream to disk while enforcing a maximum size.
+   * @throws Error if sessionId contains invalid characters
+   * @throws AudioUploadTooLargeError when stream exceeds maxBytes
+   * @throws EmptyAudioUploadError when stream contains no bytes
+   */
+  async saveAudioFileFromStream(
+    sessionId: string,
+    stream: ReadableStream<Uint8Array>,
+    maxBytes: number,
+  ): Promise<{ filePath: string; fileSizeBytes: number }> {
+    if (!Number.isFinite(maxBytes) || maxBytes <= 0) {
+      throw new Error(`Invalid maxBytes: ${maxBytes}`);
+    }
+
+    const validSessionId = this.validateSessionId(sessionId);
+    const dir = this.getAudioDir(validSessionId);
+    this.ensureDir(dir);
+
+    const filename = `${Date.now()}.webm`;
+    const filePath = join(dir, filename);
+
+    const writer = Bun.file(filePath).writer();
+    const reader = stream.getReader();
+    let fileSizeBytes = 0;
+    let completed = false;
+
+    try {
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) {
+          break;
+        }
+        if (!value || value.byteLength === 0) {
+          continue;
+        }
+
+        fileSizeBytes += value.byteLength;
+        if (fileSizeBytes > maxBytes) {
+          throw new AudioUploadTooLargeError(maxBytes, fileSizeBytes);
+        }
+        writer.write(value);
+      }
+
+      if (fileSizeBytes === 0) {
+        throw new EmptyAudioUploadError();
+      }
+
+      await writer.end();
+      completed = true;
+      return { filePath, fileSizeBytes };
+    } catch (error) {
+      try {
+        await writer.end(error instanceof Error ? error : undefined);
+      } catch {
+        // Ignore writer shutdown errors during cleanup.
+      }
+      try {
+        await reader.cancel();
+      } catch {
+        // Ignore reader cancellation errors during cleanup.
+      }
+      throw error;
+    } finally {
+      try {
+        reader.releaseLock();
+      } catch {
+        // Ignore lock release errors during cleanup.
+      }
+
+      if (!completed) {
+        try {
+          rmSync(filePath, { force: true });
+        } catch {
+          // Ignore partial file cleanup errors.
+        }
+      }
+    }
   }
 
   /**

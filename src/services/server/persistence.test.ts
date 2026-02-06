@@ -7,12 +7,22 @@
 
 import { describe, test, expect, beforeEach, afterEach } from "bun:test";
 import { PersistenceService } from "./persistence";
-import { existsSync, rmSync } from "node:fs";
+import { existsSync, readdirSync, rmSync } from "node:fs";
+import { join } from "node:path";
 
 describe("PersistenceService", () => {
   const testDbPath = ":memory:";
   const testMediaPath = "/tmp/test-persistence-media";
   let service: PersistenceService;
+  const createStream = (chunks: number[]): ReadableStream<Uint8Array> =>
+    new ReadableStream<Uint8Array>({
+      start(controller) {
+        for (const size of chunks) {
+          controller.enqueue(new Uint8Array(size));
+        }
+        controller.close();
+      },
+    });
 
   beforeEach(() => {
     if (existsSync(testMediaPath)) {
@@ -88,6 +98,52 @@ describe("PersistenceService", () => {
 
       const ended = service.getMeeting(meeting.id);
       expect(ended?.endedAt).toBeGreaterThan(0);
+    });
+
+    test("scopes meeting list by owner user id", () => {
+      service.createMeeting("User 1 A", "user-1");
+      service.createMeeting("User 1 B", "user-1");
+      service.createMeeting("User 2 A", "user-2");
+
+      const user1Meetings = service.listMeetings(undefined, "user-1");
+      const user2Meetings = service.listMeetings(undefined, "user-2");
+
+      expect(user1Meetings).toHaveLength(2);
+      expect(user2Meetings).toHaveLength(1);
+    });
+
+    test("claims legacy meetings for first logged-in user", () => {
+      service.createMeeting("Legacy 1");
+      service.createMeeting("Legacy 2");
+      service.createMeeting("Owned", "user-2");
+
+      const claimed = service.claimLegacyMeetingsForUser("user-1");
+
+      expect(claimed).toBe(2);
+      expect(service.listMeetings(undefined, "user-1")).toHaveLength(2);
+      expect(service.listMeetings(undefined, "user-2")).toHaveLength(1);
+    });
+  });
+
+  describe("User/Auth operations", () => {
+    test("creates and fetches a user", () => {
+      const user = service.createUser("alice@example.com", "hash-value");
+
+      expect(service.getUserById(user.id)?.email).toBe("alice@example.com");
+      expect(service.getUserByEmail("alice@example.com")?.id).toBe(user.id);
+    });
+
+    test("creates, finds, and revokes refresh token", () => {
+      const user = service.createUser("alice@example.com", "hash-value");
+      const token = service.createRefreshToken(user.id, "token-hash", Date.now() + 60_000);
+
+      const active = service.getActiveRefreshTokenByHash("token-hash");
+      expect(active?.id).toBe(token.id);
+
+      service.revokeRefreshToken(token.id);
+
+      const revoked = service.getActiveRefreshTokenByHash("token-hash");
+      expect(revoked).toBeNull();
     });
   });
 
@@ -378,6 +434,55 @@ describe("PersistenceService", () => {
       expect(captures).toHaveLength(1);
       expect(captures[0]!.timestamp).toBe(1234567890);
       expect(captures[0]!.filePath).toBeDefined();
+    });
+  });
+
+  describe("Audio recording persistence", () => {
+    let meetingId: string;
+    let sessionId: string;
+
+    beforeEach(() => {
+      const meeting = service.createMeeting();
+      meetingId = meeting.id;
+      sessionId = "audio-session";
+      service.createSession(meetingId, sessionId);
+    });
+
+    test("persists streamed audio and stores accurate file size", async () => {
+      const recording = await service.persistAudioRecordingFromStream(
+        sessionId,
+        meetingId,
+        createStream([64, 128, 256]),
+        1024,
+      );
+
+      expect(recording.sessionId).toBe(sessionId);
+      expect(recording.meetingId).toBe(meetingId);
+      expect(recording.fileSizeBytes).toBe(448);
+      expect(existsSync(recording.filePath)).toBe(true);
+    });
+
+    test("rejects oversized streamed audio and leaves no partial files", async () => {
+      const audioDir = join(testMediaPath, "audio", sessionId);
+
+      await expect(
+        service.persistAudioRecordingFromStream(
+          sessionId,
+          meetingId,
+          createStream([700, 700]),
+          1024,
+        ),
+      ).rejects.toThrow("File too large");
+
+      if (existsSync(audioDir)) {
+        expect(readdirSync(audioDir)).toHaveLength(0);
+      }
+    });
+
+    test("rejects empty streamed audio", async () => {
+      await expect(
+        service.persistAudioRecordingFromStream(sessionId, meetingId, createStream([]), 1024),
+      ).rejects.toThrow("Empty body");
     });
   });
 

@@ -82,6 +82,10 @@ export const WS_CONFIG = {
   pingInterval: 30000,
   /** Maximum pending audio chunks before Deepgram connection (prevents DoS) */
   maxPendingAudioChunks: 100,
+  /** Maximum size per pending audio chunk before Deepgram connection */
+  maxPendingAudioChunkBytes: 256 * 1024, // 256KB
+  /** Maximum total bytes for all pending audio chunks before Deepgram connection */
+  maxPendingAudioTotalBytes: 4 * 1024 * 1024, // 4MB
   reconnect: {
     connectTimeoutMs: 4000,
     initialBackoffMs: 250,
@@ -99,6 +103,15 @@ export const AUDIO_CONFIG = {
   channelCount: 1,
   mimeType: "audio/webm;codecs=opus",
   timesliceMs: 250,
+} as const;
+
+// ============================================================================
+// Upload Settings
+// ============================================================================
+
+export const UPLOAD_CONFIG = {
+  /** Maximum audio upload size in bytes (2GB) */
+  maxAudioUploadBytes: 2 * 1024 * 1024 * 1024,
 } as const;
 
 // ============================================================================

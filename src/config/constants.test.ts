@@ -6,7 +6,7 @@
  */
 
 import { describe, test, expect } from "bun:test";
-import { DEEPGRAM_CONFIG, AUDIO_CONFIG } from "./constants";
+import { DEEPGRAM_CONFIG, AUDIO_CONFIG, WS_CONFIG, UPLOAD_CONFIG } from "./constants";
 
 describe("DEEPGRAM_CONFIG", () => {
   test("should have required model setting", () => {
@@ -46,5 +46,25 @@ describe("AUDIO_CONFIG", () => {
 
   test("should have single channel for mono audio", () => {
     expect(AUDIO_CONFIG.channelCount).toBe(1);
+  });
+});
+
+describe("WS_CONFIG", () => {
+  test("should keep pending audio chunk count limit", () => {
+    expect(WS_CONFIG.maxPendingAudioChunks).toBe(100);
+  });
+
+  test("should define pending audio chunk size limit", () => {
+    expect(WS_CONFIG.maxPendingAudioChunkBytes).toBe(256 * 1024);
+  });
+
+  test("should define pending audio total size limit", () => {
+    expect(WS_CONFIG.maxPendingAudioTotalBytes).toBe(4 * 1024 * 1024);
+  });
+});
+
+describe("UPLOAD_CONFIG", () => {
+  test("should define maximum audio upload size for long meetings", () => {
+    expect(UPLOAD_CONFIG.maxAudioUploadBytes).toBe(2 * 1024 * 1024 * 1024);
   });
 });

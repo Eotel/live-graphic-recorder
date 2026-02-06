@@ -6,8 +6,12 @@
  */
 
 import { describe, test, expect, beforeEach, afterEach } from "bun:test";
-import { FileStorageService } from "./file-storage";
-import { existsSync, rmSync } from "node:fs";
+import {
+  AudioUploadTooLargeError,
+  EmptyAudioUploadError,
+  FileStorageService,
+} from "./file-storage";
+import { existsSync, readdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
 
 describe("FileStorageService", () => {
@@ -28,6 +32,16 @@ describe("FileStorageService", () => {
       rmSync(testMediaPath, { recursive: true });
     }
   });
+
+  const createStream = (chunks: number[]): ReadableStream<Uint8Array> =>
+    new ReadableStream<Uint8Array>({
+      start(controller) {
+        for (const size of chunks) {
+          controller.enqueue(new Uint8Array(size));
+        }
+        controller.close();
+      },
+    });
 
   describe("saveImage", () => {
     test("saves PNG image and returns file path", async () => {
@@ -82,6 +96,49 @@ describe("FileStorageService", () => {
       expect(result.filePath).toContain("captures");
       expect(result.filePath).toEndWith(".jpg");
       expect(existsSync(result.filePath)).toBe(true);
+    });
+  });
+
+  describe("saveAudioFileFromStream", () => {
+    test("saves streamed audio and returns file path and size", async () => {
+      const sessionId = "audio-session-1";
+      const stream = createStream([10, 15, 5]);
+
+      const result = await storage.saveAudioFileFromStream(sessionId, stream, 1024);
+
+      expect(result.fileSizeBytes).toBe(30);
+      expect(result.filePath).toContain("audio");
+      expect(result.filePath).toContain(sessionId);
+      expect(result.filePath).toEndWith(".webm");
+      expect(existsSync(result.filePath)).toBe(true);
+    });
+
+    test("throws EmptyAudioUploadError for empty stream and leaves no file", async () => {
+      const sessionId = "audio-empty";
+      const stream = createStream([]);
+      const audioDir = join(testMediaPath, "audio", sessionId);
+
+      await expect(storage.saveAudioFileFromStream(sessionId, stream, 1024)).rejects.toBeInstanceOf(
+        EmptyAudioUploadError,
+      );
+
+      if (existsSync(audioDir)) {
+        expect(readdirSync(audioDir)).toHaveLength(0);
+      }
+    });
+
+    test("throws AudioUploadTooLargeError and removes partial file", async () => {
+      const sessionId = "audio-too-large";
+      const stream = createStream([800, 500]);
+      const audioDir = join(testMediaPath, "audio", sessionId);
+
+      await expect(storage.saveAudioFileFromStream(sessionId, stream, 1024)).rejects.toBeInstanceOf(
+        AudioUploadTooLargeError,
+      );
+
+      if (existsSync(audioDir)) {
+        expect(readdirSync(audioDir)).toHaveLength(0);
+      }
     });
   });
 
