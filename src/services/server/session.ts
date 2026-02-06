@@ -52,7 +52,7 @@ export function setSessionStatus(session: SessionState, status: SessionStatus): 
 }
 
 export function addTranscript(session: SessionState, segment: TranscriptSegment): SessionState {
-  const wordCount = segment.text.split(/\s+/).filter(Boolean).length;
+  const wordCount = segment.isFinal ? segment.text.split(/\s+/).filter(Boolean).length : 0;
 
   return {
     ...session,
@@ -109,6 +109,8 @@ export function shouldTriggerAnalysis(session: SessionState, intervalMs: number)
 
   // Must have at least some words since last analysis
   if (session.wordsSinceLastAnalysis === 0) return false;
+  // Must have final transcript content available for analysis
+  if (!getTranscriptSinceLastAnalysis(session).trim()) return false;
 
   const timeSinceLastAnalysis = Date.now() - session.lastAnalysisAt;
   const hasEnoughTime = timeSinceLastAnalysis >= intervalMs;

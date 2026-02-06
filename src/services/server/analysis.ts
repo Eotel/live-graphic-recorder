@@ -86,6 +86,7 @@ export function createAnalysisService(
   async function checkAndTrigger(session: SessionState): Promise<void> {
     if (analysisInProgress) return;
     if (!shouldTriggerAnalysis(session, ANALYSIS_INTERVAL_MS)) return;
+    if (!getTranscriptSinceLastAnalysis(session).trim()) return;
 
     analysisInProgress = true;
     events.onPhaseChange("analyzing");

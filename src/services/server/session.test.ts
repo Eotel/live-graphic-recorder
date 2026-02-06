@@ -80,6 +80,16 @@ describe("SessionService", () => {
 
       expect(updated.wordsSinceLastAnalysis).toBe(6);
     });
+
+    test("should not count words from interim segments", () => {
+      const updated = addTranscript(session, {
+        text: "interim transcript words",
+        timestamp: Date.now(),
+        isFinal: false,
+      });
+
+      expect(updated.wordsSinceLastAnalysis).toBe(0);
+    });
   });
 
   describe("getFullTranscript", () => {
@@ -116,7 +126,14 @@ describe("SessionService", () => {
       started = {
         ...started,
         lastAnalysisAt: Date.now() - 5000,
-        wordsSinceLastAnalysis: 10,
+        wordsSinceLastAnalysis: 2,
+        transcript: [
+          {
+            text: "final words",
+            timestamp: Date.now(),
+            isFinal: true,
+          },
+        ],
       };
 
       expect(shouldTriggerAnalysis(started, 3000)).toBe(true);
@@ -128,6 +145,13 @@ describe("SessionService", () => {
       started = {
         ...started,
         wordsSinceLastAnalysis: 500,
+        transcript: [
+          {
+            text: "final transcript available",
+            timestamp: Date.now(),
+            isFinal: true,
+          },
+        ],
       };
 
       expect(shouldTriggerAnalysis(started, 999999999)).toBe(true);
@@ -143,6 +167,39 @@ describe("SessionService", () => {
       };
 
       expect(shouldTriggerAnalysis(started, 3000)).toBe(false);
+    });
+
+    test("should return false when only interim transcript exists", () => {
+      let started = startSession(session);
+      started = {
+        ...started,
+        lastAnalysisAt: Date.now() - 5000,
+        wordsSinceLastAnalysis: 10,
+        transcript: [
+          {
+            text: "still interim",
+            timestamp: Date.now(),
+            isFinal: false,
+          },
+        ],
+      };
+
+      expect(shouldTriggerAnalysis(started, 3000)).toBe(false);
+    });
+
+    test("should return true after final transcript arrives", () => {
+      let started = startSession(session);
+      started = {
+        ...started,
+        lastAnalysisAt: Date.now() - 5000,
+      };
+      started = addTranscript(started, {
+        text: "final segment arrived",
+        timestamp: Date.now(),
+        isFinal: true,
+      });
+
+      expect(shouldTriggerAnalysis(started, 3000)).toBe(true);
     });
   });
 
