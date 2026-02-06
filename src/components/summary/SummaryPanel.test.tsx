@@ -255,13 +255,15 @@ describe("SummaryPanel", () => {
       expect(screen.getByText("Page 3 Point B")).toBeDefined();
     });
 
-    test("shows navigation controls when multiple pages exist", () => {
+    test("shows centered pager when multiple pages exist", () => {
       render(
         <SummaryPanel summaryPages={createPages()} transcriptSegments={[]} interimText={null} />,
       );
 
       expect(screen.getByRole("button", { name: /previous/i })).toBeDefined();
       expect(screen.getByRole("button", { name: /next/i })).toBeDefined();
+      const pager = screen.getByTestId("summary-page-pager");
+      expect(pager.className).toContain("justify-center");
     });
 
     test("shows page counter", () => {
@@ -336,6 +338,7 @@ describe("SummaryPanel", () => {
       expect(screen.queryByRole("button", { name: /previous/i })).toBeNull();
       expect(screen.queryByRole("button", { name: /next/i })).toBeNull();
       expect(screen.queryByText(/\d+\/\d+/)).toBeNull();
+      expect(screen.queryByTestId("summary-page-pager")).toBeNull();
     });
 
     test("swipe left on summary area navigates to next page", () => {

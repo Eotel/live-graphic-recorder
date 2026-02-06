@@ -6,6 +6,7 @@
  */
 
 import { useState, useEffect, useMemo, useRef, type TouchEvent } from "react";
+import { Button } from "@/components/ui/button";
 import { useAutoScroll } from "@/hooks/useAutoScroll";
 import { cn } from "@/lib/utils";
 import type { TranscriptSegment, SummaryPage } from "@/types/messages";
@@ -136,6 +137,33 @@ export function SummaryPanel({
               </li>
             ))}
           </ul>
+          {hasMultiplePages && (
+            <div className="mt-2 flex justify-center" data-testid="summary-page-pager">
+              <div className="inline-flex items-center gap-1 rounded-full border border-border/60 bg-muted/40 px-2 py-1">
+                <Button
+                  variant="ghost"
+                  size="icon-sm"
+                  className="size-6 rounded-sm text-muted-foreground hover:text-foreground"
+                  onClick={goToPrevious}
+                  aria-label="Previous summary page"
+                >
+                  {"<"}
+                </Button>
+                <span className="px-2 text-xs font-medium leading-none tabular-nums text-muted-foreground">
+                  {currentIndex + 1}/{summaryPages.length}
+                </span>
+                <Button
+                  variant="ghost"
+                  size="icon-sm"
+                  className="size-6 rounded-sm text-muted-foreground hover:text-foreground"
+                  onClick={goToNext}
+                  aria-label="Next summary page"
+                >
+                  {">"}
+                </Button>
+              </div>
+            </div>
+          )}
         </div>
       ) : null}
 
