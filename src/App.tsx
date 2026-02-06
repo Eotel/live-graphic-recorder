@@ -43,6 +43,11 @@ import { useBeforeUnloadGuard } from "@/hooks/useBeforeUnloadGuard";
 import { useAuth } from "@/hooks/useAuth";
 import { useMeetingSession } from "@/hooks/useMeetingSession";
 import { shouldAutoConnect } from "@/logic/connection-guards";
+import {
+  hasLocalAudioFile,
+  hasUnsavedRecording,
+  shouldClearLocalFileOnUpload,
+} from "@/logic/unsaved-recording";
 import type { CameraFrame } from "@/types/messages";
 
 type View = "select" | "recording";
@@ -140,7 +145,9 @@ export function App() {
   localRecordingRef.current = localRecording;
 
   const handleUploadComplete = useCallback((uploadedSessionId: string) => {
-    if (uploadedSessionId !== localRecordingRef.current.sessionId) {
+    if (
+      !shouldClearLocalFileOnUpload(true, uploadedSessionId, localRecordingRef.current.sessionId)
+    ) {
       return;
     }
     setHasLocalFile(false);
@@ -172,7 +179,7 @@ export function App() {
     session.stopSession();
     localRecordingRef.current.stop();
     setHasLocalFile(
-      localRecordingRef.current.sessionId !== null && localRecordingRef.current.totalChunks > 0,
+      hasLocalAudioFile(localRecordingRef.current.sessionId, localRecordingRef.current.totalChunks),
     );
   }, [session]);
 
@@ -334,16 +341,23 @@ export function App() {
   const { formattedTime: elapsedTime } = useElapsedTime({ enabled: recording.isRecording });
 
   useEffect(() => {
-    if (!hasLocalFile) return;
-    const localSessionId = localRecording.sessionId;
-    if (!localSessionId) return;
-    if (audioUpload.lastUploadedSessionId !== localSessionId) return;
-    setHasLocalFile(false);
+    if (
+      shouldClearLocalFileOnUpload(
+        hasLocalFile,
+        audioUpload.lastUploadedSessionId,
+        localRecording.sessionId,
+      )
+    ) {
+      setHasLocalFile(false);
+    }
   }, [audioUpload.lastUploadedSessionId, hasLocalFile, localRecording.sessionId]);
 
-  const hasUnsavedRecording =
-    recording.isRecording || (hasLocalFile && localRecording.sessionId !== null);
-  useBeforeUnloadGuard(hasUnsavedRecording);
+  const hasUnsavedRecordingFlag = hasUnsavedRecording(
+    recording.isRecording,
+    hasLocalFile,
+    localRecording.sessionId,
+  );
+  useBeforeUnloadGuard(hasUnsavedRecordingFlag);
 
   // Camera frame capture
   const onFrameCaptured = useCallback(
@@ -511,7 +525,7 @@ export function App() {
               <MeetingHeader
                 title={session.meeting.meetingTitle}
                 onBack={handleBack}
-                hasUnsavedRecording={hasUnsavedRecording}
+                hasUnsavedRecording={hasUnsavedRecordingFlag}
                 onUpdateTitle={session.updateMeetingTitle}
               />
               <TopicIndicator topics={session.topics} />

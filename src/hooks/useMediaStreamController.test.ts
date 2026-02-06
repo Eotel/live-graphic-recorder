@@ -5,7 +5,7 @@
  * Related: src/hooks/useMediaStreamController.ts, src/logic/media-stream-controller.ts
  */
 
-import { describe, test, expect, mock, beforeEach } from "bun:test";
+import { describe, test, expect, mock, beforeEach, afterAll } from "bun:test";
 import { renderHook, act } from "@testing-library/react";
 import { StrictMode, createElement } from "react";
 import type { MediaDevicesAdapter, StreamUtils } from "../adapters/types";
@@ -134,4 +134,8 @@ describe("useMediaStreamController", () => {
     unmount();
     // Should not crash
   });
+});
+
+afterAll(() => {
+  mock.restore();
 });

@@ -5,7 +5,7 @@
  * Related: src/services/server/openai.ts
  */
 
-import { describe, test, expect, mock, beforeEach, afterEach } from "bun:test";
+import { describe, test, expect, mock, beforeEach, afterEach, afterAll } from "bun:test";
 
 // Mock response matching Responses API structure
 const createMockResponse = (
@@ -89,6 +89,10 @@ describe("OpenAIService", () => {
     } else {
       delete process.env["OPENAI_API_KEY"];
     }
+  });
+
+  afterAll(() => {
+    mock.restore();
   });
 
   describe("createOpenAIService", () => {

@@ -5,7 +5,7 @@
  * Related: src/services/server/gemini.ts
  */
 
-import { describe, test, expect, mock, beforeEach, afterEach } from "bun:test";
+import { describe, test, expect, mock, beforeEach, afterEach, afterAll } from "bun:test";
 
 type MockGeminiPart = { inlineData: { data: string } } | { text: string };
 type MockGeminiResponse = {
@@ -55,6 +55,10 @@ describe("GeminiService", () => {
     } else {
       delete process.env["GOOGLE_API_KEY"];
     }
+  });
+
+  afterAll(() => {
+    mock.restore();
   });
 
   test("should throw when GOOGLE_API_KEY is missing", () => {

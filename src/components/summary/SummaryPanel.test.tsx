@@ -5,7 +5,7 @@
  * Related: src/components/summary/SummaryPanel.tsx
  */
 
-import { describe, test, expect, afterEach, mock } from "bun:test";
+import { describe, test, expect, afterEach, afterAll, mock } from "bun:test";
 import { render, screen, cleanup, fireEvent } from "@testing-library/react";
 import { SummaryPanel } from "./SummaryPanel";
 import type { TranscriptSegment, SummaryPage } from "@/types/messages";
@@ -18,6 +18,10 @@ mock.module("@/hooks/useAutoScroll", () => ({
 describe("SummaryPanel", () => {
   afterEach(() => {
     cleanup();
+  });
+
+  afterAll(() => {
+    mock.restore();
   });
 
   describe("transcript display", () => {
