@@ -8,6 +8,7 @@
 
 import { GoogleGenAI } from "@google/genai";
 import { GEMINI_CONFIG } from "@/config/constants";
+import type { ImageModelPreset } from "@/types/messages";
 
 export interface GeneratedImage {
   base64: string;
@@ -17,6 +18,19 @@ export interface GeneratedImage {
 
 export interface GeminiServiceOptions {
   onRetrying?: (attempt: number) => void;
+}
+
+export interface GeminiImageModelConfig {
+  flash: string;
+  pro?: string;
+}
+
+export interface CreateGeminiServiceOptions {
+  /**
+   * Optional model selector. Called for each generation so the model can be
+   * switched dynamically (e.g., via WebSocket toggle).
+   */
+  getModel?: () => string;
 }
 
 export interface GeminiService {
@@ -69,7 +83,21 @@ export function parseRetryDelay(error: unknown): number | null {
   return null;
 }
 
-export function createGeminiService(): GeminiService {
+export function getGeminiImageModelConfig(): GeminiImageModelConfig {
+  const flash = process.env["GEMINI_IMAGE_MODEL_FLASH"] || GEMINI_CONFIG.model;
+  const pro = process.env["GEMINI_IMAGE_MODEL_PRO"] || undefined;
+  return { flash, pro };
+}
+
+export function resolveGeminiImageModel(
+  preset: ImageModelPreset,
+  config: GeminiImageModelConfig = getGeminiImageModelConfig(),
+): string {
+  if (preset === "pro" && config.pro) return config.pro;
+  return config.flash;
+}
+
+export function createGeminiService(options: CreateGeminiServiceOptions = {}): GeminiService {
   const apiKey = process.env["GOOGLE_API_KEY"];
   if (!apiKey) {
     throw new Error("GOOGLE_API_KEY environment variable is required");
@@ -78,8 +106,9 @@ export function createGeminiService(): GeminiService {
   const ai = new GoogleGenAI({ apiKey });
 
   async function doGenerate(fullPrompt: string): Promise<GeneratedImage> {
+    const model = options.getModel?.() ?? GEMINI_CONFIG.model;
     const response = await ai.models.generateContent({
-      model: GEMINI_CONFIG.model,
+      model,
       contents: fullPrompt,
       config: {
         imageConfig: {

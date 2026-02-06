@@ -41,6 +41,8 @@ describe("createMeetingController", () => {
     expect(state.sessionStatus).toBe("idle");
     expect(state.generationPhase).toBe("idle");
     expect(state.error).toBeNull();
+    expect(state.imageModel.preset).toBe("flash");
+    expect(state.imageModel.model).toBe(state.imageModel.available.flash);
     expect(state.meeting.meetingId).toBeNull();
   });
 
@@ -214,6 +216,38 @@ describe("createMeetingController", () => {
     );
 
     expect(controller.getState().generationPhase).toBe("analyzing");
+  });
+
+  test("handles image:model:status message", () => {
+    const wsAdapter = createMockWsAdapter();
+    const onStateChange = mock(() => {});
+
+    const controller = createMeetingController(
+      { wsAdapter, reconnect: { enabled: false, connectTimeoutMs: 0 } },
+      { onStateChange },
+    );
+
+    controller.connect();
+    wsAdapter.lastInstance!.controls.simulateOpen();
+
+    wsAdapter.lastInstance!.controls.simulateMessage(
+      JSON.stringify({
+        type: "image:model:status",
+        data: {
+          preset: "pro",
+          model: "gemini-pro-image",
+          available: {
+            flash: "gemini-flash-image",
+            pro: "gemini-pro-image",
+          },
+        },
+      }),
+    );
+
+    const state = controller.getState();
+    expect(state.imageModel.preset).toBe("pro");
+    expect(state.imageModel.model).toBe("gemini-pro-image");
+    expect(state.imageModel.available.pro).toBe("gemini-pro-image");
   });
 
   test("handles meeting:status message", () => {
@@ -543,6 +577,26 @@ describe("createMeetingController", () => {
     expect(parsed.type).toBe("camera:frame");
     expect(parsed.data.base64).toBe("abc123");
     expect(parsed.data.timestamp).toBe(1000);
+  });
+
+  test("setImageModelPreset sends image:model:set message", () => {
+    const wsAdapter = createMockWsAdapter();
+    const onStateChange = mock(() => {});
+
+    const controller = createMeetingController(
+      { wsAdapter, reconnect: { enabled: false, connectTimeoutMs: 0 } },
+      { onStateChange },
+    );
+
+    controller.connect();
+    wsAdapter.lastInstance!.controls.simulateOpen();
+
+    controller.setImageModelPreset("pro");
+
+    const messages = wsAdapter.lastInstance!.controls.getSentMessages();
+    const parsed = JSON.parse(messages[0] as string);
+    expect(parsed.type).toBe("image:model:set");
+    expect(parsed.data.preset).toBe("pro");
   });
 
   test("reconnects after unexpected close when enabled", async () => {

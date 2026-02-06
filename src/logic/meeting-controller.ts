@@ -5,10 +5,15 @@
  * Related: src/adapters/websocket.ts, src/hooks/useMeetingController.ts
  */
 
-import type { ServerMessage, TranscriptSegment, CameraFrame } from "../types/messages";
+import type {
+  ServerMessage,
+  TranscriptSegment,
+  CameraFrame,
+  ImageModelPreset,
+} from "../types/messages";
 import type { WebSocketAdapter, WebSocketInstance, WebSocketReadyState } from "../adapters/types";
 import { WebSocketReadyState as ReadyState } from "../adapters/types";
-import { WS_CONFIG } from "../config/constants";
+import { WS_CONFIG, GEMINI_CONFIG } from "../config/constants";
 import type {
   MeetingControllerState,
   MeetingControllerActions,
@@ -57,6 +62,13 @@ export function createMeetingController(
     sessionStatus: "idle",
     generationPhase: "idle",
     error: null,
+    imageModel: {
+      preset: "flash",
+      model: GEMINI_CONFIG.model,
+      available: {
+        flash: GEMINI_CONFIG.model,
+      },
+    },
     meeting: {
       meetingId: null,
       meetingTitle: null,
@@ -136,6 +148,16 @@ export function createMeetingController(
         case "error":
           updateState({ error: message.data.message });
           callbacksRef.onError?.(message.data.message);
+          break;
+
+        case "image:model:status":
+          updateState({
+            imageModel: {
+              preset: message.data.preset,
+              model: message.data.model,
+              available: message.data.available,
+            },
+          });
           break;
 
         case "meeting:status":
@@ -382,6 +404,10 @@ export function createMeetingController(
     sendMessage({ type: "camera:frame", data });
   }
 
+  function setImageModelPreset(preset: ImageModelPreset): void {
+    sendMessage({ type: "image:model:set", data: { preset } });
+  }
+
   function setCallbacks(newCallbacks: MeetingControllerCallbacks): void {
     callbacksRef = newCallbacks;
   }
@@ -404,6 +430,7 @@ export function createMeetingController(
     startSession,
     stopSession,
     sendCameraFrame,
+    setImageModelPreset,
     dispose,
   };
 }

@@ -31,7 +31,12 @@ import {
 } from "./services/server/session";
 import { createDeepgramService, type DeepgramService } from "./services/server/deepgram";
 import { createOpenAIService } from "./services/server/openai";
-import { createGeminiService, type GeneratedImage } from "./services/server/gemini";
+import {
+  createGeminiService,
+  getGeminiImageModelConfig,
+  resolveGeminiImageModel,
+  type GeneratedImage,
+} from "./services/server/gemini";
 import { createAnalysisService, type AnalysisService } from "./services/server/analysis";
 import { PersistenceService } from "./services/server/persistence";
 import {
@@ -39,6 +44,7 @@ import {
   generateAndPersistMetaSummary,
 } from "./services/server/meta-summary";
 import type { OpenAIService } from "./services/server/openai";
+import type { ImageModelPreset, ImageModelStatusMessage } from "./types/messages";
 
 // Initialize persistence service
 const persistence = new PersistenceService();
@@ -87,6 +93,7 @@ interface WSContext {
   deepgram: DeepgramService | null;
   analysis: AnalysisService | null;
   checkInterval: ReturnType<typeof setInterval> | null;
+  imageModelPreset: ImageModelPreset;
   // Buffer for audio data received before Deepgram is ready
   pendingAudio: (ArrayBuffer | Buffer)[];
   // UtteranceEnd can arrive before the final transcript is persisted; buffer and apply later.
@@ -342,6 +349,7 @@ const server = Bun.serve<WSContext>({
           deepgram: null,
           analysis: null,
           checkInterval: null,
+          imageModelPreset: "flash",
           pendingAudio: [],
           pendingUtteranceEndCount: 0,
         } satisfies WSContext,
@@ -358,6 +366,7 @@ const server = Bun.serve<WSContext>({
         type: "session:status",
         data: { status: "idle" },
       });
+      send(ws, buildImageModelStatusMessage(ws.data));
       console.log(`[WS] Session opened: ${ws.data.sessionId}`);
     },
 
@@ -408,6 +417,10 @@ const server = Bun.serve<WSContext>({
 
           case "camera:frame":
             handleCameraFrame(ctx, parsed.data);
+            break;
+
+          case "image:model:set":
+            handleImageModelSet(ws, ctx, parsed.data);
             break;
         }
       } catch (error) {
@@ -642,7 +655,9 @@ async function handleSessionStart(ws: ServerWebSocket<WSContext>, ctx: WSContext
   try {
     // Create services
     const openaiService = createOpenAIService();
-    const geminiService = createGeminiService();
+    const geminiService = createGeminiService({
+      getModel: () => resolveGeminiImageModel(ctx.imageModelPreset),
+    });
 
     ctx.analysis = createAnalysisService(
       openaiService,
@@ -814,6 +829,54 @@ async function handleSessionStart(ws: ServerWebSocket<WSContext>, ctx: WSContext
       },
     });
   }
+}
+
+function buildImageModelStatusMessage(ctx: WSContext): ImageModelStatusMessage {
+  const config = getGeminiImageModelConfig();
+  const model = resolveGeminiImageModel(ctx.imageModelPreset, config);
+  return {
+    type: "image:model:status",
+    data: {
+      preset: ctx.imageModelPreset,
+      model,
+      available: config,
+    },
+  };
+}
+
+function handleImageModelSet(ws: ServerWebSocket<WSContext>, ctx: WSContext, data: unknown): void {
+  const preset =
+    data && typeof data === "object" && "preset" in data
+      ? (data as { preset?: unknown }).preset
+      : undefined;
+  if (preset !== "flash" && preset !== "pro") {
+    send(ws, {
+      type: "error",
+      data: {
+        message: "Invalid image model preset",
+        code: "INVALID_IMAGE_MODEL_PRESET",
+      },
+    });
+    send(ws, buildImageModelStatusMessage(ctx));
+    return;
+  }
+
+  const config = getGeminiImageModelConfig();
+  if (preset === "pro" && !config.pro) {
+    send(ws, {
+      type: "error",
+      data: {
+        message: "Pro image model is not configured (set GEMINI_IMAGE_MODEL_PRO)",
+        code: "IMAGE_MODEL_NOT_CONFIGURED",
+      },
+    });
+    // Keep client in sync with current selection
+    send(ws, buildImageModelStatusMessage(ctx));
+    return;
+  }
+
+  ctx.imageModelPreset = preset;
+  send(ws, buildImageModelStatusMessage(ctx));
 }
 
 function handleSessionStop(ws: ServerWebSocket<WSContext>, ctx: WSContext): void {

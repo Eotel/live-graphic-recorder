@@ -12,7 +12,12 @@ import { useCallback, useMemo, useRef } from "react";
 import { useTranscriptStore } from "./useTranscriptStore";
 import { useSessionStore } from "./useSessionStore";
 import { useMeetingController } from "./useMeetingController";
-import type { CameraFrame, SummaryPage, TranscriptSegment } from "../types/messages";
+import type {
+  CameraFrame,
+  SummaryPage,
+  TranscriptSegment,
+  ImageModelPreset,
+} from "../types/messages";
 
 export interface UseMeetingSessionReturn {
   // Connection state
@@ -54,6 +59,16 @@ export interface UseMeetingSessionReturn {
     timestamp: number;
   }>;
 
+  // Image model state
+  imageModel: {
+    preset: ImageModelPreset;
+    model: string;
+    available: {
+      flash: string;
+      pro?: string;
+    };
+  };
+
   // Derived states
   isAnalyzing: boolean;
   isGenerating: boolean;
@@ -69,6 +84,7 @@ export interface UseMeetingSessionReturn {
   startSession: () => void;
   stopSession: () => void;
   sendCameraFrame: (data: CameraFrame) => void;
+  setImageModelPreset: (preset: ImageModelPreset) => void;
   resetSession: () => void;
 }
 
@@ -247,6 +263,8 @@ export function useMeetingSession(): UseMeetingSessionReturn {
     heat,
     images: sessionStore.images,
 
+    imageModel: mc.imageModel,
+
     // Derived states
     isAnalyzing,
     isGenerating,
@@ -262,6 +280,7 @@ export function useMeetingSession(): UseMeetingSessionReturn {
     startSession: mc.startSession,
     stopSession: mc.stopSession,
     sendCameraFrame: mc.sendCameraFrame,
+    setImageModelPreset: mc.setImageModelPreset,
     resetSession,
   };
 }

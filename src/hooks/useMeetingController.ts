@@ -6,7 +6,7 @@
  */
 
 import { useCallback, useEffect, useRef, useSyncExternalStore } from "react";
-import type { TranscriptSegment, CameraFrame } from "../types/messages";
+import type { TranscriptSegment, CameraFrame, ImageModelPreset } from "../types/messages";
 import type {
   MeetingControllerState,
   MeetingControllerCallbacks,
@@ -18,6 +18,7 @@ import type {
 } from "../logic/types";
 import { createMeetingController } from "../logic/meeting-controller";
 import { createWebSocketAdapter } from "../adapters/websocket";
+import { GEMINI_CONFIG } from "../config/constants";
 
 export interface UseMeetingControllerCallbacks {
   onTranscript?: (data: {
@@ -92,6 +93,11 @@ export interface UseMeetingControllerReturn extends MeetingControllerState {
    * Send a camera frame to the server.
    */
   sendCameraFrame: (data: CameraFrame) => void;
+
+  /**
+   * Set the image generation model preset (Flash/Pro).
+   */
+  setImageModelPreset: (preset: ImageModelPreset) => void;
 }
 
 /**
@@ -115,6 +121,13 @@ export function useMeetingController(
     sessionStatus: "idle",
     generationPhase: "idle",
     error: null,
+    imageModel: {
+      preset: "flash",
+      model: GEMINI_CONFIG.model,
+      available: {
+        flash: GEMINI_CONFIG.model,
+      },
+    },
     meeting: {
       meetingId: null,
       meetingTitle: null,
@@ -192,6 +205,13 @@ export function useMeetingController(
         sessionStatus: "idle",
         generationPhase: "idle",
         error: null,
+        imageModel: {
+          preset: "flash",
+          model: GEMINI_CONFIG.model,
+          available: {
+            flash: GEMINI_CONFIG.model,
+          },
+        },
         meeting: {
           meetingId: null,
           meetingTitle: null,
@@ -260,6 +280,13 @@ export function useMeetingController(
     [ensureController],
   );
 
+  const setImageModelPreset = useCallback(
+    (preset: ImageModelPreset) => {
+      ensureController()?.setImageModelPreset(preset);
+    },
+    [ensureController],
+  );
+
   return {
     ...state,
     connect,
@@ -272,5 +299,6 @@ export function useMeetingController(
     startSession,
     stopSession,
     sendCameraFrame,
+    setImageModelPreset,
   };
 }

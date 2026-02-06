@@ -74,6 +74,7 @@ describe("useMeetingSession", () => {
     expect(typeof result.current.startSession).toBe("function");
     expect(typeof result.current.stopSession).toBe("function");
     expect(typeof result.current.sendCameraFrame).toBe("function");
+    expect(typeof result.current.setImageModelPreset).toBe("function");
     expect(typeof result.current.resetSession).toBe("function");
   });
 

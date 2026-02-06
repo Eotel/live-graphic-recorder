@@ -14,6 +14,19 @@ bun install
 bun dev
 ```
 
+## 環境変数
+
+必須:
+
+- `OPENAI_API_KEY`
+- `DEEPGRAM_API_KEY`
+- `GOOGLE_API_KEY`
+
+画像モデル切替（UI の「画像モデル」トグルに反映）:
+
+- `GEMINI_IMAGE_MODEL_FLASH`（未指定なら `gemini-2.5-flash-image`）
+- `GEMINI_IMAGE_MODEL_PRO`（Pro を有効化する場合に指定。例: `gemini-3-pro-image-preview`）
+
 ## 本番 (production)
 
 HMR なしで起動（公開用途はこちら推奨）:

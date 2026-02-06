@@ -11,6 +11,7 @@ import type {
   AnalysisMessage,
   ImageMessage,
   CameraFrame,
+  ImageModelPreset,
 } from "../types/messages";
 import type { MediaDevicesAdapter, MediaRecorderAdapter, StreamUtils } from "../adapters/types";
 
@@ -169,6 +170,14 @@ export interface MeetingControllerState {
   sessionStatus: "idle" | "recording" | "processing" | "error";
   generationPhase: "idle" | "analyzing" | "generating" | "retrying";
   error: string | null;
+  imageModel: {
+    preset: ImageModelPreset;
+    model: string;
+    available: {
+      flash: string;
+      pro?: string;
+    };
+  };
   meeting: MeetingState;
 }
 
@@ -183,6 +192,7 @@ export interface MeetingControllerActions {
   startSession(): void;
   stopSession(): void;
   sendCameraFrame(data: CameraFrame): void;
+  setImageModelPreset(preset: ImageModelPreset): void;
 }
 
 export interface MeetingControllerCallbacks {

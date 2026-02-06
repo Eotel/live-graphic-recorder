@@ -21,6 +21,7 @@ import { TopicIndicator } from "@/components/summary/TopicIndicator";
 import { FlowMeter } from "@/components/metrics/FlowMeter";
 import { HeatMeter } from "@/components/metrics/HeatMeter";
 import { ImageCarousel } from "@/components/graphics/ImageCarousel";
+import { ImageModelToggle } from "@/components/graphics/ImageModelToggle";
 import { MeetingSelectPage } from "@/components/pages/MeetingSelectPage";
 import { MeetingHeader } from "@/components/navigation/MeetingHeader";
 
@@ -274,6 +275,13 @@ export function App() {
               onChange={recording.isRecording ? media.switchVideoSource : media.switchSourceType}
               disabled={media.isSwitching}
               isLoading={media.isSwitching}
+            />
+            <ImageModelToggle
+              value={session.imageModel.preset}
+              model={session.imageModel.model}
+              onChange={session.setImageModelPreset}
+              proAvailable={Boolean(session.imageModel.available.pro)}
+              disabled={session.isGenerating}
             />
             {media.hasPermission && (
               <DeviceSelector

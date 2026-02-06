@@ -12,6 +12,12 @@
 export type MediaSourceType = "camera" | "screen";
 
 // ============================================================================
+// Image Model Types
+// ============================================================================
+
+export type ImageModelPreset = "flash" | "pro";
+
+// ============================================================================
 // Client → Server Messages
 // ============================================================================
 
@@ -60,6 +66,13 @@ export interface MeetingUpdateMessage {
   };
 }
 
+export interface ImageModelSetMessage {
+  type: "image:model:set";
+  data: {
+    preset: ImageModelPreset;
+  };
+}
+
 export type ClientMessage =
   | SessionStartMessage
   | SessionStopMessage
@@ -67,7 +80,8 @@ export type ClientMessage =
   | MeetingStartMessage
   | MeetingStopMessage
   | MeetingListRequestMessage
-  | MeetingUpdateMessage;
+  | MeetingUpdateMessage
+  | ImageModelSetMessage;
 
 // ============================================================================
 // Server → Client Messages
@@ -119,6 +133,18 @@ export interface ErrorMessage {
   data: {
     message: string;
     code?: string;
+  };
+}
+
+export interface ImageModelStatusMessage {
+  type: "image:model:status";
+  data: {
+    preset: ImageModelPreset;
+    model: string;
+    available: {
+      flash: string;
+      pro?: string;
+    };
   };
 }
 
@@ -214,6 +240,7 @@ export type ServerMessage =
   | ImageMessage
   | SessionStatusMessage
   | ErrorMessage
+  | ImageModelStatusMessage
   | GenerationStatusMessage
   | UtteranceEndMessage
   | MeetingStatusMessage
