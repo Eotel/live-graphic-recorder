@@ -5,7 +5,7 @@
  * Related: src/hooks/useAutoScroll.ts, src/types/messages.ts
  */
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef, type TouchEvent } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { useAutoScroll } from "@/hooks/useAutoScroll";
 import { Button } from "@/components/ui/button";
@@ -14,6 +14,9 @@ import type { TranscriptSegment, SummaryPage } from "@/types/messages";
 import { SummarySkeleton } from "./SummarySkeleton";
 import { TranscriptLine } from "./TranscriptLine";
 import { groupByUtterance } from "@/lib/transcript-utils";
+
+const SWIPE_MIN_DISTANCE_PX = 40;
+const SWIPE_HORIZONTAL_RATIO = 1.2;
 
 interface SummaryPanelProps {
   summaryPages: SummaryPage[];
@@ -39,6 +42,7 @@ export function SummaryPanel({
   className,
 }: SummaryPanelProps) {
   const { containerRef } = useAutoScroll({ enabled: true });
+  const touchStartRef = useRef<{ x: number; y: number } | null>(null);
 
   const [currentIndex, setCurrentIndex] = useState(0);
 
@@ -83,6 +87,34 @@ export function SummaryPanel({
     setCurrentIndex((prev) => (prev < summaryPages.length - 1 ? prev + 1 : 0));
   };
 
+  const handleSummaryTouchStart = (event: TouchEvent<HTMLDivElement>) => {
+    if (!hasMultiplePages) return;
+    const touch = event.changedTouches[0];
+    if (!touch) return;
+    touchStartRef.current = { x: touch.clientX, y: touch.clientY };
+  };
+
+  const handleSummaryTouchEnd = (event: TouchEvent<HTMLDivElement>) => {
+    if (!hasMultiplePages) return;
+    const touchStart = touchStartRef.current;
+    touchStartRef.current = null;
+    if (!touchStart) return;
+
+    const touch = event.changedTouches[0];
+    if (!touch) return;
+
+    const deltaX = touch.clientX - touchStart.x;
+    const deltaY = touch.clientY - touchStart.y;
+    if (Math.abs(deltaX) < SWIPE_MIN_DISTANCE_PX) return;
+    if (Math.abs(deltaX) <= Math.abs(deltaY) * SWIPE_HORIZONTAL_RATIO) return;
+
+    if (deltaX < 0) {
+      goToNext();
+      return;
+    }
+    goToPrevious();
+  };
+
   return (
     <div className={cn("flex flex-col h-full overflow-hidden", className)}>
       {/* Summary Section - fixed, never scrolls */}
@@ -92,32 +124,12 @@ export function SummaryPanel({
           <SummarySkeleton />
         </div>
       ) : hasPages && currentPage ? (
-        <div className="flex-shrink-0 mb-3">
-          <div className="flex items-center justify-between mb-2">
-            <h3 className="text-sm font-semibold text-muted-foreground">Summary</h3>
-            {hasMultiplePages && (
-              <div className="flex items-center gap-1">
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="size-6"
-                  onClick={goToPrevious}
-                  aria-label="Previous summary page"
-                >
-                  <ChevronLeft className="size-4" />
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="size-6"
-                  onClick={goToNext}
-                  aria-label="Next summary page"
-                >
-                  <ChevronRight className="size-4" />
-                </Button>
-              </div>
-            )}
-          </div>
+        <div
+          className="flex-shrink-0 mb-3 [touch-action:pan-y]"
+          onTouchStart={handleSummaryTouchStart}
+          onTouchEnd={handleSummaryTouchEnd}
+        >
+          <h3 className="text-sm font-semibold leading-none text-muted-foreground mb-2">Summary</h3>
           <ul className="space-y-1.5">
             {currentPage.points.map((point, index) => (
               <li key={index} className="flex items-start gap-2 text-sm">
@@ -127,8 +139,31 @@ export function SummaryPanel({
             ))}
           </ul>
           {hasMultiplePages && (
-            <div className="text-center text-xs text-muted-foreground mt-2">
-              {currentIndex + 1} / {summaryPages.length}
+            <div className="mt-2">
+              <div className="inline-flex items-center gap-1 rounded-md border border-border/60 bg-muted/40 p-1">
+                <span className="px-1 text-xs font-medium leading-none tabular-nums text-muted-foreground">
+                  {currentIndex + 1}/{summaryPages.length}
+                </span>
+                <span className="h-4 w-px bg-border/70" aria-hidden="true" />
+                <Button
+                  variant="ghost"
+                  size="icon-sm"
+                  className="size-6 rounded-sm text-muted-foreground hover:text-foreground"
+                  onClick={goToPrevious}
+                  aria-label="Previous summary page"
+                >
+                  <ChevronLeft className="size-4" />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="icon-sm"
+                  className="size-6 rounded-sm text-muted-foreground hover:text-foreground"
+                  onClick={goToNext}
+                  aria-label="Next summary page"
+                >
+                  <ChevronRight className="size-4" />
+                </Button>
+              </div>
             </div>
           )}
         </div>

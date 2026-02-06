@@ -269,7 +269,7 @@ describe("SummaryPanel", () => {
         <SummaryPanel summaryPages={createPages()} transcriptSegments={[]} interimText={null} />,
       );
 
-      expect(screen.getByText("3 / 3")).toBeDefined();
+      expect(screen.getByText("3/3")).toBeDefined();
     });
 
     test("navigates to previous page when clicking previous button", () => {
@@ -280,7 +280,7 @@ describe("SummaryPanel", () => {
       fireEvent.click(screen.getByRole("button", { name: /previous/i }));
 
       expect(screen.getByText("Page 2 Point A")).toBeDefined();
-      expect(screen.getByText("2 / 3")).toBeDefined();
+      expect(screen.getByText("2/3")).toBeDefined();
     });
 
     test("navigates to next page when clicking next button", () => {
@@ -293,7 +293,7 @@ describe("SummaryPanel", () => {
       fireEvent.click(screen.getByRole("button", { name: /next/i }));
 
       expect(screen.getByText("Page 3 Point A")).toBeDefined();
-      expect(screen.getByText("3 / 3")).toBeDefined();
+      expect(screen.getByText("3/3")).toBeDefined();
     });
 
     test("wraps around from first page to last page", () => {
@@ -304,12 +304,12 @@ describe("SummaryPanel", () => {
       // Go to first page
       fireEvent.click(screen.getByRole("button", { name: /previous/i }));
       fireEvent.click(screen.getByRole("button", { name: /previous/i }));
-      expect(screen.getByText("1 / 3")).toBeDefined();
+      expect(screen.getByText("1/3")).toBeDefined();
 
       // Wrap around to last
       fireEvent.click(screen.getByRole("button", { name: /previous/i }));
       expect(screen.getByText("Page 3 Point A")).toBeDefined();
-      expect(screen.getByText("3 / 3")).toBeDefined();
+      expect(screen.getByText("3/3")).toBeDefined();
     });
 
     test("wraps around from last page to first page", () => {
@@ -321,7 +321,7 @@ describe("SummaryPanel", () => {
       fireEvent.click(screen.getByRole("button", { name: /next/i }));
 
       expect(screen.getByText("Page 1 Point A")).toBeDefined();
-      expect(screen.getByText("1 / 3")).toBeDefined();
+      expect(screen.getByText("1/3")).toBeDefined();
     });
 
     test("does not show navigation when only one page exists", () => {
@@ -335,7 +335,58 @@ describe("SummaryPanel", () => {
 
       expect(screen.queryByRole("button", { name: /previous/i })).toBeNull();
       expect(screen.queryByRole("button", { name: /next/i })).toBeNull();
-      expect(screen.queryByText(/\d+ \/ \d+/)).toBeNull();
+      expect(screen.queryByText(/\d+\/\d+/)).toBeNull();
+    });
+
+    test("swipe left on summary area navigates to next page", () => {
+      render(
+        <SummaryPanel summaryPages={createPages()} transcriptSegments={[]} interimText={null} />,
+      );
+
+      const summaryPoint = screen.getByText("Page 3 Point A");
+      fireEvent.touchStart(summaryPoint, {
+        changedTouches: [{ clientX: 180, clientY: 100 }],
+      });
+      fireEvent.touchEnd(summaryPoint, {
+        changedTouches: [{ clientX: 80, clientY: 100 }],
+      });
+
+      expect(screen.getByText("Page 1 Point A")).toBeDefined();
+      expect(screen.getByText("1/3")).toBeDefined();
+    });
+
+    test("swipe right on summary area navigates to previous page", () => {
+      render(
+        <SummaryPanel summaryPages={createPages()} transcriptSegments={[]} interimText={null} />,
+      );
+
+      const summaryPoint = screen.getByText("Page 3 Point A");
+      fireEvent.touchStart(summaryPoint, {
+        changedTouches: [{ clientX: 80, clientY: 100 }],
+      });
+      fireEvent.touchEnd(summaryPoint, {
+        changedTouches: [{ clientX: 180, clientY: 100 }],
+      });
+
+      expect(screen.getByText("Page 2 Point A")).toBeDefined();
+      expect(screen.getByText("2/3")).toBeDefined();
+    });
+
+    test("does not navigate when swipe is mostly vertical", () => {
+      render(
+        <SummaryPanel summaryPages={createPages()} transcriptSegments={[]} interimText={null} />,
+      );
+
+      const summaryPoint = screen.getByText("Page 3 Point A");
+      fireEvent.touchStart(summaryPoint, {
+        changedTouches: [{ clientX: 120, clientY: 60 }],
+      });
+      fireEvent.touchEnd(summaryPoint, {
+        changedTouches: [{ clientX: 80, clientY: 130 }],
+      });
+
+      expect(screen.getByText("Page 3 Point A")).toBeDefined();
+      expect(screen.getByText("3/3")).toBeDefined();
     });
   });
 
@@ -351,7 +402,7 @@ describe("SummaryPanel", () => {
       );
 
       expect(screen.getByText("Page 2 Point")).toBeDefined();
-      expect(screen.getByText("2 / 2")).toBeDefined();
+      expect(screen.getByText("2/2")).toBeDefined();
 
       // Add new page
       const updatedPages: SummaryPage[] = [
@@ -364,7 +415,7 @@ describe("SummaryPanel", () => {
       );
 
       expect(screen.getByText("Page 3 Point")).toBeDefined();
-      expect(screen.getByText("3 / 3")).toBeDefined();
+      expect(screen.getByText("3/3")).toBeDefined();
     });
   });
 });
