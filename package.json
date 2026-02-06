@@ -25,6 +25,7 @@
     "bun-plugin-tailwind": "^0.1.2",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
+    "fflate": "^0.8.2",
     "lucide-react": "^0.545.0",
     "openai": "^6.17.0",
     "react": "^19",

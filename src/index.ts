@@ -39,6 +39,7 @@ import {
 } from "./services/server/gemini";
 import { createAnalysisService, type AnalysisService } from "./services/server/analysis";
 import { PersistenceService } from "./services/server/persistence";
+import { buildMeetingReportZipStream, ReportSizeLimitError } from "./services/server/report";
 import {
   shouldTriggerMetaSummary,
   generateAndPersistMetaSummary,
@@ -48,6 +49,17 @@ import type { ImageModelPreset, ImageModelStatusMessage } from "./types/messages
 
 // Initialize persistence service
 const persistence = new PersistenceService();
+
+function buildContentDispositionAttachment(filename: string): string {
+  const fallback =
+    filename
+      .replace(/[^\x20-\x7E]+/g, "_")
+      .replace(/["\\]/g, "_")
+      .trim() || "meeting-report.zip";
+
+  const encoded = encodeURIComponent(filename).replace(/\*/g, "%2A");
+  return `attachment; filename="${fallback}"; filename*=UTF-8''${encoded}`;
+}
 
 /**
  * Check if a meta-summary should be generated and generate it if so.
@@ -338,6 +350,58 @@ const server = Bun.serve<WSContext>({
       }
 
       return serveMediaFile("audio", recording.filePath.replace(/^.*\/audio\//, ""));
+    },
+    "/api/meetings/:meetingId/report.zip": async (req: Request) => {
+      const url = new URL(req.url);
+      const match = url.pathname.match(/^\/api\/meetings\/([^/]+)\/report\.zip$/);
+      if (!match) {
+        return new Response("Bad Request", { status: 400 });
+      }
+      const [, meetingId] = match;
+
+      if (!meetingId || !isValidUUID(meetingId)) {
+        return new Response("Invalid meeting ID", { status: 400 });
+      }
+
+      // Verify meeting exists
+      const meeting = persistence.getMeeting(meetingId);
+      if (!meeting) {
+        return new Response("Meeting not found", { status: 404 });
+      }
+
+      try {
+        const mediaParam = (url.searchParams.get("media") ?? "auto").toLowerCase();
+        const includeMedia = mediaParam !== "none";
+        const onMediaLimit = mediaParam === "strict" || mediaParam === "error" ? "error" : "skip";
+        const includeCaptures = url.searchParams.get("captures") === "1";
+
+        const { stream, filename, mediaBundle } = await buildMeetingReportZipStream(
+          persistence,
+          meetingId,
+          {
+            includeMedia,
+            includeCaptures,
+            onMediaLimit,
+          },
+        );
+        return new Response(stream, {
+          headers: {
+            "Content-Type": "application/zip",
+            "Content-Disposition": buildContentDispositionAttachment(filename),
+            "Cache-Control": "no-store",
+            "X-Report-Media-Mode": mediaBundle.mode,
+          },
+        });
+      } catch (error) {
+        if (error instanceof ReportSizeLimitError) {
+          console.warn(
+            `[API] Report too large for meeting ${meetingId}: ${error.totalBytes} > ${error.maxBytes}`,
+          );
+          return new Response("Report too large to bundle media", { status: 413 });
+        }
+        console.error("[API] Failed to generate report:", error);
+        return new Response("Failed to generate report", { status: 500 });
+      }
     },
     "/ws/recording": (req: Request, server: Server<WSContext>) => {
       const sessionId = generateSessionId();

@@ -9,6 +9,8 @@ import { useState, useCallback, useEffect, useRef } from "react";
 import "./index.css";
 
 import { MainLayout } from "@/components/layout/MainLayout";
+import { Button } from "@/components/ui/button";
+import { Loader2 } from "lucide-react";
 import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from "@/components/ui/resizable";
 import { RecordingControls } from "@/components/recording/RecordingControls";
 import { CloudSaveButton } from "@/components/recording/CloudSaveButton";
@@ -39,6 +41,9 @@ type View = "select" | "recording";
 export function App() {
   // View state for routing
   const [view, setView] = useState<View>("select");
+  const [isDownloadingReport, setIsDownloadingReport] = useState(false);
+  const reportDownloadLockRef = useRef(false);
+  const reportDownloadUnlockTimerRef = useRef<number | null>(null);
 
   // Media stream management (controller-based)
   const media = useMediaStreamController();
@@ -103,6 +108,16 @@ export function App() {
       session.connect();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (reportDownloadUnlockTimerRef.current !== null) {
+        window.clearTimeout(reportDownloadUnlockTimerRef.current);
+        reportDownloadUnlockTimerRef.current = null;
+      }
+      reportDownloadLockRef.current = false;
+    };
   }, []);
 
   // Track pending meeting action (waiting for WebSocket connection)
@@ -209,6 +224,44 @@ export function App() {
     audioUpload.cancel();
   }, [audioUpload]);
 
+  const meetingIdForReport = session.meeting.meetingId;
+  const handleDownloadReport = useCallback(async () => {
+    const meetingId = meetingIdForReport;
+    if (!meetingId) return;
+
+    if (reportDownloadLockRef.current) return;
+    reportDownloadLockRef.current = true;
+
+    setIsDownloadingReport(true);
+    try {
+      const url = `/api/meetings/${meetingId}/report.zip?media=auto`;
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+    } catch (error) {
+      console.error("[Report] Download failed:", error);
+      if (typeof globalThis.alert === "function") {
+        const msg = error instanceof Error ? error.message : "";
+        globalThis.alert(`レポートのダウンロードに失敗しました。${msg ? `\n\n${msg}` : ""}`.trim());
+      }
+      reportDownloadLockRef.current = false;
+      setIsDownloadingReport(false);
+      return;
+    }
+
+    if (reportDownloadUnlockTimerRef.current !== null) {
+      window.clearTimeout(reportDownloadUnlockTimerRef.current);
+    }
+    reportDownloadUnlockTimerRef.current = window.setTimeout(() => {
+      reportDownloadUnlockTimerRef.current = null;
+      reportDownloadLockRef.current = false;
+      setIsDownloadingReport(false);
+    }, 2000);
+  }, [meetingIdForReport]);
+
   const handleBack = useCallback(() => {
     if (recording.isRecording) {
       recording.stop();
@@ -248,6 +301,22 @@ export function App() {
             <TopicIndicator topics={session.topics} />
           </div>
           <div className="flex items-center gap-6">
+            <Button
+              variant="outline"
+              size="sm"
+              type="button"
+              onClick={handleDownloadReport}
+              disabled={!meetingIdForReport || isDownloadingReport}
+            >
+              {isDownloadingReport ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  レポートDL中...
+                </>
+              ) : (
+                "レポートDL"
+              )}
+            </Button>
             <FlowMeter value={session.flow} />
             <HeatMeter value={session.heat} />
           </div>
