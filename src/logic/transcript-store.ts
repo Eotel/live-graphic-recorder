@@ -19,6 +19,7 @@ export function createTranscriptStore(
     interimText: "",
     interimSpeaker: undefined,
     interimStartTime: undefined,
+    speakerAliases: {},
   };
 
   function emit() {
@@ -84,12 +85,42 @@ export function createTranscriptStore(
     });
   }
 
+  function setSpeakerAlias(speaker: number, displayName: string): void {
+    const normalizedName = displayName.trim();
+    if (!normalizedName) {
+      const nextAliases = { ...state.speakerAliases };
+      delete nextAliases[speaker];
+      updateState({ speakerAliases: nextAliases });
+      return;
+    }
+
+    updateState({
+      speakerAliases: {
+        ...state.speakerAliases,
+        [speaker]: normalizedName,
+      },
+    });
+  }
+
+  function setSpeakerAliases(aliases: Record<number, string>): void {
+    const nextAliases: Record<number, string> = {};
+    for (const [rawSpeaker, rawName] of Object.entries(aliases)) {
+      const speaker = Number(rawSpeaker);
+      if (!Number.isInteger(speaker) || speaker < 0) continue;
+      const normalizedName = rawName.trim();
+      if (!normalizedName) continue;
+      nextAliases[speaker] = normalizedName;
+    }
+    updateState({ speakerAliases: nextAliases });
+  }
+
   function clear(): void {
     updateState({
       segments: [],
       interimText: "",
       interimSpeaker: undefined,
       interimStartTime: undefined,
+      speakerAliases: {},
     });
   }
 
@@ -98,6 +129,8 @@ export function createTranscriptStore(
     addTranscript,
     markUtteranceEnd,
     loadHistory,
+    setSpeakerAlias,
+    setSpeakerAliases,
     clear,
   };
 }

@@ -14,6 +14,7 @@ import { createOPFSStorageAdapter, createMockOPFSStorageAdapter } from "../adapt
 export interface UseAudioUploadOptions {
   storage?: OPFSStorageAdapter;
   fetchFn?: typeof fetch;
+  onComplete?: (sessionId: string) => void;
 }
 
 export interface UseAudioUploadReturn extends UploadState {
@@ -64,7 +65,9 @@ export function useAudioUpload(options?: UseAudioUploadOptions): UseAudioUploadR
           stateRef.current = state;
           subscribersRef.current.forEach((cb) => cb());
         },
-        onComplete: () => {},
+        onComplete: (sessionId) => {
+          optionsRef.current?.onComplete?.(sessionId);
+        },
         onError: () => {},
       },
     );

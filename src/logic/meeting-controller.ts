@@ -104,6 +104,20 @@ export function createMeetingController(
     emit();
   }
 
+  function normalizeSpeakerAliases(
+    aliases: Record<string, string> | Record<number, string>,
+  ): Record<number, string> {
+    const normalized: Record<number, string> = {};
+    for (const [rawSpeaker, rawName] of Object.entries(aliases)) {
+      const speaker = Number(rawSpeaker);
+      if (!Number.isInteger(speaker) || speaker < 0) continue;
+      const name = String(rawName ?? "").trim();
+      if (!name) continue;
+      normalized[speaker] = name;
+    }
+    return normalized;
+  }
+
   function handleMessage(data: string | ArrayBuffer): void {
     if (typeof data !== "string") return;
 
@@ -209,6 +223,7 @@ export function createMeetingController(
             startTime: m.startTime,
             endTime: m.endTime,
           }));
+          const speakerAliases = normalizeSpeakerAliases(historyData.speakerAliases ?? {});
 
           callbacksRef.onMeetingHistory?.({
             transcripts,
@@ -216,9 +231,16 @@ export function createMeetingController(
             images,
             captures,
             metaSummaries,
+            speakerAliases,
           });
           break;
         }
+
+        case "meeting:speaker-alias":
+          callbacksRef.onSpeakerAliases?.(
+            normalizeSpeakerAliases(message.data.speakerAliases ?? {}),
+          );
+          break;
       }
     } catch (err) {
       console.error("Failed to parse WebSocket message:", err);
@@ -392,6 +414,13 @@ export function createMeetingController(
     });
   }
 
+  function updateSpeakerAlias(speaker: number, displayName: string): void {
+    sendMessage({
+      type: "meeting:speaker-alias:update",
+      data: { speaker, displayName },
+    });
+  }
+
   function startSession(): void {
     sendMessage({ type: "session:start" });
   }
@@ -427,6 +456,7 @@ export function createMeetingController(
     stopMeeting,
     requestMeetingList,
     updateMeetingTitle,
+    updateSpeakerAlias,
     startSession,
     stopSession,
     sendCameraFrame,

@@ -11,11 +11,16 @@ import { Button } from "@/components/ui/button";
 export interface MeetingHeaderProps {
   title?: string | null;
   onBack: () => void;
-  isRecording: boolean;
+  hasUnsavedRecording: boolean;
   onUpdateTitle?: (title: string) => void;
 }
 
-export function MeetingHeader({ title, onBack, isRecording, onUpdateTitle }: MeetingHeaderProps) {
+export function MeetingHeader({
+  title,
+  onBack,
+  hasUnsavedRecording,
+  onUpdateTitle,
+}: MeetingHeaderProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [editValue, setEditValue] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
@@ -31,10 +36,10 @@ export function MeetingHeader({ title, onBack, isRecording, onUpdateTitle }: Mee
   }, [isEditing]);
 
   const handleBack = () => {
-    if (isRecording) {
+    if (hasUnsavedRecording) {
       if (typeof globalThis.confirm === "function") {
         const confirmed = globalThis.confirm(
-          "Recording in progress. Stop and return to meeting selection?",
+          "You have unsaved local audio. Leave this meeting and discard it?",
         );
         if (!confirmed) {
           return;

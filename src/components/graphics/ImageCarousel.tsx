@@ -110,6 +110,7 @@ export function ImageCarousel({
                     size="icon"
                     className="absolute left-2 top-1/2 -translate-y-1/2 bg-black/30 hover:bg-black/50 text-white"
                     onClick={goToPrevious}
+                    aria-label="Previous image"
                   >
                     <ChevronLeft className="size-6" />
                   </Button>
@@ -118,6 +119,7 @@ export function ImageCarousel({
                     size="icon"
                     className="absolute right-2 top-1/2 -translate-y-1/2 bg-black/30 hover:bg-black/50 text-white"
                     onClick={goToNext}
+                    aria-label="Next image"
                   >
                     <ChevronRight className="size-6" />
                   </Button>

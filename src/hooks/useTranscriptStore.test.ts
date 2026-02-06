@@ -14,6 +14,7 @@ describe("useTranscriptStore", () => {
     expect(result.current.interimText).toBe("");
     expect(result.current.interimSpeaker).toBeUndefined();
     expect(result.current.interimStartTime).toBeUndefined();
+    expect(result.current.speakerAliases).toEqual({});
   });
 
   test("addTranscript with final=true adds to segments", () => {
@@ -113,6 +114,7 @@ describe("useTranscriptStore", () => {
         timestamp: 2000,
         speaker: 1,
       });
+      result.current.setSpeakerAlias(1, "田中");
     });
 
     act(() => {
@@ -122,6 +124,32 @@ describe("useTranscriptStore", () => {
     expect(result.current.segments).toHaveLength(0);
     expect(result.current.interimText).toBe("");
     expect(result.current.interimSpeaker).toBeUndefined();
+    expect(result.current.speakerAliases).toEqual({});
+  });
+
+  test("setSpeakerAlias updates alias map", () => {
+    const { result } = renderHook(() => useTranscriptStore());
+
+    act(() => {
+      result.current.setSpeakerAlias(0, "田中");
+    });
+    expect(result.current.speakerAliases).toEqual({ 0: "田中" });
+
+    act(() => {
+      result.current.setSpeakerAlias(0, "");
+    });
+    expect(result.current.speakerAliases).toEqual({});
+  });
+
+  test("setSpeakerAliases replaces alias map", () => {
+    const { result } = renderHook(() => useTranscriptStore());
+
+    act(() => {
+      result.current.setSpeakerAlias(0, "旧名");
+      result.current.setSpeakerAliases({ 1: "山田", 2: "鈴木" });
+    });
+
+    expect(result.current.speakerAliases).toEqual({ 1: "山田", 2: "鈴木" });
   });
 
   test("maintains stable action references", () => {
@@ -129,10 +157,12 @@ describe("useTranscriptStore", () => {
 
     const addTranscript1 = result.current.addTranscript;
     const clear1 = result.current.clear;
+    const setSpeakerAlias1 = result.current.setSpeakerAlias;
 
     rerender();
 
     expect(result.current.addTranscript).toBe(addTranscript1);
     expect(result.current.clear).toBe(clear1);
+    expect(result.current.setSpeakerAlias).toBe(setSpeakerAlias1);
   });
 });

@@ -7,7 +7,7 @@
 
 import type { Database } from "bun:sqlite";
 
-export const CURRENT_SCHEMA_VERSION = 3;
+export const CURRENT_SCHEMA_VERSION = 5;
 
 /**
  * Get the current schema version from the database.
@@ -41,6 +41,14 @@ export function runMigrations(db: Database): void {
 
   if (currentVersion < 3) {
     migrateToV3(db);
+  }
+
+  if (currentVersion < 4) {
+    migrateToV4(db);
+  }
+
+  if (currentVersion < 5) {
+    migrateToV5(db);
   }
 }
 
@@ -196,4 +204,74 @@ function migrateToV3(db: Database): void {
   );
 
   db.run("INSERT INTO schema_version (version) VALUES (3)");
+}
+
+function hasColumn(db: Database, tableName: string, columnName: string): boolean {
+  const columns = db.query(`PRAGMA table_info(${tableName})`).all() as Array<{ name: string }>;
+  return columns.some((column) => column.name === columnName);
+}
+
+/**
+ * Migration to schema version 4.
+ * Adds authentication and user ownership support.
+ */
+function migrateToV4(db: Database): void {
+  db.run(`
+    CREATE TABLE IF NOT EXISTS users (
+      id TEXT PRIMARY KEY,
+      email TEXT NOT NULL UNIQUE,
+      password_hash TEXT NOT NULL,
+      created_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now') * 1000)
+    )
+  `);
+
+  db.run(`
+    CREATE TABLE IF NOT EXISTS auth_refresh_tokens (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      token_hash TEXT NOT NULL UNIQUE,
+      expires_at INTEGER NOT NULL,
+      revoked_at INTEGER,
+      created_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now') * 1000),
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    )
+  `);
+
+  if (!hasColumn(db, "meetings", "owner_user_id")) {
+    db.run(`ALTER TABLE meetings ADD COLUMN owner_user_id TEXT`);
+  }
+
+  db.run(`CREATE INDEX IF NOT EXISTS idx_meetings_owner_user_id ON meetings(owner_user_id)`);
+  db.run(`CREATE INDEX IF NOT EXISTS idx_users_email ON users(email)`);
+  db.run(
+    `CREATE INDEX IF NOT EXISTS idx_auth_refresh_tokens_user_id ON auth_refresh_tokens(user_id)`,
+  );
+  db.run(
+    `CREATE INDEX IF NOT EXISTS idx_auth_refresh_tokens_expires_at ON auth_refresh_tokens(expires_at)`,
+  );
+
+  db.run("INSERT INTO schema_version (version) VALUES (4)");
+}
+
+/**
+ * Migration to schema version 5.
+ * Adds speaker alias table for per-meeting speaker label overrides.
+ */
+function migrateToV5(db: Database): void {
+  db.run(`
+    CREATE TABLE IF NOT EXISTS meeting_speaker_aliases (
+      meeting_id TEXT NOT NULL,
+      speaker INTEGER NOT NULL,
+      display_name TEXT NOT NULL,
+      updated_at INTEGER NOT NULL,
+      PRIMARY KEY (meeting_id, speaker),
+      FOREIGN KEY (meeting_id) REFERENCES meetings(id) ON DELETE CASCADE
+    )
+  `);
+
+  db.run(
+    `CREATE INDEX IF NOT EXISTS idx_speaker_aliases_meeting_id ON meeting_speaker_aliases(meeting_id)`,
+  );
+
+  db.run("INSERT INTO schema_version (version) VALUES (5)");
 }

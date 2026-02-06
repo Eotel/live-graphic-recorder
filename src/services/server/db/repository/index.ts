@@ -11,3 +11,7 @@ export * from "./analysis";
 export * from "./image";
 export * from "./capture";
 export * from "./meta-summary";
+export * from "./audio";
+export * from "./user";
+export * from "./refresh-token";
+export * from "./speaker-alias";

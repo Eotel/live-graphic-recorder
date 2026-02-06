@@ -68,4 +68,15 @@ describe("PaneToolbar", () => {
 
     expect(onPopout).toHaveBeenCalledTimes(1);
   });
+
+  test("uses mobile-visible and desktop hover/focus visibility classes", () => {
+    const { container } = render(<PaneToolbar {...defaultProps} mode="normal" />);
+    const toolbar = container.firstElementChild as HTMLElement | null;
+
+    expect(toolbar).toBeTruthy();
+    expect(toolbar?.className).toContain("opacity-100");
+    expect(toolbar?.className).toContain("md:opacity-0");
+    expect(toolbar?.className).toContain("md:group-hover:opacity-100");
+    expect(toolbar?.className).toContain("md:group-focus-within:opacity-100");
+  });
 });

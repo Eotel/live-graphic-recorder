@@ -58,6 +58,7 @@ import {
   hashToken,
   normalizeEmail,
   parseCookies,
+  resolveAuthSecret,
   validatePasswordComplexity,
   verifyToken,
 } from "./services/server/auth";
@@ -174,19 +175,17 @@ function parseContentLengthHeader(value: string): number | null {
 const PORT = Number(process.env["PORT"]) || 3000;
 const HOST = process.env["HOST"] || "127.0.0.1";
 const WS_ALLOWED_ORIGINS = parseAllowedOrigins(process.env["WS_ALLOWED_ORIGINS"]);
-const AUTH_JWT_SECRET = process.env["AUTH_JWT_SECRET"];
 const ACCESS_TOKEN_COOKIE = "access_token";
 const REFRESH_TOKEN_COOKIE = "refresh_token";
 const ACCESS_TOKEN_TTL_SEC = 15 * 60;
 const REFRESH_TOKEN_TTL_SEC = 30 * 24 * 60 * 60;
 
-if (!AUTH_JWT_SECRET && process.env["NODE_ENV"] === "production") {
-  throw new Error("AUTH_JWT_SECRET must be set in production");
-}
+const { secret: AUTH_SECRET, usesFallback: isUsingFallbackAuthSecret } = resolveAuthSecret({
+  AUTH_JWT_SECRET: process.env["AUTH_JWT_SECRET"],
+  NODE_ENV: process.env["NODE_ENV"],
+});
 
-const AUTH_SECRET = AUTH_JWT_SECRET || "dev-insecure-auth-secret-change-me-immediately";
-
-if (!AUTH_JWT_SECRET) {
+if (isUsingFallbackAuthSecret) {
   console.warn("[Auth] AUTH_JWT_SECRET is not set. Using an insecure development fallback secret.");
 }
 

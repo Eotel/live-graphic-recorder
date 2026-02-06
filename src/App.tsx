@@ -75,9 +75,7 @@ export function App() {
   latestMeetingListRef.current = session.meeting.meetingList;
   const latestSessionErrorRef = useRef(session.error);
   latestSessionErrorRef.current = session.error;
-
-  // Audio upload to server
-  const audioUpload = useAudioUpload();
+  const isLogoutInProgressRef = useRef(false);
 
   // Pane expand/popout state
   const paneState = usePaneState();
@@ -139,6 +137,16 @@ export function App() {
   // ことで、React の依存追跡を迂回しつつ stale closure を防ぐ。
   const localRecordingRef = useRef(localRecording);
   localRecordingRef.current = localRecording;
+
+  const handleUploadComplete = useCallback((uploadedSessionId: string) => {
+    if (uploadedSessionId !== localRecordingRef.current.sessionId) {
+      return;
+    }
+    setHasLocalFile(false);
+  }, []);
+
+  // Audio upload to server
+  const audioUpload = useAudioUpload({ onComplete: handleUploadComplete });
 
   // Recording orchestration (controller-based)
   const onChunk = useCallback(
@@ -205,6 +213,9 @@ export function App() {
   // Auto-connect WebSocket after authentication
   useEffect(() => {
     if (auth.status !== "authenticated") {
+      return;
+    }
+    if (isLogoutInProgressRef.current) {
       return;
     }
     if (!session.isConnected) {
@@ -416,6 +427,10 @@ export function App() {
   }, [recording, session]);
 
   const handleLogout = useCallback(async () => {
+    if (isLogoutInProgressRef.current) {
+      return;
+    }
+    isLogoutInProgressRef.current = true;
     if (recording.isRecording) {
       recording.stop();
     }
@@ -433,6 +448,7 @@ export function App() {
 
   useEffect(() => {
     if (auth.status === "authenticated") return;
+    isLogoutInProgressRef.current = false;
     clearMeetingListRequestTimeout();
     setIsMeetingListLoading(false);
     setMeetingListError(null);

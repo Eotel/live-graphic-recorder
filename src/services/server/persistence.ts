@@ -75,6 +75,12 @@ import {
   revokeAllRefreshTokensForUser as revokeAllRefreshTokensForUserRepo,
   type PersistedRefreshToken,
 } from "./db/repository/refresh-token";
+import {
+  upsertSpeakerAlias as upsertSpeakerAliasRepo,
+  deleteSpeakerAlias as deleteSpeakerAliasRepo,
+  findSpeakerAliasesByMeetingId,
+  type PersistedSpeakerAlias,
+} from "./db/repository/speaker-alias";
 import { FileStorageService } from "./db/storage/file-storage";
 
 // Keep sessionId format consistent with FileStorageService.
@@ -108,6 +114,7 @@ export type {
   PersistedAudioRecording,
   PersistedUser,
   PersistedRefreshToken,
+  PersistedSpeakerAlias,
 };
 
 export class PersistenceService {
@@ -172,6 +179,40 @@ export class PersistenceService {
 
   claimLegacyMeetingsForUser(ownerUserId: string): number {
     return assignUnownedMeetingsToOwner(this.db, ownerUserId);
+  }
+
+  // ============================================================================
+  // Speaker Alias Operations
+  // ============================================================================
+
+  upsertSpeakerAlias(
+    meetingId: string,
+    speaker: number,
+    displayName: string,
+    ownerUserId?: string,
+  ): PersistedSpeakerAlias | null {
+    if (!this.isMeetingOwnedByUser(meetingId, ownerUserId)) {
+      return null;
+    }
+    return upsertSpeakerAliasRepo(this.db, {
+      meetingId,
+      speaker,
+      displayName,
+    });
+  }
+
+  deleteSpeakerAlias(meetingId: string, speaker: number, ownerUserId?: string): boolean {
+    if (!this.isMeetingOwnedByUser(meetingId, ownerUserId)) {
+      return false;
+    }
+    return deleteSpeakerAliasRepo(this.db, meetingId, speaker);
+  }
+
+  loadSpeakerAliases(meetingId: string, ownerUserId?: string): PersistedSpeakerAlias[] {
+    if (!this.isMeetingOwnedByUser(meetingId, ownerUserId)) {
+      return [];
+    }
+    return findSpeakerAliasesByMeetingId(this.db, meetingId);
   }
 
   // ============================================================================

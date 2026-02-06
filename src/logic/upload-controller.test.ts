@@ -101,6 +101,7 @@ describe("UploadController", () => {
       expect(capturedRequest).not.toBeNull();
       expect(capturedRequest!.url).toBe("http://localhost:3000/api/meetings/meeting-1/audio");
       expect(capturedRequest!.method).toBe("POST");
+      expect(capturedRequest!.credentials).toBe("include");
       expect(capturedRequest!.headers.get("content-type")).toBe("audio/webm");
       expect(capturedRequest!.headers.get("x-session-id")).toBe("session-1");
     });
@@ -190,6 +191,7 @@ describe("UploadController", () => {
         requestHeaders = new Map<string, string>();
         status = 0;
         statusText = "OK";
+        withCredentials = false;
         upload: { onprogress: ((event: any) => void) | null } = { onprogress: null };
         onload: (() => void) | null = null;
         onerror: (() => void) | null = null;
@@ -244,6 +246,7 @@ describe("UploadController", () => {
       expect(xhrInstances.length).toBe(1);
       expect(xhrInstances[0]!.method).toBe("POST");
       expect(xhrInstances[0]!.url).toBe("http://localhost:3000/api/meetings/meeting-1/audio");
+      expect(xhrInstances[0]!.withCredentials).toBe(true);
       expect(xhrInstances[0]!.requestHeaders.get("Content-Type")).toBe("audio/webm");
       expect(xhrInstances[0]!.requestHeaders.get("X-Session-Id")).toBe("session-1");
 

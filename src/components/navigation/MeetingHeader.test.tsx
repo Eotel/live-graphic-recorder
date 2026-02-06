@@ -22,19 +22,23 @@ describe("MeetingHeader", () => {
   });
 
   test("renders meeting title", () => {
-    render(<MeetingHeader title="Team Standup" onBack={mock(() => {})} isRecording={false} />);
+    render(
+      <MeetingHeader title="Team Standup" onBack={mock(() => {})} hasUnsavedRecording={false} />,
+    );
 
     expect(screen.getByText("Team Standup")).toBeDefined();
   });
 
   test("renders 'Untitled Meeting' when title is null", () => {
-    render(<MeetingHeader title={null} onBack={mock(() => {})} isRecording={false} />);
+    render(<MeetingHeader title={null} onBack={mock(() => {})} hasUnsavedRecording={false} />);
 
     expect(screen.getByText("Untitled Meeting")).toBeDefined();
   });
 
   test("renders back button", () => {
-    render(<MeetingHeader title="Team Standup" onBack={mock(() => {})} isRecording={false} />);
+    render(
+      <MeetingHeader title="Team Standup" onBack={mock(() => {})} hasUnsavedRecording={false} />,
+    );
 
     expect(screen.getByRole("button", { name: /back/i })).toBeDefined();
   });
@@ -42,7 +46,7 @@ describe("MeetingHeader", () => {
   test("calls onBack when back button is clicked (not recording)", () => {
     const onBack = mock(() => {});
 
-    render(<MeetingHeader title="Team Standup" onBack={onBack} isRecording={false} />);
+    render(<MeetingHeader title="Team Standup" onBack={onBack} hasUnsavedRecording={false} />);
 
     fireEvent.click(screen.getByRole("button", { name: /back/i }));
 
@@ -54,7 +58,7 @@ describe("MeetingHeader", () => {
     const confirmMock = mock(() => false);
     globalThis.confirm = confirmMock;
 
-    render(<MeetingHeader title="Team Standup" onBack={onBack} isRecording={true} />);
+    render(<MeetingHeader title="Team Standup" onBack={onBack} hasUnsavedRecording={true} />);
 
     fireEvent.click(screen.getByRole("button", { name: /back/i }));
 
@@ -67,7 +71,7 @@ describe("MeetingHeader", () => {
     const confirmMock = mock(() => true);
     globalThis.confirm = confirmMock;
 
-    render(<MeetingHeader title="Team Standup" onBack={onBack} isRecording={true} />);
+    render(<MeetingHeader title="Team Standup" onBack={onBack} hasUnsavedRecording={true} />);
 
     fireEvent.click(screen.getByRole("button", { name: /back/i }));
 
@@ -79,7 +83,7 @@ describe("MeetingHeader", () => {
     const onBack = mock(() => {});
     globalThis.confirm = undefined as unknown as typeof globalThis.confirm;
 
-    render(<MeetingHeader title="Team Standup" onBack={onBack} isRecording={true} />);
+    render(<MeetingHeader title="Team Standup" onBack={onBack} hasUnsavedRecording={true} />);
 
     fireEvent.click(screen.getByRole("button", { name: /back/i }));
 
@@ -94,7 +98,7 @@ describe("MeetingHeader", () => {
         <MeetingHeader
           title="Team Standup"
           onBack={mock(() => {})}
-          isRecording={false}
+          hasUnsavedRecording={false}
           onUpdateTitle={onUpdateTitle}
         />,
       );
@@ -113,7 +117,7 @@ describe("MeetingHeader", () => {
         <MeetingHeader
           title="Team Standup"
           onBack={mock(() => {})}
-          isRecording={false}
+          hasUnsavedRecording={false}
           onUpdateTitle={onUpdateTitle}
         />,
       );
@@ -133,7 +137,7 @@ describe("MeetingHeader", () => {
         <MeetingHeader
           title="Team Standup"
           onBack={mock(() => {})}
-          isRecording={false}
+          hasUnsavedRecording={false}
           onUpdateTitle={onUpdateTitle}
         />,
       );
@@ -153,7 +157,7 @@ describe("MeetingHeader", () => {
         <MeetingHeader
           title="Team Standup"
           onBack={mock(() => {})}
-          isRecording={false}
+          hasUnsavedRecording={false}
           onUpdateTitle={onUpdateTitle}
         />,
       );
@@ -174,7 +178,7 @@ describe("MeetingHeader", () => {
         <MeetingHeader
           title="Team Standup"
           onBack={mock(() => {})}
-          isRecording={false}
+          hasUnsavedRecording={false}
           onUpdateTitle={onUpdateTitle}
         />,
       );
@@ -193,7 +197,7 @@ describe("MeetingHeader", () => {
         <MeetingHeader
           title="Team Standup"
           onBack={mock(() => {})}
-          isRecording={false}
+          hasUnsavedRecording={false}
           onUpdateTitle={onUpdateTitle}
         />,
       );
@@ -207,7 +211,9 @@ describe("MeetingHeader", () => {
     });
 
     test("does not enter edit mode when onUpdateTitle is not provided", () => {
-      render(<MeetingHeader title="Team Standup" onBack={mock(() => {})} isRecording={false} />);
+      render(
+        <MeetingHeader title="Team Standup" onBack={mock(() => {})} hasUnsavedRecording={false} />,
+      );
 
       fireEvent.click(screen.getByText("Team Standup"));
 

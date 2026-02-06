@@ -11,10 +11,12 @@ import { runMigrations } from "../migrations";
 import {
   createMeeting,
   findMeetingById,
+  findMeetingByIdAndOwner,
   findAllMeetings,
+  findAllMeetingsByOwner,
   updateMeeting,
   deleteMeeting,
-  type Meeting,
+  assignUnownedMeetingsToOwner,
 } from "./meeting";
 
 describe("MeetingRepository", () => {
@@ -40,6 +42,7 @@ describe("MeetingRepository", () => {
       expect(meeting.startedAt).toBeGreaterThan(0);
       expect(meeting.endedAt).toBeNull();
       expect(meeting.createdAt).toBeGreaterThan(0);
+      expect(meeting.ownerUserId).toBeNull();
     });
 
     test("creates a meeting with provided id", () => {
@@ -54,6 +57,16 @@ describe("MeetingRepository", () => {
       const meeting = createMeeting(db, { title: "Project Discussion" });
 
       expect(meeting.title).toBe("Project Discussion");
+    });
+
+    test("creates a meeting with owner", () => {
+      const db = getDatabase(testDbPath);
+      const meeting = createMeeting(db, {
+        title: "Project Discussion",
+        ownerUserId: "user-1",
+      });
+
+      expect(meeting.ownerUserId).toBe("user-1");
     });
 
     test("creates a meeting without title", () => {
@@ -118,6 +131,50 @@ describe("MeetingRepository", () => {
       const meetings = findAllMeetings(db, 2);
 
       expect(meetings).toHaveLength(2);
+    });
+  });
+
+  describe("owner-scoped queries", () => {
+    test("finds meeting by id and owner", () => {
+      const db = getDatabase(testDbPath);
+      const created = createMeeting(db, {
+        title: "Owner Meeting",
+        ownerUserId: "user-1",
+      });
+
+      const found = findMeetingByIdAndOwner(db, created.id, "user-1");
+      const notFound = findMeetingByIdAndOwner(db, created.id, "user-2");
+
+      expect(found).not.toBeNull();
+      expect(found!.id).toBe(created.id);
+      expect(notFound).toBeNull();
+    });
+
+    test("lists meetings by owner", () => {
+      const db = getDatabase(testDbPath);
+      createMeeting(db, { title: "A", ownerUserId: "user-1" });
+      createMeeting(db, { title: "B", ownerUserId: "user-1" });
+      createMeeting(db, { title: "C", ownerUserId: "user-2" });
+
+      const owned = findAllMeetingsByOwner(db, "user-1");
+
+      expect(owned).toHaveLength(2);
+      owned.forEach((meeting) => expect(meeting.ownerUserId).toBe("user-1"));
+    });
+
+    test("assigns unowned meetings to owner", () => {
+      const db = getDatabase(testDbPath);
+      createMeeting(db, { title: "Unowned 1" });
+      createMeeting(db, { title: "Unowned 2" });
+      createMeeting(db, { title: "Owned", ownerUserId: "user-2" });
+
+      const changed = assignUnownedMeetingsToOwner(db, "user-1");
+      const user1Meetings = findAllMeetingsByOwner(db, "user-1");
+      const user2Meetings = findAllMeetingsByOwner(db, "user-2");
+
+      expect(changed).toBe(2);
+      expect(user1Meetings).toHaveLength(2);
+      expect(user2Meetings).toHaveLength(1);
     });
   });
 

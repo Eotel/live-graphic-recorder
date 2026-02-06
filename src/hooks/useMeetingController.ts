@@ -40,7 +40,9 @@ export interface UseMeetingControllerCallbacks {
     images: ImageData[];
     captures: CaptureData[];
     metaSummaries: MetaSummaryData[];
+    speakerAliases: Record<number, string>;
   }) => void;
+  onSpeakerAliases?: (speakerAliases: Record<number, string>) => void;
 }
 
 export interface UseMeetingControllerReturn extends MeetingControllerState {
@@ -78,6 +80,11 @@ export interface UseMeetingControllerReturn extends MeetingControllerState {
    * Update the meeting title.
    */
   updateMeetingTitle: (title: string) => void;
+
+  /**
+   * Update one speaker alias for the active meeting.
+   */
+  updateSpeakerAlias: (speaker: number, displayName: string) => void;
 
   /**
    * Start the recording session.
@@ -151,6 +158,7 @@ export function useMeetingController(
       onMeetingStatus: (data) => callbacksRef.current.onMeetingStatus?.(data),
       onMeetingList: (meetings) => callbacksRef.current.onMeetingList?.(meetings),
       onMeetingHistory: (data) => callbacksRef.current.onMeetingHistory?.(data),
+      onSpeakerAliases: (speakerAliases) => callbacksRef.current.onSpeakerAliases?.(speakerAliases),
     };
 
     return createMeetingController(
@@ -265,6 +273,13 @@ export function useMeetingController(
     [ensureController],
   );
 
+  const updateSpeakerAlias = useCallback(
+    (speaker: number, displayName: string) => {
+      ensureController()?.updateSpeakerAlias(speaker, displayName);
+    },
+    [ensureController],
+  );
+
   const startSession = useCallback(() => {
     ensureController()?.startSession();
   }, [ensureController]);
@@ -296,6 +311,7 @@ export function useMeetingController(
     stopMeeting,
     requestMeetingList,
     updateMeetingTitle,
+    updateSpeakerAlias,
     startSession,
     stopSession,
     sendCameraFrame,

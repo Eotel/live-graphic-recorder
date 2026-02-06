@@ -16,6 +16,7 @@ describe("createTranscriptStore", () => {
     expect(state.interimText).toBe("");
     expect(state.interimSpeaker).toBeUndefined();
     expect(state.interimStartTime).toBeUndefined();
+    expect(state.speakerAliases).toEqual({});
   });
 
   test("addTranscript with final=true adds to segments", () => {
@@ -159,6 +160,7 @@ describe("createTranscriptStore", () => {
       speaker: 1,
       startTime: 1.5,
     });
+    store.setSpeakerAlias(1, "田中");
 
     store.clear();
 
@@ -167,6 +169,38 @@ describe("createTranscriptStore", () => {
     expect(state.interimText).toBe("");
     expect(state.interimSpeaker).toBeUndefined();
     expect(state.interimStartTime).toBeUndefined();
+    expect(state.speakerAliases).toEqual({});
+  });
+
+  test("setSpeakerAlias creates/updates/removes alias", () => {
+    const onStateChange = mock(() => {});
+    const store = createTranscriptStore({ onStateChange });
+
+    store.setSpeakerAlias(0, "田中");
+    expect(store.getState().speakerAliases).toEqual({ 0: "田中" });
+
+    store.setSpeakerAlias(0, "佐藤");
+    expect(store.getState().speakerAliases).toEqual({ 0: "佐藤" });
+
+    store.setSpeakerAlias(0, "   ");
+    expect(store.getState().speakerAliases).toEqual({});
+  });
+
+  test("setSpeakerAliases replaces aliases map", () => {
+    const onStateChange = mock(() => {});
+    const store = createTranscriptStore({ onStateChange });
+
+    store.setSpeakerAlias(0, "既存");
+    store.setSpeakerAliases({
+      1: "山田",
+      2: "  鈴木  ",
+      [-1]: "invalid",
+    });
+
+    expect(store.getState().speakerAliases).toEqual({
+      1: "山田",
+      2: "鈴木",
+    });
   });
 
   test("emits state changes on updates", () => {

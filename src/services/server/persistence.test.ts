@@ -125,6 +125,60 @@ describe("PersistenceService", () => {
     });
   });
 
+  describe("Speaker alias operations", () => {
+    test("upserts and loads speaker aliases", () => {
+      const meeting = service.createMeeting("Alias Meeting");
+
+      const upserted = service.upsertSpeakerAlias(meeting.id, 0, "田中");
+      expect(upserted).not.toBeNull();
+      expect(upserted?.displayName).toBe("田中");
+
+      const aliases = service.loadSpeakerAliases(meeting.id);
+      expect(aliases).toHaveLength(1);
+      expect(aliases[0]!.speaker).toBe(0);
+      expect(aliases[0]!.displayName).toBe("田中");
+    });
+
+    test("updates existing speaker alias", () => {
+      const meeting = service.createMeeting("Alias Meeting");
+
+      const first = service.upsertSpeakerAlias(meeting.id, 1, "佐藤");
+      const updated = service.upsertSpeakerAlias(meeting.id, 1, "鈴木");
+
+      expect(first).not.toBeNull();
+      expect(updated).not.toBeNull();
+      expect(updated?.displayName).toBe("鈴木");
+      expect(updated!.updatedAt).toBeGreaterThanOrEqual(first!.updatedAt);
+    });
+
+    test("deletes speaker alias", () => {
+      const meeting = service.createMeeting("Alias Meeting");
+      service.upsertSpeakerAlias(meeting.id, 2, "削除対象");
+
+      const deleted = service.deleteSpeakerAlias(meeting.id, 2);
+      expect(deleted).toBe(true);
+      expect(service.loadSpeakerAliases(meeting.id)).toHaveLength(0);
+    });
+
+    test("enforces owner scope on speaker alias operations", () => {
+      const meeting = service.createMeeting("Owned Meeting", "user-1");
+
+      const deniedUpsert = service.upsertSpeakerAlias(meeting.id, 0, "田中", "user-2");
+      expect(deniedUpsert).toBeNull();
+      expect(service.loadSpeakerAliases(meeting.id, "user-2")).toEqual([]);
+
+      const allowedUpsert = service.upsertSpeakerAlias(meeting.id, 0, "田中", "user-1");
+      expect(allowedUpsert).not.toBeNull();
+
+      const deniedDelete = service.deleteSpeakerAlias(meeting.id, 0, "user-2");
+      expect(deniedDelete).toBe(false);
+
+      const aliasesForOwner = service.loadSpeakerAliases(meeting.id, "user-1");
+      expect(aliasesForOwner).toHaveLength(1);
+      expect(aliasesForOwner[0]!.displayName).toBe("田中");
+    });
+  });
+
   describe("User/Auth operations", () => {
     test("creates and fetches a user", () => {
       const user = service.createUser("alice@example.com", "hash-value");

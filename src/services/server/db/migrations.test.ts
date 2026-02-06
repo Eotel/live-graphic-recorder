@@ -39,6 +39,10 @@ describe("migrations", () => {
       expect(tableNames).toContain("generated_images");
       expect(tableNames).toContain("camera_captures");
       expect(tableNames).toContain("meta_summaries");
+      expect(tableNames).toContain("audio_recordings");
+      expect(tableNames).toContain("users");
+      expect(tableNames).toContain("auth_refresh_tokens");
+      expect(tableNames).toContain("meeting_speaker_aliases");
       expect(tableNames).toContain("schema_version");
     });
 
@@ -60,6 +64,7 @@ describe("migrations", () => {
       expect(columnMap.get("started_at")!.notnull).toBe(1);
       expect(columnMap.get("ended_at")).toBeDefined();
       expect(columnMap.get("created_at")!.notnull).toBe(1);
+      expect(columnMap.get("owner_user_id")).toBeDefined();
     });
 
     test("creates sessions table with foreign key to meetings", () => {
@@ -177,6 +182,105 @@ describe("migrations", () => {
       runMigrations(db);
 
       const fks = db.query("PRAGMA foreign_key_list(meta_summaries)").all() as {
+        table: string;
+        from: string;
+        to: string;
+        on_delete: string;
+      }[];
+
+      expect(fks).toHaveLength(1);
+      expect(fks[0]!.table).toBe("meetings");
+      expect(fks[0]!.from).toBe("meeting_id");
+      expect(fks[0]!.to).toBe("id");
+      expect(fks[0]!.on_delete).toBe("CASCADE");
+    });
+
+    test("creates users table with correct columns", () => {
+      const db = getDatabase(testDbPath);
+      runMigrations(db);
+
+      const columns = db.query("PRAGMA table_info(users)").all() as {
+        name: string;
+        type: string;
+        notnull: number;
+        pk: number;
+      }[];
+
+      const columnMap = new Map(columns.map((c) => [c.name, c]));
+      expect(columnMap.get("id")!.type).toBe("TEXT");
+      expect(columnMap.get("id")!.pk).toBe(1);
+      expect(columnMap.get("email")!.type).toBe("TEXT");
+      expect(columnMap.get("email")!.notnull).toBe(1);
+      expect(columnMap.get("password_hash")!.type).toBe("TEXT");
+      expect(columnMap.get("password_hash")!.notnull).toBe(1);
+      expect(columnMap.get("created_at")!.type).toBe("INTEGER");
+      expect(columnMap.get("created_at")!.notnull).toBe(1);
+    });
+
+    test("creates auth_refresh_tokens table with user foreign key", () => {
+      const db = getDatabase(testDbPath);
+      runMigrations(db);
+
+      const columns = db.query("PRAGMA table_info(auth_refresh_tokens)").all() as {
+        name: string;
+        type: string;
+        notnull: number;
+        pk: number;
+      }[];
+
+      const columnMap = new Map(columns.map((c) => [c.name, c]));
+      expect(columnMap.get("id")!.type).toBe("TEXT");
+      expect(columnMap.get("id")!.pk).toBe(1);
+      expect(columnMap.get("user_id")!.type).toBe("TEXT");
+      expect(columnMap.get("user_id")!.notnull).toBe(1);
+      expect(columnMap.get("token_hash")!.type).toBe("TEXT");
+      expect(columnMap.get("token_hash")!.notnull).toBe(1);
+      expect(columnMap.get("expires_at")!.type).toBe("INTEGER");
+      expect(columnMap.get("expires_at")!.notnull).toBe(1);
+      expect(columnMap.get("revoked_at")).toBeDefined();
+
+      const fks = db.query("PRAGMA foreign_key_list(auth_refresh_tokens)").all() as {
+        table: string;
+        from: string;
+        to: string;
+        on_delete: string;
+      }[];
+      expect(fks).toHaveLength(1);
+      expect(fks[0]!.table).toBe("users");
+      expect(fks[0]!.from).toBe("user_id");
+      expect(fks[0]!.to).toBe("id");
+      expect(fks[0]!.on_delete).toBe("CASCADE");
+    });
+
+    test("creates meeting_speaker_aliases table with correct columns", () => {
+      const db = getDatabase(testDbPath);
+      runMigrations(db);
+
+      const columns = db.query("PRAGMA table_info(meeting_speaker_aliases)").all() as {
+        name: string;
+        type: string;
+        notnull: number;
+        pk: number;
+      }[];
+
+      const columnMap = new Map(columns.map((c) => [c.name, c]));
+      expect(columnMap.get("meeting_id")!.type).toBe("TEXT");
+      expect(columnMap.get("meeting_id")!.notnull).toBe(1);
+      expect(columnMap.get("meeting_id")!.pk).toBe(1);
+      expect(columnMap.get("speaker")!.type).toBe("INTEGER");
+      expect(columnMap.get("speaker")!.notnull).toBe(1);
+      expect(columnMap.get("speaker")!.pk).toBe(2);
+      expect(columnMap.get("display_name")!.type).toBe("TEXT");
+      expect(columnMap.get("display_name")!.notnull).toBe(1);
+      expect(columnMap.get("updated_at")!.type).toBe("INTEGER");
+      expect(columnMap.get("updated_at")!.notnull).toBe(1);
+    });
+
+    test("creates meeting_speaker_aliases table with foreign key to meetings", () => {
+      const db = getDatabase(testDbPath);
+      runMigrations(db);
+
+      const fks = db.query("PRAGMA foreign_key_list(meeting_speaker_aliases)").all() as {
         table: string;
         from: string;
         to: string;

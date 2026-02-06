@@ -21,11 +21,18 @@ bun dev
 - `OPENAI_API_KEY`
 - `DEEPGRAM_API_KEY`
 - `GOOGLE_API_KEY`
+- `AUTH_JWT_SECRET`（十分に長いランダム文字列）
 
 画像モデル切替（UI の「画像モデル」トグルに反映）:
 
 - `GEMINI_IMAGE_MODEL_FLASH`（未指定なら `gemini-2.5-flash-image`）
 - `GEMINI_IMAGE_MODEL_PRO`（Pro を有効化する場合に指定。例: `gemini-3-pro-image-preview`）
+
+WebSocket Origin 制御（CSWSH 対策）:
+
+- `WS_ALLOWED_ORIGINS`（任意。カンマ区切りの絶対 origin）
+  - 例: `https://app.example.com,https://admin.example.com`
+  - 未設定でも同一 origin（`Origin` とリクエスト先 origin が一致）は許可されます
 
 ## 本番 (production)
 

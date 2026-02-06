@@ -65,6 +65,7 @@ export interface TranscriptStoreState {
   interimText: string;
   interimSpeaker: number | undefined;
   interimStartTime: number | undefined;
+  speakerAliases: Record<number, string>;
 }
 
 export interface TranscriptStoreActions {
@@ -77,6 +78,8 @@ export interface TranscriptStoreActions {
   }): void;
   markUtteranceEnd(timestamp: number): void;
   loadHistory(transcripts: TranscriptSegment[]): void;
+  setSpeakerAlias(speaker: number, displayName: string): void;
+  setSpeakerAliases(aliases: Record<number, string>): void;
   clear(): void;
 }
 
@@ -189,6 +192,7 @@ export interface MeetingControllerActions {
   stopMeeting(): void;
   requestMeetingList(): void;
   updateMeetingTitle(title: string): void;
+  updateSpeakerAlias(speaker: number, displayName: string): void;
   startSession(): void;
   stopSession(): void;
   sendCameraFrame(data: CameraFrame): void;
@@ -215,7 +219,9 @@ export interface MeetingControllerCallbacks {
     images: ImageData[];
     captures: CaptureData[];
     metaSummaries: MetaSummaryData[];
+    speakerAliases: Record<number, string>;
   }) => void;
+  onSpeakerAliases?: (speakerAliases: Record<number, string>) => void;
 }
 
 export interface MeetingControllerEvents {

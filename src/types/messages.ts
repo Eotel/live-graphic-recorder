@@ -66,6 +66,14 @@ export interface MeetingUpdateMessage {
   };
 }
 
+export interface SpeakerAliasUpdateMessage {
+  type: "meeting:speaker-alias:update";
+  data: {
+    speaker: number;
+    displayName: string;
+  };
+}
+
 export interface ImageModelSetMessage {
   type: "image:model:set";
   data: {
@@ -81,6 +89,7 @@ export type ClientMessage =
   | MeetingStopMessage
   | MeetingListRequestMessage
   | MeetingUpdateMessage
+  | SpeakerAliasUpdateMessage
   | ImageModelSetMessage;
 
 // ============================================================================
@@ -197,6 +206,13 @@ export interface MeetingListMessage {
   };
 }
 
+export interface SpeakerAliasMessage {
+  type: "meeting:speaker-alias";
+  data: {
+    speakerAliases: Record<string, string>;
+  };
+}
+
 export interface MeetingHistoryMessage {
   type: "meeting:history";
   data: {
@@ -231,6 +247,7 @@ export interface MeetingHistoryMessage {
       startTime: number;
       endTime: number;
     }>;
+    speakerAliases: Record<string, string>;
   };
 }
 
@@ -245,6 +262,7 @@ export type ServerMessage =
   | UtteranceEndMessage
   | MeetingStatusMessage
   | MeetingListMessage
+  | SpeakerAliasMessage
   | MeetingHistoryMessage;
 
 // ============================================================================

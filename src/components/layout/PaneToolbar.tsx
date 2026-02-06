@@ -26,7 +26,7 @@ export function PaneToolbar({ mode, onExpand, onCollapse, onPopout, className }:
   return (
     <div
       className={cn(
-        "absolute top-1 right-1 z-10 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity",
+        "absolute top-1 right-1 z-10 flex gap-1 opacity-100 md:opacity-0 md:group-hover:opacity-100 md:group-focus-within:opacity-100 transition-opacity",
         className,
       )}
     >

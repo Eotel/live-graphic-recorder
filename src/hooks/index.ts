@@ -14,3 +14,4 @@ export * from "./useRecordingController";
 export * from "./useTranscriptStore";
 export * from "./useSessionStore";
 export * from "./useMeetingSession";
+export * from "./useAuth";

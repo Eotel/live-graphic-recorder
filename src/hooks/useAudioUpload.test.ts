@@ -28,9 +28,10 @@ describe("useAudioUpload", () => {
     await writer.close();
 
     const mockFetch = mock(async () => new Response(JSON.stringify({ id: 1, url: "/audio/1" })));
+    const onComplete = mock(() => {});
 
     const { result } = renderHook(() =>
-      useAudioUpload({ storage, fetchFn: mockFetch as unknown as typeof fetch }),
+      useAudioUpload({ storage, fetchFn: mockFetch as unknown as typeof fetch, onComplete }),
     );
 
     await act(async () => {
@@ -40,14 +41,17 @@ describe("useAudioUpload", () => {
     expect(result.current.isUploading).toBe(false);
     expect(result.current.progress).toBe(100);
     expect(result.current.error).toBeNull();
+    expect(onComplete).toHaveBeenCalledTimes(1);
+    expect(onComplete).toHaveBeenCalledWith("session-1");
   });
 
   test("upload without file sets error", async () => {
     const storage = createMockOPFSStorageAdapter();
     const mockFetch = mock(async () => new Response("ok"));
+    const onComplete = mock(() => {});
 
     const { result } = renderHook(() =>
-      useAudioUpload({ storage, fetchFn: mockFetch as unknown as typeof fetch }),
+      useAudioUpload({ storage, fetchFn: mockFetch as unknown as typeof fetch, onComplete }),
     );
 
     await act(async () => {
@@ -56,6 +60,7 @@ describe("useAudioUpload", () => {
 
     expect(result.current.isUploading).toBe(false);
     expect(result.current.error).toBe("Audio file not found");
+    expect(onComplete).not.toHaveBeenCalled();
   });
 
   test("cleanup disposes controller on unmount", async () => {

@@ -33,6 +33,16 @@ export interface UseTranscriptStoreReturn extends TranscriptStoreState {
   loadHistory: (transcripts: TranscriptSegment[]) => void;
 
   /**
+   * Set one speaker alias.
+   */
+  setSpeakerAlias: (speaker: number, displayName: string) => void;
+
+  /**
+   * Replace all speaker aliases.
+   */
+  setSpeakerAliases: (aliases: Record<number, string>) => void;
+
+  /**
    * Clear all transcripts.
    */
   clear: () => void;
@@ -49,6 +59,7 @@ export function useTranscriptStore(): UseTranscriptStoreReturn {
     interimText: "",
     interimSpeaker: undefined,
     interimStartTime: undefined,
+    speakerAliases: {},
   });
 
   // Subscribers for external store
@@ -102,11 +113,21 @@ export function useTranscriptStore(): UseTranscriptStoreReturn {
     storeRef.current?.clear();
   }, []);
 
+  const setSpeakerAlias = useCallback((speaker: number, displayName: string) => {
+    storeRef.current?.setSpeakerAlias(speaker, displayName);
+  }, []);
+
+  const setSpeakerAliases = useCallback((aliases: Record<number, string>) => {
+    storeRef.current?.setSpeakerAliases(aliases);
+  }, []);
+
   return {
     ...state,
     addTranscript,
     markUtteranceEnd,
     loadHistory,
+    setSpeakerAlias,
+    setSpeakerAliases,
     clear,
   };
 }

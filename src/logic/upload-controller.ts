@@ -94,6 +94,7 @@ export function createUploadController(
           );
 
           xhr.open("POST", url, true);
+          xhr.withCredentials = true;
           xhr.setRequestHeader("Content-Type", "audio/webm");
           xhr.setRequestHeader("X-Session-Id", sessionId);
 
@@ -127,6 +128,7 @@ export function createUploadController(
         // Note: fetch() doesn't provide upload progress; keep progress at 0 until completion.
         const response = await fetchFn(url, {
           method: "POST",
+          credentials: "include",
           headers: {
             "Content-Type": "audio/webm",
             "X-Session-Id": sessionId,
