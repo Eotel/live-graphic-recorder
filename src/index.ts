@@ -182,7 +182,9 @@ async function serveMediaFile(subdir: string, filePath: string): Promise<Respons
       ? "image/png"
       : ext === "jpg" || ext === "jpeg"
         ? "image/jpeg"
-        : "application/octet-stream";
+        : ext === "webm"
+          ? "audio/webm"
+          : "application/octet-stream";
 
   return new Response(file, {
     headers: {
@@ -244,6 +246,91 @@ const server = Bun.serve<WSContext>({
       }
 
       return serveMediaFile("captures", capture.filePath.replace(/^.*\/captures\//, ""));
+    },
+    "/api/meetings/:meetingId/audio": {
+      POST: async (req: Request) => {
+        const url = new URL(req.url);
+        const match = url.pathname.match(/^\/api\/meetings\/([^/]+)\/audio$/);
+        if (!match) {
+          return new Response("Bad Request", { status: 400 });
+        }
+        const [, meetingId] = match;
+
+        if (!meetingId || !isValidUUID(meetingId)) {
+          return new Response("Invalid meeting ID", { status: 400 });
+        }
+
+        // Verify meeting exists
+        const meeting = persistence.getMeeting(meetingId);
+        if (!meeting) {
+          return new Response("Meeting not found", { status: 404 });
+        }
+
+        // Validate content type
+        const contentType = req.headers.get("content-type");
+        if (!contentType || !contentType.includes("audio/webm")) {
+          return new Response("Content-Type must be audio/webm", { status: 415 });
+        }
+
+        // Check file size (100 MB limit)
+        const MAX_AUDIO_SIZE = 100 * 1024 * 1024;
+        const contentLength = req.headers.get("content-length");
+        if (contentLength && parseInt(contentLength, 10) > MAX_AUDIO_SIZE) {
+          return new Response("File too large", { status: 413 });
+        }
+
+        // Get session ID from header
+        const sessionId = req.headers.get("x-session-id");
+        if (!sessionId || !/^[a-zA-Z0-9_-]+$/.test(sessionId)) {
+          return new Response("Invalid or missing X-Session-Id header", { status: 400 });
+        }
+
+        // Verify session exists and belongs to meeting
+        const persistedSession = persistence.getSessionByIdAndMeetingId(sessionId, meetingId);
+        if (!persistedSession) {
+          return new Response("Session not found", { status: 404 });
+        }
+
+        try {
+          const buffer = await req.arrayBuffer();
+          if (buffer.byteLength === 0) {
+            return new Response("Empty body", { status: 400 });
+          }
+          if (buffer.byteLength > MAX_AUDIO_SIZE) {
+            return new Response("File too large", { status: 413 });
+          }
+
+          const recording = await persistence.persistAudioRecording(sessionId, meetingId, buffer);
+
+          return Response.json({
+            id: recording.id,
+            url: `/api/meetings/${meetingId}/audio/${recording.id}`,
+          });
+        } catch (error) {
+          console.error("[API] Failed to save audio:", error);
+          return new Response("Failed to save audio recording", { status: 500 });
+        }
+      },
+    },
+    "/api/meetings/:meetingId/audio/:audioId": async (req: Request) => {
+      const url = new URL(req.url);
+      const match = url.pathname.match(/^\/api\/meetings\/([^/]+)\/audio\/(\d+)$/);
+      if (!match) {
+        return new Response("Bad Request", { status: 400 });
+      }
+      const [, meetingId, audioIdStr] = match;
+      const audioId = parseInt(audioIdStr!, 10);
+
+      if (!meetingId || !isValidUUID(meetingId)) {
+        return new Response("Invalid meeting ID", { status: 400 });
+      }
+
+      const recording = persistence.getAudioRecordingByIdAndMeetingId(audioId, meetingId);
+      if (!recording) {
+        return new Response("Not Found", { status: 404 });
+      }
+
+      return serveMediaFile("audio", recording.filePath.replace(/^.*\/audio\//, ""));
     },
     "/ws/recording": (req: Request, server: Server<WSContext>) => {
       const sessionId = generateSessionId();

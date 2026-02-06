@@ -33,3 +33,7 @@ export {
 
 // Stream Utils
 export { createStreamUtils, createMockStreamUtils, stopTracks } from "./stream-utils";
+
+// OPFS Storage
+export { createOPFSStorageAdapter, createMockOPFSStorageAdapter } from "./opfs-storage";
+export type { OPFSStorageAdapter, OPFSAudioWriter } from "./opfs-storage";

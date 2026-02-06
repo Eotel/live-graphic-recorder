@@ -71,6 +71,7 @@ export function App() {
   const onSessionStart = useCallback(() => {
     session.startSession();
     setHasLocalFile(false);
+    localRecordingRef.current.reset();
     const sessionId = session.meeting.sessionId;
     if (sessionId) {
       localRecordingRef.current.start(sessionId);
@@ -80,7 +81,9 @@ export function App() {
   const onSessionStop = useCallback(() => {
     session.stopSession();
     localRecordingRef.current.stop();
-    setHasLocalFile(true);
+    setHasLocalFile(
+      localRecordingRef.current.sessionId !== null && localRecordingRef.current.totalChunks > 0,
+    );
   }, [session]);
 
   const recording = useRecordingController({
@@ -115,6 +118,8 @@ export function App() {
     const pending = pendingMeetingActionRef.current;
     if (pending) {
       pendingMeetingActionRef.current = null;
+      setHasLocalFile(false);
+      localRecordingRef.current.reset();
       if (pending.type === "new") {
         session.startMeeting(pending.title);
       } else {
@@ -135,6 +140,8 @@ export function App() {
         session.connect();
         return;
       }
+      setHasLocalFile(false);
+      localRecordingRef.current.reset();
       session.startMeeting(title);
       setView("recording");
     },
@@ -148,6 +155,8 @@ export function App() {
         session.connect();
         return;
       }
+      setHasLocalFile(false);
+      localRecordingRef.current.reset();
       session.startMeeting(undefined, meetingId);
       setView("recording");
     },
@@ -203,6 +212,8 @@ export function App() {
     if (recording.isRecording) {
       recording.stop();
     }
+    setHasLocalFile(false);
+    localRecordingRef.current.reset();
     session.stopMeeting();
     session.resetSession();
     setView("select");

@@ -7,7 +7,7 @@
 
 import type { Database } from "bun:sqlite";
 
-export const CURRENT_SCHEMA_VERSION = 2;
+export const CURRENT_SCHEMA_VERSION = 3;
 
 /**
  * Get the current schema version from the database.
@@ -39,8 +39,9 @@ export function runMigrations(db: Database): void {
     migrateToV2(db);
   }
 
-  // Future migrations would go here:
-  // if (currentVersion < 3) migrateToV3(db);
+  if (currentVersion < 3) {
+    migrateToV3(db);
+  }
 }
 
 /**
@@ -167,4 +168,32 @@ function migrateToV2(db: Database): void {
 
   // Record the migration
   db.run("INSERT INTO schema_version (version) VALUES (2)");
+}
+
+/**
+ * Migration to schema version 3.
+ * Adds audio_recordings table for uploaded audio files.
+ */
+function migrateToV3(db: Database): void {
+  db.run(`
+    CREATE TABLE IF NOT EXISTS audio_recordings (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      session_id TEXT NOT NULL,
+      meeting_id TEXT NOT NULL,
+      file_path TEXT NOT NULL,
+      file_size_bytes INTEGER NOT NULL,
+      created_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now') * 1000),
+      FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE,
+      FOREIGN KEY (meeting_id) REFERENCES meetings(id) ON DELETE CASCADE
+    )
+  `);
+
+  db.run(
+    `CREATE INDEX IF NOT EXISTS idx_audio_recordings_session_id ON audio_recordings(session_id)`,
+  );
+  db.run(
+    `CREATE INDEX IF NOT EXISTS idx_audio_recordings_meeting_id ON audio_recordings(meeting_id)`,
+  );
+
+  db.run("INSERT INTO schema_version (version) VALUES (3)");
 }

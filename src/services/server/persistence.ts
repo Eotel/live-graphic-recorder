@@ -54,6 +54,11 @@ import {
   findLatestMetaSummaryByMeetingId,
   type PersistedMetaSummary,
 } from "./db/repository/meta-summary";
+import {
+  createAudioRecording,
+  findAudioRecordingByIdAndMeetingId,
+  type PersistedAudioRecording,
+} from "./db/repository/audio";
 import { FileStorageService } from "./db/storage/file-storage";
 
 // Keep sessionId format consistent with FileStorageService.
@@ -84,6 +89,7 @@ export type {
   PersistedAnalysis,
   PersistedGeneratedImage,
   PersistedCameraCapture,
+  PersistedAudioRecording,
 };
 
 export class PersistenceService {
@@ -133,6 +139,18 @@ export class PersistenceService {
 
   getSession(sessionId: string): PersistedSession | null {
     return findSessionById(this.db, sessionId);
+  }
+
+  /**
+   * Get a session by ID with meeting ownership validation.
+   * Returns null if the session doesn't exist or doesn't belong to the meeting.
+   */
+  getSessionByIdAndMeetingId(sessionId: string, meetingId: string): PersistedSession | null {
+    const session = findSessionById(this.db, sessionId);
+    if (!session || session.meetingId !== meetingId) {
+      return null;
+    }
+    return session;
   }
 
   getSessionsByMeeting(meetingId: string): PersistedSession[] {
@@ -277,6 +295,31 @@ export class PersistenceService {
    */
   getCaptureByIdAndMeetingId(captureId: number, meetingId: string): PersistedCameraCapture | null {
     return findCameraCapturByIdAndMeetingId(this.db, captureId, meetingId);
+  }
+
+  // ============================================================================
+  // Audio Recording Operations
+  // ============================================================================
+
+  async persistAudioRecording(
+    sessionId: string,
+    meetingId: string,
+    buffer: ArrayBuffer | Buffer,
+  ): Promise<PersistedAudioRecording> {
+    const { filePath } = await this.storage.saveAudioFile(sessionId, buffer);
+    return createAudioRecording(this.db, {
+      sessionId,
+      meetingId,
+      filePath,
+      fileSizeBytes: buffer.byteLength,
+    });
+  }
+
+  getAudioRecordingByIdAndMeetingId(
+    audioId: number,
+    meetingId: string,
+  ): PersistedAudioRecording | null {
+    return findAudioRecordingByIdAndMeetingId(this.db, audioId, meetingId);
   }
 
   // ============================================================================

@@ -112,6 +112,26 @@ export class FileStorageService {
   }
 
   /**
+   * Save an audio file to disk.
+   * @throws Error if sessionId contains invalid characters
+   */
+  async saveAudioFile(
+    sessionId: string,
+    buffer: ArrayBuffer | Buffer,
+  ): Promise<{ filePath: string }> {
+    const validSessionId = this.validateSessionId(sessionId);
+    const dir = this.getAudioDir(validSessionId);
+    this.ensureDir(dir);
+
+    const filename = `${Date.now()}.webm`;
+    const filePath = join(dir, filename);
+
+    await Bun.write(filePath, buffer);
+
+    return { filePath };
+  }
+
+  /**
    * Delete all media files for a session.
    * Returns the number of files deleted.
    * @throws Error if sessionId contains invalid characters
@@ -134,6 +154,13 @@ export class FileStorageService {
       rmSync(captureDir, { recursive: true });
     }
 
+    const audioDir = this.getAudioDir(validSessionId);
+    if (existsSync(audioDir)) {
+      const files = readdirSync(audioDir);
+      count += files.length;
+      rmSync(audioDir, { recursive: true });
+    }
+
     return count;
   }
 
@@ -145,6 +172,11 @@ export class FileStorageService {
   private getCaptureDir(sessionId: string): string {
     // sessionId should already be validated at this point
     return join(this.basePath, "captures", sessionId);
+  }
+
+  private getAudioDir(sessionId: string): string {
+    // sessionId should already be validated at this point
+    return join(this.basePath, "audio", sessionId);
   }
 
   private ensureDir(dir: string): void {

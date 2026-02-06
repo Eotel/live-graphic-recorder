@@ -93,10 +93,12 @@ describe("PersistenceService", () => {
 
   describe("Session operations", () => {
     let meetingId: string;
+    let meetingId2: string;
 
     beforeEach(() => {
       const meeting = service.createMeeting("Test Meeting");
       meetingId = meeting.id;
+      meetingId2 = service.createMeeting("Other Meeting").id;
     });
 
     test("creates a session", () => {
@@ -135,6 +137,19 @@ describe("PersistenceService", () => {
       const sessions = service.getSessionsByMeeting(meetingId);
 
       expect(sessions).toHaveLength(2);
+    });
+
+    test("gets session by id with meeting ownership validation", () => {
+      service.createSession(meetingId, "session-1");
+
+      const ok = service.getSessionByIdAndMeetingId("session-1", meetingId);
+      expect(ok?.id).toBe("session-1");
+
+      const wrongMeeting = service.getSessionByIdAndMeetingId("session-1", meetingId2);
+      expect(wrongMeeting).toBeNull();
+
+      const missing = service.getSessionByIdAndMeetingId("missing", meetingId);
+      expect(missing).toBeNull();
     });
   });
 
