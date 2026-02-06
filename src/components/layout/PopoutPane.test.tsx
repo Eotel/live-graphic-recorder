@@ -9,7 +9,7 @@
  */
 
 import { describe, test, expect, mock, afterEach } from "bun:test";
-import { render, screen, cleanup } from "@testing-library/react";
+import { render, screen, cleanup, fireEvent } from "@testing-library/react";
 import { PopoutPane } from "./PopoutPane";
 
 afterEach(() => cleanup());
@@ -107,7 +107,7 @@ describe("PopoutPane", () => {
       .getByText(/separate window/i)
       .closest("button, [role=button], div[class*='cursor']");
     if (skeleton) {
-      skeleton.click();
+      fireEvent.click(skeleton);
       expect(onFocus).toHaveBeenCalledTimes(1);
     }
   });

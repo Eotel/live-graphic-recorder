@@ -39,8 +39,8 @@ export interface UsePopoutWindowReturn {
 }
 
 /** Check if Document Picture-in-Picture API is available */
-function hasDocumentPiP(): boolean {
-  return "documentPictureInPicture" in window;
+function hasDocumentPiP(target: Window): target is WindowWithDocPiP {
+  return "documentPictureInPicture" in target;
 }
 
 /**
@@ -93,11 +93,11 @@ export function usePopoutWindow(options: UsePopoutWindowOptions): UsePopoutWindo
 
     let popout: Window | null = null;
 
-    if (hasDocumentPiP()) {
+    if (hasDocumentPiP(window)) {
       try {
         // Document PiP API: creates a floating always-on-top window
         // Requires transient activation (must be called from click handler)
-        popout = await (window as WindowWithDocPiP).documentPictureInPicture.requestWindow({
+        popout = await window.documentPictureInPicture.requestWindow({
           width,
           height,
         });

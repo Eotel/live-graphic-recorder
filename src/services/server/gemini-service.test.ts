@@ -7,8 +7,17 @@
 
 import { describe, test, expect, mock, beforeEach, afterEach } from "bun:test";
 
+type MockGeminiPart = { inlineData: { data: string } } | { text: string };
+type MockGeminiResponse = {
+  candidates: Array<{
+    content: {
+      parts: MockGeminiPart[];
+    };
+  }>;
+};
+
 let mockGenerateCalls: unknown[] = [];
-const mockGenerateContent = mock((params: unknown) => {
+const mockGenerateContent = mock((params: unknown): Promise<MockGeminiResponse> => {
   mockGenerateCalls.push(params);
   return Promise.resolve({
     candidates: [
@@ -82,7 +91,7 @@ describe("GeminiService", () => {
   });
 
   test("should throw when Gemini response has no image data", async () => {
-    mockGenerateContent.mockImplementationOnce((params: unknown) => {
+    mockGenerateContent.mockImplementationOnce((params: unknown): Promise<MockGeminiResponse> => {
       mockGenerateCalls.push(params);
       return Promise.resolve({
         candidates: [
