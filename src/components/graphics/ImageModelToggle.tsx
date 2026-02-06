@@ -26,17 +26,17 @@ export function ImageModelToggle({
   className,
 }: ImageModelToggleProps) {
   const isDisabled = disabled;
+  const toggleTooltip = `Flash（速度） / Pro（品質）\n使用中: ${model}`;
 
   return (
     <div className={cn("flex items-center justify-between gap-3", className)}>
       <div className="min-w-0">
         <div className="text-sm font-medium leading-none">画像モデル</div>
-        <div className="text-xs text-muted-foreground mt-1 truncate">
-          Flash（速度） / Pro（品質）
-        </div>
-        <div className="text-xs text-muted-foreground mt-1 truncate">使用中: {model}</div>
       </div>
-      <div className={cn("inline-flex rounded-lg bg-muted p-1", isDisabled && "opacity-50")}>
+      <div
+        title={toggleTooltip}
+        className={cn("inline-flex rounded-lg bg-muted p-1", isDisabled && "opacity-50")}
+      >
         <button
           type="button"
           onClick={() => onChange("flash")}
