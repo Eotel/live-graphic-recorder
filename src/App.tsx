@@ -75,7 +75,6 @@ export function App() {
   latestMeetingListRef.current = session.meeting.meetingList;
   const latestSessionErrorRef = useRef(session.error);
   latestSessionErrorRef.current = session.error;
-  const isLogoutInProgressRef = useRef(false);
 
   // Pane expand/popout state
   const paneState = usePaneState();
@@ -213,9 +212,6 @@ export function App() {
   // Auto-connect WebSocket after authentication
   useEffect(() => {
     if (auth.status !== "authenticated") {
-      return;
-    }
-    if (isLogoutInProgressRef.current) {
       return;
     }
     if (!session.isConnected) {
@@ -427,10 +423,6 @@ export function App() {
   }, [recording, session]);
 
   const handleLogout = useCallback(async () => {
-    if (isLogoutInProgressRef.current) {
-      return;
-    }
-    isLogoutInProgressRef.current = true;
     if (recording.isRecording) {
       recording.stop();
     }
@@ -448,7 +440,6 @@ export function App() {
 
   useEffect(() => {
     if (auth.status === "authenticated") return;
-    isLogoutInProgressRef.current = false;
     clearMeetingListRequestTimeout();
     setIsMeetingListLoading(false);
     setMeetingListError(null);
