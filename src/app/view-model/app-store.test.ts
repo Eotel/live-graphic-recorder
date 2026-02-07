@@ -82,6 +82,35 @@ describe("createAppStore", () => {
     expect(store.getState().ui.expandedPane).toBe("summary");
   });
 
+  test("section actions update store", () => {
+    const store = createAppStore();
+    const { actions } = store.getState();
+
+    actions.setAuthState({
+      status: "authenticated",
+      user: { id: "u1", email: "user@example.com" },
+    });
+    actions.setMeetingState({ meetingId: "meeting-1", view: "recording" });
+    actions.setMediaState({ hasPermission: true, isLoading: false });
+    actions.setRecordingState({
+      isRecording: false,
+      sessionStatus: "idle",
+      localSessionId: "session-1",
+      hasLocalFile: true,
+    });
+    actions.setUploadState({ isUploading: true, progress: 40 });
+    actions.setUiState({ expandedPane: "summary", popoutPanes: ["camera"] });
+
+    const state = store.getState();
+    expect(state.auth.status).toBe("authenticated");
+    expect(state.meeting.meetingId).toBe("meeting-1");
+    expect(state.upload.isUploading).toBe(true);
+    expect(state.ui.expandedPane).toBe("summary");
+    expect(state.ui.popoutPanes).toEqual(["camera"]);
+    expect(state.derived.hasMeeting).toBe(true);
+    expect(state.derived.hasUnsavedRecording).toBe(true);
+  });
+
   test("downloadReport sets and clears lock", async () => {
     const downloadReport = mock(async (_meetingId: string) => {});
     const store = createAppStore(
@@ -106,5 +135,30 @@ describe("createAppStore", () => {
 
     expect(store.getState().ui.isDownloadingReport).toBe(false);
     expect(store.getState().ui.reportDownloadLocked).toBe(false);
+  });
+
+  test("downloadReport notifies callback on dependency error", async () => {
+    const onDownloadReportError = mock((_error: unknown) => {});
+    const store = createAppStore(
+      {
+        downloadReport: async () => {
+          throw new Error("download failed");
+        },
+        onDownloadReportError,
+      },
+      {
+        meeting: {
+          meetingId: "meeting-1",
+        },
+      },
+    );
+
+    const ok = await store.getState().actions.downloadReport();
+
+    expect(ok).toBe(false);
+    expect(onDownloadReportError).toHaveBeenCalledTimes(1);
+    expect(store.getState().ui.reportDownloadLocked).toBe(false);
+    expect(store.getState().ui.isDownloadingReport).toBe(false);
+    expect(store.getState().ui.reportDownloadError).toContain("download failed");
   });
 });

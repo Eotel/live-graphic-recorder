@@ -86,6 +86,34 @@
         "将来の app-store 委譲に向けた移行コメントを明示"
       ],
       "commands": ["bun test src/hooks/useMeetingSession.test.ts"]
+    },
+    {
+      "task_id": "T07",
+      "agent": "A07",
+      "source": "src/app/container/AppShell.tsx",
+      "test_file": "src/app/view/AppShellRecordingView.tsx",
+      "goal": "AppShell を container/view へ責務分割し 200-300 行単位に整理",
+      "dependencies": ["T03"],
+      "requirements": [
+        "src/app/container/AppShell.tsx を薄いエントリに変更する",
+        "UI レンダリングを src/app/view/* へ分離する",
+        "container 側ロジックを責務別 hook へ分割し、1 ファイル 200-300 行目安に整理する"
+      ],
+      "commands": ["bun run typecheck"]
+    },
+    {
+      "task_id": "T08",
+      "agent": "A08",
+      "source": "src/app/view-model/app-store.ts",
+      "test_file": "src/app/view-model/app-store.test.ts",
+      "goal": "app-store を AppShell 状態ソースに段階移行し syncSnapshot を廃止",
+      "dependencies": ["T01", "T02", "T03"],
+      "requirements": [
+        "app-store に section 単位の更新 action を追加する",
+        "AppShell から app-store を実状態ソースとして参照する",
+        "syncSnapshot を削除し、section action 経路のみで回帰テストを追加する"
+      ],
+      "commands": ["bun run typecheck", "bun test src/app/view-model/app-store.test.ts"]
     }
   ]
 }

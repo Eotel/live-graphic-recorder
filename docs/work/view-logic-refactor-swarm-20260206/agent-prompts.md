@@ -125,3 +125,46 @@ Task ID: T06
 進捗更新:
 - docs/work/.../progress.md の自分のセクション
 ```
+
+## A07 / T07
+
+```text
+あなたは Coverage Swarm の Agent A07 です。
+Task ID: T07
+依存: T03
+対象ソース: src/app/container/AppShell.tsx
+主テストファイル: src/app/view/AppShellRecordingView.tsx
+
+要件:
+1. AppShell を container/view に責務分割する
+2. UI 挙動は現行維持
+3. container の各ファイルは 200-300 行目安で分割する
+
+実行:
+- bun run typecheck
+
+進捗更新:
+- docs/work/.../progress.md の自分のセクション
+```
+
+## A08 / T08
+
+```text
+あなたは Coverage Swarm の Agent A08 です。
+Task ID: T08
+依存: T01, T02, T03
+対象ソース: src/app/view-model/app-store.ts
+主テストファイル: src/app/view-model/app-store.test.ts
+
+要件:
+1. app-store に section 単位の更新 action を追加する
+2. AppShell 状態ソースを app-store へ段階移行し syncSnapshot を廃止する
+3. 追加 action と report error callback のテストを追加する
+
+実行:
+- bun run typecheck
+- bun test src/app/view-model/app-store.test.ts
+
+進捗更新:
+- docs/work/.../progress.md の自分のセクション
+```

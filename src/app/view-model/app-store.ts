@@ -16,6 +16,7 @@ export interface AppStoreDependencies {
   downloadReport?: (meetingId: string) => Promise<void> | void;
   refreshMeetings?: () => Promise<MeetingInfo[] | void> | MeetingInfo[] | void;
   togglePaneMode?: (paneId: PaneId, mode: PaneMode) => Promise<void> | void;
+  onDownloadReportError?: (error: unknown) => void;
   reportUnlockDelayMs?: number;
 }
 
@@ -79,7 +80,12 @@ export interface AppStoreState {
 
 export interface AppStoreActions {
   initialize: (snapshot?: AppStoreSnapshotPatch) => Promise<void>;
-  syncSnapshot: (snapshot: AppStoreSnapshotPatch) => void;
+  setAuthState: (auth: Partial<AppStoreState["auth"]>) => void;
+  setMeetingState: (meeting: Partial<AppStoreState["meeting"]>) => void;
+  setRecordingState: (recording: Partial<AppStoreState["recording"]>) => void;
+  setMediaState: (media: Partial<AppStoreState["media"]>) => void;
+  setUploadState: (upload: Partial<AppStoreState["upload"]>) => void;
+  setUiState: (ui: Partial<AppStoreState["ui"]>) => void;
   selectMeeting: (meetingId: string) => Promise<void>;
   createMeeting: (title?: string) => Promise<void>;
   startRecording: () => Promise<void>;
@@ -234,8 +240,58 @@ export function createAppStore(
         await deps.initialize?.();
       },
 
-      syncSnapshot: (snapshot) => {
-        set((state) => ({ ...applyPatch(state, snapshot), actions: state.actions }));
+      setAuthState: (auth) => {
+        set((state) => ({
+          ...applyPatch(state, {
+            auth,
+          }),
+          actions: state.actions,
+        }));
+      },
+
+      setMeetingState: (meeting) => {
+        set((state) => ({
+          ...applyPatch(state, {
+            meeting,
+          }),
+          actions: state.actions,
+        }));
+      },
+
+      setRecordingState: (recording) => {
+        set((state) => ({
+          ...applyPatch(state, {
+            recording,
+          }),
+          actions: state.actions,
+        }));
+      },
+
+      setMediaState: (media) => {
+        set((state) => ({
+          ...applyPatch(state, {
+            media,
+          }),
+          actions: state.actions,
+        }));
+      },
+
+      setUploadState: (upload) => {
+        set((state) => ({
+          ...applyPatch(state, {
+            upload,
+          }),
+          actions: state.actions,
+        }));
+      },
+
+      setUiState: (ui) => {
+        set((state) => ({
+          ...applyPatch(state, {
+            ui,
+          }),
+          actions: state.actions,
+        }));
       },
 
       createMeeting: async (title) => {
@@ -369,6 +425,7 @@ export function createAppStore(
         try {
           await deps.downloadReport?.(meetingId);
         } catch (error) {
+          deps.onDownloadReportError?.(error);
           set(
             (state) =>
               ({
