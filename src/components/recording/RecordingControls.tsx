@@ -6,6 +6,7 @@
  */
 
 import { Circle, Square, AlertCircle, Loader2 } from "lucide-react";
+import type { ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import type { SessionStatus, MediaSourceType } from "@/types/messages";
 
@@ -43,8 +44,43 @@ export function RecordingControls({
 
   const isPermissionDenied = error?.toLowerCase().includes("permission denied");
 
+  let primaryControl: ReactNode;
+
+  if (!hasPermission) {
+    primaryControl = (
+      <Button onClick={onRequestPermission} disabled={isLoading} size="lg" className="gap-2">
+        {isLoading ? <Loader2 className="size-4 animate-spin" /> : <Circle className="size-4" />}
+        {permissionButtonText}
+      </Button>
+    );
+  } else if (isRecording) {
+    primaryControl = (
+      <Button onClick={onStop} variant="destructive" size="lg" className="gap-2">
+        <Square className="size-4 fill-current" />
+        Stop Recording
+      </Button>
+    );
+  } else {
+    primaryControl = (
+      <Button
+        onClick={onStart}
+        size="lg"
+        className="gap-2"
+        disabled={sessionStatus === "processing" || isLoading || !hasMeeting}
+        title={!hasMeeting ? "Start or join a meeting first" : undefined}
+      >
+        {sessionStatus === "processing" ? (
+          <Loader2 className="size-4 animate-spin" />
+        ) : (
+          <Circle className="size-4 fill-red-500 text-red-500" />
+        )}
+        {hasMeeting ? "Start Recording" : "Select Meeting First"}
+      </Button>
+    );
+  }
+
   return (
-    <div className="flex flex-col items-center justify-center gap-4">
+    <div className="flex flex-col items-center justify-center gap-2">
       {error && (
         <div className="flex flex-col items-center gap-2 text-destructive text-sm max-w-md text-center">
           <div className="flex items-center gap-2">
@@ -59,39 +95,14 @@ export function RecordingControls({
         </div>
       )}
 
-      {!hasPermission ? (
-        <Button onClick={onRequestPermission} disabled={isLoading} size="lg" className="gap-2">
-          {isLoading ? <Loader2 className="size-4 animate-spin" /> : <Circle className="size-4" />}
-          {permissionButtonText}
-        </Button>
-      ) : isRecording ? (
-        <>
-          <Button onClick={onStop} variant="destructive" size="lg" className="gap-2">
-            <Square className="size-4 fill-current" />
-            Stop Recording
-          </Button>
-          {elapsedTime && (
-            <span className="font-mono tabular-nums text-sm text-muted-foreground">
-              {elapsedTime}
-            </span>
-          )}
-        </>
-      ) : (
-        <Button
-          onClick={onStart}
-          size="lg"
-          className="gap-2"
-          disabled={sessionStatus === "processing" || isLoading || !hasMeeting}
-          title={!hasMeeting ? "Start or join a meeting first" : undefined}
-        >
-          {sessionStatus === "processing" ? (
-            <Loader2 className="size-4 animate-spin" />
-          ) : (
-            <Circle className="size-4 fill-red-500 text-red-500" />
-          )}
-          {hasMeeting ? "Start Recording" : "Select Meeting First"}
-        </Button>
-      )}
+      <div className="flex items-center justify-center gap-3" data-testid="recording-control-row">
+        {primaryControl}
+        {isRecording && elapsedTime && (
+          <span className="font-mono tabular-nums text-sm text-muted-foreground">
+            {elapsedTime}
+          </span>
+        )}
+      </div>
     </div>
   );
 }

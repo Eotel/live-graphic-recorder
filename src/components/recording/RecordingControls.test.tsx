@@ -1,0 +1,68 @@
+import { afterEach, describe, expect, mock, test } from "bun:test";
+import { cleanup, render, screen } from "@testing-library/react";
+import type { ComponentProps } from "react";
+
+import { RecordingControls } from "./RecordingControls";
+
+describe("RecordingControls", () => {
+  afterEach(() => {
+    cleanup();
+  });
+
+  const baseProps: ComponentProps<typeof RecordingControls> = {
+    sessionStatus: "idle",
+    isRecording: false,
+    hasPermission: true,
+    isLoading: false,
+    error: null,
+    sourceType: "camera",
+    elapsedTime: undefined,
+    hasMeeting: true,
+    onRequestPermission: mock(() => {}),
+    onStart: mock(() => {}),
+    onStop: mock(() => {}),
+  };
+
+  test("shows stop button and elapsed time in the same horizontal row while recording", () => {
+    render(
+      <RecordingControls
+        {...baseProps}
+        isRecording={true}
+        hasPermission={true}
+        elapsedTime="12:34"
+      />,
+    );
+
+    const row = screen.getByTestId("recording-control-row");
+    const stopButton = screen.getByRole("button", { name: "Stop Recording" });
+    const elapsedTime = screen.getByText("12:34");
+
+    expect(row.contains(stopButton)).toBe(true);
+    expect(row.contains(elapsedTime)).toBe(true);
+    expect(row.className).toContain("items-center");
+    expect(row.className).toContain("gap-3");
+    expect(elapsedTime.className).toContain("font-mono");
+    expect(elapsedTime.className).toContain("tabular-nums");
+  });
+
+  test("does not show elapsed time in grant state", () => {
+    render(<RecordingControls {...baseProps} hasPermission={false} elapsedTime="00:42" />);
+
+    expect(screen.getByRole("button", { name: "Grant Camera & Mic Access" })).toBeTruthy();
+    expect(screen.queryByText("00:42")).toBeNull();
+  });
+
+  test("does not show elapsed time in start state", () => {
+    render(
+      <RecordingControls
+        {...baseProps}
+        hasPermission={true}
+        isRecording={false}
+        elapsedTime="00:42"
+      />,
+    );
+
+    expect(screen.getByRole("button", { name: "Start Recording" })).toBeTruthy();
+    expect(screen.queryByText("00:42")).toBeNull();
+  });
+});
