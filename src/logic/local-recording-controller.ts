@@ -7,6 +7,13 @@
 
 import type { OPFSStorageAdapter, OPFSAudioWriter } from "../adapters/opfs-storage";
 
+export interface PendingLocalRecording {
+  recordingId: string;
+  sessionId: string;
+  totalChunks: number;
+  createdAt: number;
+}
+
 export interface LocalRecordingState {
   isRecording: boolean;
   /**
@@ -15,6 +22,7 @@ export interface LocalRecordingState {
    */
   sessionId: string | null;
   totalChunks: number;
+  pendingRecordings: PendingLocalRecording[];
   error: string | null;
 }
 
@@ -33,6 +41,7 @@ export function createLocalRecordingController(
   start(sessionId: string): Promise<void>;
   writeChunk(chunk: ArrayBuffer): Promise<void>;
   stop(): Promise<void>;
+  removePendingRecording(recordingId: string): void;
   reset(): void;
   getState(): LocalRecordingState;
   dispose(): void;
@@ -43,10 +52,13 @@ export function createLocalRecordingController(
     isRecording: false,
     sessionId: null,
     totalChunks: 0,
+    pendingRecordings: [],
     error: null,
   };
 
   let writer: OPFSAudioWriter | null = null;
+  let activeRecordingId: string | null = null;
+  let activeRecordingStartedAt: number | null = null;
   let isDisposed = false;
 
   function updateState(updates: Partial<LocalRecordingState>): void {
@@ -56,11 +68,18 @@ export function createLocalRecordingController(
     }
   }
 
+  function createRecordingId(sessionId: string): string {
+    const nonce = Math.random().toString(36).slice(2, 10);
+    return `${sessionId}-${Date.now()}-${nonce}`;
+  }
+
   async function start(sessionId: string): Promise<void> {
     if (isDisposed || state.isRecording) return;
 
     try {
-      writer = await storage.createAudioFile(sessionId);
+      activeRecordingId = createRecordingId(sessionId);
+      activeRecordingStartedAt = Date.now();
+      writer = await storage.createAudioFile(activeRecordingId);
       updateState({
         isRecording: true,
         sessionId,
@@ -69,6 +88,8 @@ export function createLocalRecordingController(
       });
     } catch (err) {
       const message = err instanceof Error ? err.message : "Failed to create audio file";
+      activeRecordingId = null;
+      activeRecordingStartedAt = null;
       updateState({ error: message });
     }
   }
@@ -89,6 +110,11 @@ export function createLocalRecordingController(
   async function stop(): Promise<void> {
     if (isDisposed || !state.isRecording) return;
 
+    const completedRecordingId = activeRecordingId;
+    const completedStartedAt = activeRecordingStartedAt;
+    const completedSessionId = state.sessionId;
+    const completedChunks = state.totalChunks;
+
     try {
       await writer?.close();
     } catch {
@@ -96,24 +122,66 @@ export function createLocalRecordingController(
     }
 
     writer = null;
+    activeRecordingId = null;
+    activeRecordingStartedAt = null;
+
+    const shouldQueue =
+      completedRecordingId !== null &&
+      completedStartedAt !== null &&
+      completedSessionId !== null &&
+      completedChunks > 0;
+
     updateState({
       isRecording: false,
+      pendingRecordings: shouldQueue
+        ? [
+            ...state.pendingRecordings,
+            {
+              recordingId: completedRecordingId!,
+              sessionId: completedSessionId!,
+              totalChunks: completedChunks,
+              createdAt: completedStartedAt!,
+            },
+          ]
+        : state.pendingRecordings,
       error: null,
     });
+  }
+
+  function removePendingRecording(recordingId: string): void {
+    if (isDisposed) return;
+    if (!recordingId) return;
+    const next = state.pendingRecordings.filter(
+      (recording) => recording.recordingId !== recordingId,
+    );
+    if (next.length === state.pendingRecordings.length) return;
+    updateState({ pendingRecordings: next });
   }
 
   function reset(): void {
     if (isDisposed) return;
 
-    if (state.isRecording) {
+    const recordingIdsToDelete = state.pendingRecordings.map((recording) => recording.recordingId);
+    if (activeRecordingId) {
+      recordingIdsToDelete.push(activeRecordingId);
+    }
+
+    if (state.isRecording || writer) {
       writer?.close().catch(() => {});
       writer = null;
+    }
+    activeRecordingId = null;
+    activeRecordingStartedAt = null;
+
+    for (const recordingId of recordingIdsToDelete) {
+      storage.deleteAudioFile(recordingId).catch(() => {});
     }
 
     updateState({
       isRecording: false,
       sessionId: null,
       totalChunks: 0,
+      pendingRecordings: [],
       error: null,
     });
   }
@@ -121,12 +189,20 @@ export function createLocalRecordingController(
   function dispose(): void {
     if (isDisposed) return;
 
-    if (state.isRecording) {
+    if (state.isRecording || writer) {
       writer?.close().catch(() => {});
       writer = null;
-      state = { ...state, isRecording: false, sessionId: null, totalChunks: 0 };
+      state = {
+        ...state,
+        isRecording: false,
+        sessionId: null,
+        totalChunks: 0,
+        pendingRecordings: [],
+      };
       callbacks.onStateChange({ ...state });
     }
+    activeRecordingId = null;
+    activeRecordingStartedAt = null;
 
     isDisposed = true;
   }
@@ -135,6 +211,7 @@ export function createLocalRecordingController(
     start,
     writeChunk,
     stop,
+    removePendingRecording,
     reset,
     getState: () => ({ ...state }),
     dispose,

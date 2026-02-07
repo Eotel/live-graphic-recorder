@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { useTranslation } from "react-i18next";
 
 export interface LoginPageProps {
   isSubmitting: boolean;
@@ -10,6 +11,7 @@ export interface LoginPageProps {
 }
 
 export function LoginPage({ isSubmitting, error, onLogin, onSignup }: LoginPageProps) {
+  const { t } = useTranslation();
   const [mode, setMode] = useState<"login" | "signup">("login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -23,11 +25,11 @@ export function LoginPage({ isSubmitting, error, onLogin, onSignup }: LoginPageP
 
     const normalizedEmail = email.trim().toLowerCase();
     if (!normalizedEmail || !normalizedEmail.includes("@")) {
-      setLocalError("有効なメールアドレスを入力してください");
+      setLocalError(t("auth.invalidEmail"));
       return;
     }
     if (!password) {
-      setLocalError("パスワードを入力してください");
+      setLocalError(t("auth.passwordRequired"));
       return;
     }
 
@@ -36,7 +38,7 @@ export function LoginPage({ isSubmitting, error, onLogin, onSignup }: LoginPageP
       : await onSignup(normalizedEmail, password);
 
     if (!ok && !error) {
-      setLocalError(isLogin ? "ログインに失敗しました" : "アカウント作成に失敗しました");
+      setLocalError(isLogin ? t("auth.loginFailed") : t("auth.signupFailed"));
     }
   }
 
@@ -45,15 +47,15 @@ export function LoginPage({ isSubmitting, error, onLogin, onSignup }: LoginPageP
   return (
     <div className="min-h-screen flex items-center justify-center bg-background p-6">
       <div className="w-full max-w-md rounded-xl border border-border bg-card p-6 shadow-sm">
-        <h1 className="text-2xl font-bold text-foreground">Live Graphic Recorder</h1>
+        <h1 className="text-2xl font-bold text-foreground">{t("common.appName")}</h1>
         <p className="mt-2 text-sm text-muted-foreground">
-          {isLogin ? "ログインして会議一覧を表示します" : "新規アカウントを作成します"}
+          {isLogin ? t("auth.loginDescription") : t("auth.signupDescription")}
         </p>
 
         <form className="mt-6 space-y-4" onSubmit={handleSubmit}>
           <div className="space-y-2">
             <label className="text-sm font-medium text-foreground" htmlFor="email">
-              メールアドレス
+              {t("auth.emailLabel")}
             </label>
             <Input
               id="email"
@@ -61,14 +63,14 @@ export function LoginPage({ isSubmitting, error, onLogin, onSignup }: LoginPageP
               autoComplete="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              placeholder="you@example.com"
+              placeholder={t("auth.emailPlaceholder")}
               disabled={isSubmitting}
             />
           </div>
 
           <div className="space-y-2">
             <label className="text-sm font-medium text-foreground" htmlFor="password">
-              パスワード
+              {t("auth.passwordLabel")}
             </label>
             <Input
               id="password"
@@ -76,7 +78,9 @@ export function LoginPage({ isSubmitting, error, onLogin, onSignup }: LoginPageP
               autoComplete={isLogin ? "current-password" : "new-password"}
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              placeholder={isLogin ? "パスワード" : "12文字以上・英大小/数字/記号を含む"}
+              placeholder={
+                isLogin ? t("auth.passwordPlaceholderLogin") : t("auth.passwordPlaceholderSignup")
+              }
               disabled={isSubmitting}
             />
           </div>
@@ -84,12 +88,12 @@ export function LoginPage({ isSubmitting, error, onLogin, onSignup }: LoginPageP
           {displayError && <p className="text-sm text-destructive">{displayError}</p>}
 
           <Button type="submit" className="w-full" disabled={isSubmitting}>
-            {isSubmitting ? "処理中..." : isLogin ? "ログイン" : "アカウント作成"}
+            {isSubmitting ? t("auth.submitting") : isLogin ? t("auth.login") : t("auth.signup")}
           </Button>
         </form>
 
         <div className="mt-4 text-sm text-muted-foreground">
-          {isLogin ? "アカウント未登録ですか？" : "既にアカウントをお持ちですか？"}
+          {isLogin ? t("auth.noAccount") : t("auth.hasAccount")}
           <button
             type="button"
             className="ml-2 text-foreground underline underline-offset-4"
@@ -99,7 +103,7 @@ export function LoginPage({ isSubmitting, error, onLogin, onSignup }: LoginPageP
             }}
             disabled={isSubmitting}
           >
-            {isLogin ? "新規登録" : "ログインへ"}
+            {isLogin ? t("auth.goSignup") : t("auth.goLogin")}
           </button>
         </div>
       </div>

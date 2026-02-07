@@ -2,7 +2,7 @@
  * Tests for MediaStreamController.
  */
 
-import { describe, test, expect, mock, beforeEach } from "bun:test";
+import { describe, test, expect, mock } from "bun:test";
 import { createMediaStreamController, formatMediaError } from "./media-stream-controller";
 import type { MediaDevicesAdapter, StreamUtils } from "../adapters/types";
 import type { MediaStreamControllerState } from "./types";
@@ -82,10 +82,6 @@ function createMockCameraStream(): MockMediaStream {
 
 function createMockScreenStream(): MockMediaStream {
   return new MockMediaStream([createMockVideoTrack()]);
-}
-
-function createMockAudioOnlyStream(): MockMediaStream {
-  return new MockMediaStream([createMockAudioTrack()]);
 }
 
 function createMockDeps(): { mediaDevices: MediaDevicesAdapter; streamUtils: StreamUtils } {
@@ -319,7 +315,6 @@ describe("switchVideoSource (video switching during recording)", () => {
     const deps = createMockDeps();
     const cameraStream = createMockCameraStream();
     const screenStream = createMockScreenStream();
-    const audioStream = createMockAudioOnlyStream();
 
     deps.mediaDevices.getUserMedia = mock(() =>
       Promise.resolve(cameraStream as unknown as MediaStream),

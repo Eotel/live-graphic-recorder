@@ -8,6 +8,7 @@ import type { PaneId } from "@/logic/pane-state-controller";
 import { Maximize2, Minimize2, ExternalLink } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { useTranslation } from "react-i18next";
 
 interface PaneToolbarProps {
   paneId: PaneId;
@@ -19,6 +20,8 @@ interface PaneToolbarProps {
 }
 
 export function PaneToolbar({ mode, onExpand, onCollapse, onPopout, className }: PaneToolbarProps) {
+  const { t } = useTranslation();
+
   if (mode === "popout") {
     return null;
   }
@@ -36,7 +39,7 @@ export function PaneToolbar({ mode, onExpand, onCollapse, onPopout, className }:
             variant="ghost"
             size="icon-sm"
             onClick={onExpand}
-            aria-label="Expand pane"
+            aria-label={t("layout.expandPane")}
             className="bg-background/80 backdrop-blur-sm"
           >
             <Maximize2 className="size-4" />
@@ -45,7 +48,7 @@ export function PaneToolbar({ mode, onExpand, onCollapse, onPopout, className }:
             variant="ghost"
             size="icon-sm"
             onClick={onPopout}
-            aria-label="Pop out pane"
+            aria-label={t("layout.popoutPane")}
             className="hidden md:inline-flex bg-background/80 backdrop-blur-sm"
           >
             <ExternalLink className="size-4" />
@@ -57,7 +60,7 @@ export function PaneToolbar({ mode, onExpand, onCollapse, onPopout, className }:
           variant="ghost"
           size="icon-sm"
           onClick={onCollapse}
-          aria-label="Collapse pane"
+          aria-label={t("layout.collapsePane")}
           className="bg-background/80 backdrop-blur-sm"
         >
           <Minimize2 className="size-4" />

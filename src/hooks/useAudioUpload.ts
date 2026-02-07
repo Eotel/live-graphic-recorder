@@ -6,7 +6,7 @@
  */
 
 import { useCallback, useEffect, useRef, useSyncExternalStore } from "react";
-import type { UploadState } from "../logic/upload-controller";
+import type { PendingUploadRecording, UploadState } from "../logic/upload-controller";
 import { createUploadController } from "../logic/upload-controller";
 import type { OPFSStorageAdapter } from "../adapters/opfs-storage";
 import { createOPFSStorageAdapter, createMockOPFSStorageAdapter } from "../adapters/opfs-storage";
@@ -14,11 +14,11 @@ import { createOPFSStorageAdapter, createMockOPFSStorageAdapter } from "../adapt
 export interface UseAudioUploadOptions {
   storage?: OPFSStorageAdapter;
   fetchFn?: typeof fetch;
-  onComplete?: (sessionId: string) => void;
+  onComplete?: (recordingId: string) => void;
 }
 
 export interface UseAudioUploadReturn extends UploadState {
-  upload(sessionId: string, meetingId: string): Promise<void>;
+  upload(recordings: PendingUploadRecording[], meetingId: string): Promise<void>;
   cancel(): void;
 }
 
@@ -41,6 +41,9 @@ export function useAudioUpload(options?: UseAudioUploadOptions): UseAudioUploadR
     progress: 0,
     error: null,
     lastUploadedSessionId: null,
+    lastUploadedAudioUrl: null,
+    uploadedCount: 0,
+    totalCount: 0,
   });
 
   const subscribersRef = useRef<Set<() => void>>(new Set());
@@ -65,8 +68,8 @@ export function useAudioUpload(options?: UseAudioUploadOptions): UseAudioUploadR
           stateRef.current = state;
           subscribersRef.current.forEach((cb) => cb());
         },
-        onComplete: (sessionId) => {
-          optionsRef.current?.onComplete?.(sessionId);
+        onComplete: (recordingId) => {
+          optionsRef.current?.onComplete?.(recordingId);
         },
         onError: () => {},
       },
@@ -92,8 +95,8 @@ export function useAudioUpload(options?: UseAudioUploadOptions): UseAudioUploadR
     };
   }, []);
 
-  const upload = useCallback(async (sessionId: string, meetingId: string) => {
-    await controllerRef.current?.upload(sessionId, meetingId);
+  const upload = useCallback(async (recordings: PendingUploadRecording[], meetingId: string) => {
+    await controllerRef.current?.upload(recordings, meetingId);
   }, []);
 
   const cancel = useCallback(() => {

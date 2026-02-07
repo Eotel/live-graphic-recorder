@@ -16,12 +16,7 @@ import type { ReactNode } from "react";
 import { createPortal } from "react-dom";
 import type { PaneId } from "@/logic/pane-state-controller";
 import { PaneSkeleton } from "./PaneSkeleton";
-
-const PANE_LABELS: Record<PaneId, string> = {
-  summary: "Summary",
-  camera: "Camera",
-  graphics: "Graphics",
-};
+import { useTranslation } from "react-i18next";
 
 interface PopoutPaneProps {
   paneId: PaneId;
@@ -42,12 +37,19 @@ export function PopoutPane({
   children,
   placeholder,
 }: PopoutPaneProps) {
+  const { t } = useTranslation();
+  const paneLabels: Record<PaneId, string> = {
+    summary: t("layout.paneSummary"),
+    camera: t("layout.paneCamera"),
+    graphics: t("layout.paneGraphics"),
+  };
+
   // When popped out with a valid portal container, render children into the popout window
   if (isPopout && portalContainer) {
     return (
       <>
         {placeholder ?? (
-          <PaneSkeleton paneId={paneId} label={PANE_LABELS[paneId]} onFocus={onFocusPopout} />
+          <PaneSkeleton paneId={paneId} label={paneLabels[paneId]} onFocus={onFocusPopout} />
         )}
         {createPortal(children, portalContainer)}
       </>

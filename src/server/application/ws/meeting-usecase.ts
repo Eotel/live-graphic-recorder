@@ -1,13 +1,19 @@
 import type { ServerWebSocket } from "bun";
 import { isValidUUID } from "@/server/domain/common/id";
-import { buildMeetingHistoryMessage } from "@/server/domain/meeting/history-mapper";
+import {
+  buildMeetingHistoryDeltaMessage,
+  buildMeetingHistoryMessage,
+} from "@/server/domain/meeting/history-mapper";
 import { speakerAliasArrayToMap } from "@/server/domain/meeting/speaker-alias";
 import { send } from "@/server/presentation/ws/sender";
 import type { WSContext } from "@/server/types/context";
+import type { RecordingLockManager } from "@/server/application/ws/recording-lock-manager";
 import type { PersistenceService } from "@/services/server/persistence";
+import type { MeetingHistoryCursor, MeetingMode } from "@/types/messages";
 
 interface CreateMeetingWsUsecaseInput {
   persistence: PersistenceService;
+  recordingLocks: RecordingLockManager;
 }
 
 export interface MeetingWsUsecase {
@@ -16,11 +22,15 @@ export interface MeetingWsUsecase {
   list: (ws: ServerWebSocket<WSContext>) => void;
   update: (ws: ServerWebSocket<WSContext>, ctx: WSContext, data: unknown) => void;
   updateSpeakerAlias: (ws: ServerWebSocket<WSContext>, ctx: WSContext, data: unknown) => void;
+  setMode: (ws: ServerWebSocket<WSContext>, ctx: WSContext, data: unknown) => void;
+  requestHistoryDelta: (ws: ServerWebSocket<WSContext>, ctx: WSContext, data: unknown) => void;
+  releaseRecordingLock: (ctx: WSContext) => void;
 }
 
 function readMeetingStartData(data: unknown): {
   title?: string;
   meetingId?: string;
+  mode?: MeetingMode;
 } | null {
   if (typeof data === "undefined") {
     return {};
@@ -31,16 +41,21 @@ function readMeetingStartData(data: unknown): {
 
   const title = (data as { title?: unknown }).title;
   const meetingId = (data as { meetingId?: unknown }).meetingId;
+  const mode = (data as { mode?: unknown }).mode;
   if (typeof title !== "undefined" && typeof title !== "string") {
     return null;
   }
   if (typeof meetingId !== "undefined" && typeof meetingId !== "string") {
     return null;
   }
+  if (typeof mode !== "undefined" && mode !== "record" && mode !== "view") {
+    return null;
+  }
 
   return {
     title,
     meetingId,
+    mode,
   };
 }
 
@@ -55,6 +70,88 @@ function readMeetingUpdateData(data: unknown): {
     return null;
   }
   return { title };
+}
+
+function readMeetingModeSetData(data: unknown): {
+  mode: MeetingMode;
+} | null {
+  if (!data || typeof data !== "object") {
+    return null;
+  }
+  const mode = (data as { mode?: unknown }).mode;
+  if (mode !== "record" && mode !== "view") {
+    return null;
+  }
+  return { mode };
+}
+
+function readMeetingHistoryCursor(data: unknown): MeetingHistoryCursor | null {
+  if (typeof data === "undefined") {
+    return {};
+  }
+  if (!data || typeof data !== "object") {
+    return null;
+  }
+
+  const cursorValue = (data as { cursor?: unknown }).cursor;
+  if (typeof cursorValue === "undefined") {
+    return {};
+  }
+  if (!cursorValue || typeof cursorValue !== "object") {
+    return null;
+  }
+
+  const cursor = cursorValue as {
+    transcriptTs?: unknown;
+    analysisTs?: unknown;
+    imageTs?: unknown;
+    captureTs?: unknown;
+    metaSummaryEndTs?: unknown;
+  };
+
+  const parsed: MeetingHistoryCursor = {};
+  const numericKeys: Array<keyof MeetingHistoryCursor> = [
+    "transcriptTs",
+    "analysisTs",
+    "imageTs",
+    "captureTs",
+    "metaSummaryEndTs",
+  ];
+
+  for (const key of numericKeys) {
+    const value = cursor[key];
+    if (typeof value === "undefined") continue;
+    if (typeof value !== "number" || !Number.isFinite(value)) {
+      return null;
+    }
+    parsed[key] = value;
+  }
+
+  return parsed;
+}
+
+function readMeetingHistoryRequestData(data: unknown): {
+  meetingId: string;
+  cursor: MeetingHistoryCursor;
+} | null {
+  if (!data || typeof data !== "object") {
+    return null;
+  }
+
+  const meetingId = (data as { meetingId?: unknown }).meetingId;
+  if (typeof meetingId !== "string") {
+    return null;
+  }
+
+  const cursor = readMeetingHistoryCursor(data);
+  if (!cursor) {
+    return null;
+  }
+
+  return {
+    meetingId,
+    cursor,
+  };
 }
 
 function sendSpeakerAliases(
@@ -101,8 +198,85 @@ function sendMeetingHistory(
   }
 }
 
+function sendMeetingHistoryDelta(
+  ws: ServerWebSocket<WSContext>,
+  persistence: PersistenceService,
+  meetingId: string,
+  userId: string,
+  cursor: MeetingHistoryCursor,
+): void {
+  try {
+    const transcripts = persistence
+      .loadMeetingTranscript(meetingId, userId)
+      .filter(
+        (item) => typeof cursor.transcriptTs !== "number" || item.timestamp > cursor.transcriptTs,
+      );
+    const analyses = persistence
+      .loadMeetingAnalyses(meetingId, userId)
+      .filter(
+        (item) => typeof cursor.analysisTs !== "number" || item.timestamp > cursor.analysisTs,
+      );
+    const images = persistence
+      .loadMeetingImages(meetingId, userId)
+      .filter((item) => typeof cursor.imageTs !== "number" || item.timestamp > cursor.imageTs);
+    const captures = persistence
+      .loadMeetingCaptures(meetingId, userId)
+      .filter((item) => typeof cursor.captureTs !== "number" || item.timestamp > cursor.captureTs);
+    const metaSummaries = persistence
+      .loadMetaSummaries(meetingId, userId)
+      .filter(
+        (item) =>
+          typeof cursor.metaSummaryEndTs !== "number" || item.endTime > cursor.metaSummaryEndTs,
+      );
+
+    const message = buildMeetingHistoryDeltaMessage(meetingId, {
+      transcripts,
+      analyses,
+      images,
+      captures,
+      metaSummaries,
+      speakerAliases: persistence.loadSpeakerAliases(meetingId, userId),
+    });
+
+    send(ws, message);
+  } catch (error) {
+    console.error("[WS] Failed to send meeting history delta:", error);
+    send(ws, {
+      type: "error",
+      data: { message: "Failed to load meeting history delta" },
+    });
+  }
+}
+
+function sendMeetingStatus(
+  ws: ServerWebSocket<WSContext>,
+  data: { meetingId: string; title?: string; sessionId: string; mode: MeetingMode },
+): void {
+  send(ws, {
+    type: "meeting:status",
+    data,
+  });
+}
+
+function resolveMeetingMode(isExistingMeeting: boolean, requestedMode?: MeetingMode): MeetingMode {
+  if (requestedMode === "record" || requestedMode === "view") {
+    return requestedMode;
+  }
+  return isExistingMeeting ? "view" : "record";
+}
+
+function sendReadOnlyError(ws: ServerWebSocket<WSContext>): void {
+  send(ws, {
+    type: "error",
+    data: {
+      message: "This meeting is in read-only mode",
+      code: "READ_ONLY_MEETING",
+    },
+  });
+}
+
 export function createMeetingWsUsecase(input: CreateMeetingWsUsecaseInput): MeetingWsUsecase {
-  const { persistence } = input;
+  const { persistence, recordingLocks } = input;
 
   function start(ws: ServerWebSocket<WSContext>, ctx: WSContext, data: unknown): void {
     const parsedData = readMeetingStartData(data);
@@ -146,19 +320,34 @@ export function createMeetingWsUsecase(input: CreateMeetingWsUsecaseInput): Meet
         title = meeting.title ?? undefined;
       }
 
+      const mode = resolveMeetingMode(isExistingMeeting, parsedData.mode);
+      if (mode === "record" && recordingLocks.isLockedByAnother(meetingId, ctx.sessionId)) {
+        send(ws, {
+          type: "error",
+          data: {
+            message: "Another user is already recording this meeting",
+            code: "MEETING_ALREADY_RECORDING",
+          },
+        });
+        return;
+      }
+
       ctx.meetingId = meetingId;
+      ctx.meetingMode = mode;
       persistence.createSession(meetingId, ctx.sessionId);
 
-      send(ws, {
-        type: "meeting:status",
-        data: { meetingId, title, sessionId: ctx.sessionId },
+      sendMeetingStatus(ws, {
+        meetingId,
+        title,
+        sessionId: ctx.sessionId,
+        mode,
       });
 
       if (isExistingMeeting) {
         sendMeetingHistory(ws, persistence, meetingId, ctx.userId);
       }
 
-      console.log(`[WS] Meeting started: ${meetingId}, session: ${ctx.sessionId}`);
+      console.log(`[WS] Meeting started: ${meetingId}, mode: ${mode}, session: ${ctx.sessionId}`);
     } catch (error) {
       console.error("[WS] Failed to start meeting:", error);
       send(ws, {
@@ -170,9 +359,11 @@ export function createMeetingWsUsecase(input: CreateMeetingWsUsecaseInput): Meet
 
   function stop(ctx: WSContext): void {
     if (ctx.meetingId) {
+      recordingLocks.release(ctx.meetingId, ctx.sessionId);
       persistence.endMeeting(ctx.meetingId, ctx.userId);
       console.log(`[WS] Meeting ended: ${ctx.meetingId}`);
       ctx.meetingId = null;
+      ctx.meetingMode = null;
     }
   }
 
@@ -201,6 +392,11 @@ export function createMeetingWsUsecase(input: CreateMeetingWsUsecaseInput): Meet
       return;
     }
 
+    if (ctx.meetingMode !== "record") {
+      sendReadOnlyError(ws);
+      return;
+    }
+
     const parsedData = readMeetingUpdateData(data);
     if (!parsedData) {
       send(ws, {
@@ -220,13 +416,11 @@ export function createMeetingWsUsecase(input: CreateMeetingWsUsecaseInput): Meet
         return;
       }
 
-      send(ws, {
-        type: "meeting:status",
-        data: {
-          meetingId: ctx.meetingId,
-          title: parsedData.title,
-          sessionId: ctx.sessionId,
-        },
+      sendMeetingStatus(ws, {
+        meetingId: ctx.meetingId,
+        title: parsedData.title,
+        sessionId: ctx.sessionId,
+        mode: ctx.meetingMode ?? "record",
       });
 
       console.log(`[WS] Meeting title updated: ${ctx.meetingId} -> "${parsedData.title}"`);
@@ -245,6 +439,11 @@ export function createMeetingWsUsecase(input: CreateMeetingWsUsecaseInput): Meet
         type: "error",
         data: { message: "No active meeting to update", code: "NO_ACTIVE_MEETING" },
       });
+      return;
+    }
+
+    if (ctx.meetingMode !== "record") {
+      sendReadOnlyError(ws);
       return;
     }
 
@@ -296,11 +495,114 @@ export function createMeetingWsUsecase(input: CreateMeetingWsUsecaseInput): Meet
     sendSpeakerAliases(ws, persistence, ctx.meetingId, ctx.userId);
   }
 
+  function setMode(ws: ServerWebSocket<WSContext>, ctx: WSContext, data: unknown): void {
+    if (!ctx.meetingId) {
+      send(ws, {
+        type: "error",
+        data: { message: "No active meeting to update", code: "NO_ACTIVE_MEETING" },
+      });
+      return;
+    }
+
+    const parsedData = readMeetingModeSetData(data);
+    if (!parsedData) {
+      send(ws, {
+        type: "error",
+        data: { message: "Invalid meeting mode payload", code: "INVALID_MEETING_MODE" },
+      });
+      return;
+    }
+
+    if (
+      parsedData.mode === "record" &&
+      recordingLocks.isLockedByAnother(ctx.meetingId, ctx.sessionId)
+    ) {
+      send(ws, {
+        type: "error",
+        data: {
+          message: "Another user is already recording this meeting",
+          code: "MEETING_ALREADY_RECORDING",
+        },
+      });
+      return;
+    }
+
+    ctx.meetingMode = parsedData.mode;
+    if (parsedData.mode === "view") {
+      recordingLocks.release(ctx.meetingId, ctx.sessionId);
+    }
+
+    const meeting = persistence.getMeeting(ctx.meetingId, ctx.userId);
+    sendMeetingStatus(ws, {
+      meetingId: ctx.meetingId,
+      title: meeting?.title ?? undefined,
+      sessionId: ctx.sessionId,
+      mode: parsedData.mode,
+    });
+  }
+
+  function requestHistoryDelta(
+    ws: ServerWebSocket<WSContext>,
+    ctx: WSContext,
+    data: unknown,
+  ): void {
+    const parsedData = readMeetingHistoryRequestData(data);
+    if (!parsedData) {
+      send(ws, {
+        type: "error",
+        data: {
+          message: "Invalid history request payload",
+          code: "INVALID_MEETING_HISTORY_REQUEST",
+        },
+      });
+      return;
+    }
+
+    if (!isValidUUID(parsedData.meetingId)) {
+      send(ws, {
+        type: "error",
+        data: { message: "Invalid meeting ID format", code: "INVALID_MEETING_ID" },
+      });
+      return;
+    }
+
+    if (!ctx.meetingId || ctx.meetingId !== parsedData.meetingId) {
+      send(ws, {
+        type: "error",
+        data: {
+          message: "No active meeting context",
+          code: "NO_ACTIVE_MEETING",
+        },
+      });
+      return;
+    }
+
+    if (!persistence.getMeeting(parsedData.meetingId, ctx.userId)) {
+      send(ws, {
+        type: "error",
+        data: { message: "Meeting not found", code: "MEETING_NOT_FOUND" },
+      });
+      return;
+    }
+
+    sendMeetingHistoryDelta(ws, persistence, parsedData.meetingId, ctx.userId, parsedData.cursor);
+  }
+
+  function releaseRecordingLock(ctx: WSContext): void {
+    if (!ctx.meetingId) {
+      return;
+    }
+    recordingLocks.release(ctx.meetingId, ctx.sessionId);
+  }
+
   return {
     start,
     stop,
     list,
     update,
     updateSpeakerAlias,
+    setMode,
+    requestHistoryDelta,
+    releaseRecordingLock,
   };
 }

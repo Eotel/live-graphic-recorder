@@ -5,13 +5,10 @@
  * Related: src/hooks/useRecordingController.ts, src/logic/recording-controller.ts
  */
 
-import { describe, test, expect, mock, beforeEach } from "bun:test";
+import { describe, test, expect, mock } from "bun:test";
 import { renderHook, act } from "@testing-library/react";
 import { useRecordingController } from "./useRecordingController";
 import type { UseRecordingControllerOptions } from "./useRecordingController";
-
-// Mock the media-recorder adapter module
-import { createMediaRecorderAdapter } from "../adapters/media-recorder";
 
 // Since MediaRecorder isn't available in test env, we need to mock the module
 // The hook creates the adapter internally, so we test behavior through the hook API

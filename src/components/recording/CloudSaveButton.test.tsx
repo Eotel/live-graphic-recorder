@@ -14,19 +14,18 @@ describe("CloudSaveButton", () => {
   });
 
   const defaultProps: CloudSaveButtonProps = {
-    sessionId: "session-1",
     meetingId: "meeting-1",
     isRecording: false,
     isUploading: false,
     progress: 0,
     error: null,
-    hasLocalRecording: true,
+    pendingCount: 1,
     onUpload: () => {},
     onCancel: () => {},
   };
 
   test("should return null when there is no local recording and idle", () => {
-    const { container } = render(<CloudSaveButton {...defaultProps} hasLocalRecording={false} />);
+    const { container } = render(<CloudSaveButton {...defaultProps} pendingCount={0} />);
 
     expect(container.innerHTML).toBe("");
   });
@@ -39,12 +38,12 @@ describe("CloudSaveButton", () => {
     expect((button as HTMLButtonElement).disabled).toBe(false);
   });
 
-  test("should call onUpload with sessionId and meetingId when clicked", () => {
+  test("should call onUpload with meetingId when clicked", () => {
     const onUpload = mock(() => {});
     render(<CloudSaveButton {...defaultProps} onUpload={onUpload} />);
 
     fireEvent.click(screen.getByRole("button", { name: "Save to Cloud" }));
-    expect(onUpload).toHaveBeenCalledWith("session-1", "meeting-1");
+    expect(onUpload).toHaveBeenCalledWith("meeting-1");
   });
 
   test("should show uploading state with progress bar and allow cancel", () => {
@@ -78,13 +77,7 @@ describe("CloudSaveButton", () => {
 
   test("should render error message and disable upload when error exists", () => {
     render(
-      <CloudSaveButton
-        {...defaultProps}
-        hasLocalRecording={false}
-        error="Upload failed"
-        sessionId={null}
-        meetingId={null}
-      />,
+      <CloudSaveButton {...defaultProps} pendingCount={0} error="Upload failed" meetingId={null} />,
     );
 
     expect(screen.getByText("Upload failed")).toBeTruthy();
@@ -97,8 +90,7 @@ describe("CloudSaveButton", () => {
     render(
       <CloudSaveButton
         {...defaultProps}
-        hasLocalRecording={false}
-        sessionId={null}
+        pendingCount={0}
         meetingId={null}
         progress={100}
         isUploading={false}
@@ -108,5 +100,11 @@ describe("CloudSaveButton", () => {
 
     expect(screen.queryByRole("button", { name: "Saved" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Save to Cloud" })).toBeNull();
+  });
+
+  test("shows pending count when multiple recordings are queued", () => {
+    render(<CloudSaveButton {...defaultProps} pendingCount={3} />);
+
+    expect(screen.getByRole("button", { name: "Save to Cloud (3)" })).toBeTruthy();
   });
 });

@@ -5,14 +5,10 @@
  * Related: src/logic/recording-controller.ts, src/adapters/media-recorder.ts
  */
 
-import { describe, test, expect, mock, beforeEach } from "bun:test";
+import { describe, test, expect, mock } from "bun:test";
 import { createRecordingController } from "./recording-controller";
 import type { MediaRecorderAdapter, MediaRecorderInstance } from "../adapters/types";
-import type {
-  RecordingContext,
-  RecordingControllerCallbacks,
-  RecordingControllerState,
-} from "./types";
+import type { RecordingContext, RecordingControllerCallbacks } from "./types";
 
 // ============================================================================
 // Test Helpers
@@ -144,7 +140,7 @@ describe("createRecordingController", () => {
   });
 
   test("start() with valid context transitions to recording and calls onSessionStart", () => {
-    const { controller, mockRecorder, onSessionStart, onStateChange } = createTestSetup();
+    const { controller, mockRecorder, onSessionStart } = createTestSetup();
 
     controller.start(validContext());
 
@@ -330,7 +326,7 @@ describe("createRecordingController", () => {
   });
 
   test("start() then stop() then start() follows correct lifecycle", () => {
-    const { controller, onSessionStart, onSessionStop, mockRecorder } = createTestSetup();
+    const { controller, onSessionStart, onSessionStop } = createTestSetup();
 
     // First start
     controller.start(validContext());

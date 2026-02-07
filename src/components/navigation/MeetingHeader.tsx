@@ -7,6 +7,7 @@
 
 import { useState, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
+import { useTranslation } from "react-i18next";
 
 export interface MeetingHeaderProps {
   title?: string | null;
@@ -15,11 +16,12 @@ export interface MeetingHeaderProps {
 }
 
 export function MeetingHeader({ title, onBackRequested, onUpdateTitle }: MeetingHeaderProps) {
+  const { t } = useTranslation();
   const [isEditing, setIsEditing] = useState(false);
   const [editValue, setEditValue] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
 
-  const displayTitle = title?.trim() || "Untitled Meeting";
+  const displayTitle = title?.trim() || t("meeting.untitled");
 
   // Focus input when entering edit mode
   useEffect(() => {
@@ -43,7 +45,7 @@ export function MeetingHeader({ title, onBackRequested, onUpdateTitle }: Meeting
     const newTitle = editValue.trim();
     setIsEditing(false);
     if (newTitle !== (title?.trim() || "") && onUpdateTitle) {
-      onUpdateTitle(newTitle || "Untitled Meeting");
+      onUpdateTitle(newTitle || t("meeting.untitled"));
     }
   };
 
@@ -67,7 +69,7 @@ export function MeetingHeader({ title, onBackRequested, onUpdateTitle }: Meeting
         size="sm"
         onClick={handleBack}
         type="button"
-        aria-label="Back"
+        aria-label={t("common.back")}
         className="p-1"
       >
         <span>←</span>
@@ -80,7 +82,7 @@ export function MeetingHeader({ title, onBackRequested, onUpdateTitle }: Meeting
           onChange={(e) => setEditValue(e.target.value)}
           onBlur={handleConfirm}
           onKeyDown={handleKeyDown}
-          placeholder="Meeting title"
+          placeholder={t("meeting.titlePlaceholder")}
           className="text-sm font-medium bg-transparent border-b border-foreground/50 focus:border-foreground focus:outline-none px-0 py-0.5 max-w-[60vw]"
         />
       ) : (
@@ -88,7 +90,7 @@ export function MeetingHeader({ title, onBackRequested, onUpdateTitle }: Meeting
           type="button"
           onClick={handleTitleClick}
           className="text-sm font-medium text-foreground truncate max-w-[60vw] hover:underline cursor-pointer"
-          title={onUpdateTitle ? "Click to edit title" : undefined}
+          title={onUpdateTitle ? t("meeting.clickToEditTitle") : undefined}
         >
           {displayTitle}
         </button>

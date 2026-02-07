@@ -10,8 +10,10 @@ import type {
   TranscriptSegment,
   CameraFrame,
   ImageModelPreset,
+  MeetingMode,
+  MeetingHistoryCursor,
 } from "../types/messages";
-import type { WebSocketAdapter, WebSocketInstance, WebSocketReadyState } from "../adapters/types";
+import type { WebSocketAdapter, WebSocketInstance } from "../adapters/types";
 import { WebSocketReadyState as ReadyState } from "../adapters/types";
 import { WS_CONFIG, GEMINI_CONFIG } from "../config/constants";
 import type {
@@ -73,6 +75,7 @@ export function createMeetingController(
       meetingId: null,
       meetingTitle: null,
       sessionId: null,
+      mode: null,
       meetingList: [],
     },
   };
@@ -116,6 +119,75 @@ export function createMeetingController(
       normalized[speaker] = name;
     }
     return normalized;
+  }
+
+  function mapHistoryData(historyData: {
+    transcripts: Array<{
+      text: string;
+      timestamp: number;
+      isFinal: boolean;
+      speaker?: number;
+      startTime?: number;
+      isUtteranceEnd?: boolean;
+    }>;
+    analyses: Array<{
+      summary: string[];
+      topics: string[];
+      tags: string[];
+      flow: number;
+      heat: number;
+      timestamp: number;
+    }>;
+    images: Array<{ url: string; prompt: string; timestamp: number }>;
+    captures: Array<{ url: string; timestamp: number }>;
+    metaSummaries: Array<{
+      summary: string[];
+      themes: string[];
+      startTime: number;
+      endTime: number;
+    }>;
+    speakerAliases?: Record<string, string> | Record<number, string>;
+  }): {
+    transcripts: TranscriptSegment[];
+    analyses: AnalysisData[];
+    images: ImageData[];
+    captures: CaptureData[];
+    metaSummaries: MetaSummaryData[];
+    speakerAliases: Record<number, string>;
+  } {
+    const transcripts: TranscriptSegment[] = historyData.transcripts.map((t) => ({
+      text: t.text,
+      timestamp: t.timestamp,
+      isFinal: t.isFinal,
+      speaker: t.speaker,
+      startTime: t.startTime,
+      isUtteranceEnd: t.isUtteranceEnd,
+    }));
+    const analyses: AnalysisData[] = historyData.analyses.map((a) => ({
+      summary: a.summary,
+      topics: a.topics,
+      tags: a.tags,
+      flow: a.flow,
+      heat: a.heat,
+      timestamp: a.timestamp,
+    }));
+    const images: ImageData[] = historyData.images.map((i) => ({
+      url: i.url,
+      prompt: i.prompt,
+      timestamp: i.timestamp,
+    }));
+    const captures: CaptureData[] = historyData.captures.map((c) => ({
+      url: c.url,
+      timestamp: c.timestamp,
+    }));
+    const metaSummaries: MetaSummaryData[] = historyData.metaSummaries.map((m) => ({
+      summary: m.summary,
+      themes: m.themes,
+      startTime: m.startTime,
+      endTime: m.endTime,
+    }));
+    const speakerAliases = normalizeSpeakerAliases(historyData.speakerAliases ?? {});
+    return { transcripts, analyses, images, captures, metaSummaries, speakerAliases };
   }
 
   function handleMessage(data: string | ArrayBuffer): void {
@@ -179,6 +251,7 @@ export function createMeetingController(
             meetingId: message.data.meetingId,
             meetingTitle: message.data.title ?? null,
             sessionId: message.data.sessionId,
+            mode: message.data.mode,
           });
           callbacksRef.onMeetingStatus?.(message.data);
           break;
@@ -191,48 +264,12 @@ export function createMeetingController(
           break;
 
         case "meeting:history": {
-          const historyData = message.data;
-          const transcripts: TranscriptSegment[] = historyData.transcripts.map((t) => ({
-            text: t.text,
-            timestamp: t.timestamp,
-            isFinal: t.isFinal,
-            speaker: t.speaker,
-            startTime: t.startTime,
-            isUtteranceEnd: t.isUtteranceEnd,
-          }));
-          const analyses: AnalysisData[] = historyData.analyses.map((a) => ({
-            summary: a.summary,
-            topics: a.topics,
-            tags: a.tags,
-            flow: a.flow,
-            heat: a.heat,
-            timestamp: a.timestamp,
-          }));
-          const images: ImageData[] = historyData.images.map((i) => ({
-            url: i.url,
-            prompt: i.prompt,
-            timestamp: i.timestamp,
-          }));
-          const captures: CaptureData[] = historyData.captures.map((c) => ({
-            url: c.url,
-            timestamp: c.timestamp,
-          }));
-          const metaSummaries: MetaSummaryData[] = historyData.metaSummaries.map((m) => ({
-            summary: m.summary,
-            themes: m.themes,
-            startTime: m.startTime,
-            endTime: m.endTime,
-          }));
-          const speakerAliases = normalizeSpeakerAliases(historyData.speakerAliases ?? {});
+          callbacksRef.onMeetingHistory?.(mapHistoryData(message.data));
+          break;
+        }
 
-          callbacksRef.onMeetingHistory?.({
-            transcripts,
-            analyses,
-            images,
-            captures,
-            metaSummaries,
-            speakerAliases,
-          });
+        case "meeting:history:delta": {
+          callbacksRef.onMeetingHistoryDelta?.(mapHistoryData(message.data));
           break;
         }
 
@@ -386,10 +423,10 @@ export function createMeetingController(
     }
   }
 
-  function startMeeting(title?: string, meetingId?: string): void {
+  function startMeeting(title?: string, meetingId?: string, mode?: MeetingMode): void {
     sendMessage({
       type: "meeting:start",
-      data: { title, meetingId },
+      data: { title, meetingId, mode },
     });
   }
 
@@ -399,12 +436,27 @@ export function createMeetingController(
       meetingId: null,
       meetingTitle: null,
       sessionId: null,
+      mode: null,
       meetingList: [],
     });
   }
 
   function requestMeetingList(): void {
     sendMessage({ type: "meeting:list:request" });
+  }
+
+  function requestMeetingHistoryDelta(meetingId: string, cursor?: MeetingHistoryCursor): void {
+    sendMessage({
+      type: "meeting:history:request",
+      data: { meetingId, cursor },
+    });
+  }
+
+  function setMeetingMode(mode: MeetingMode): void {
+    sendMessage({
+      type: "meeting:mode:set",
+      data: { mode },
+    });
   }
 
   function updateMeetingTitle(title: string): void {
@@ -437,10 +489,6 @@ export function createMeetingController(
     sendMessage({ type: "image:model:set", data: { preset } });
   }
 
-  function setCallbacks(newCallbacks: MeetingControllerCallbacks): void {
-    callbacksRef = newCallbacks;
-  }
-
   function dispose(): void {
     isDisposed = true;
     clearTimers();
@@ -455,6 +503,8 @@ export function createMeetingController(
     startMeeting,
     stopMeeting,
     requestMeetingList,
+    requestMeetingHistoryDelta,
+    setMeetingMode,
     updateMeetingTitle,
     updateSpeakerAlias,
     startSession,

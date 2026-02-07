@@ -10,11 +10,7 @@ import { getDatabase, closeDatabase } from "../database";
 import { runMigrations } from "../migrations";
 import { createMeeting } from "./meeting";
 import { createSession } from "./session";
-import {
-  createCameraCapture,
-  findCameraCapturesBySessionId,
-  type PersistedCameraCapture,
-} from "./capture";
+import { createCameraCapture, findCameraCapturesBySessionId } from "./capture";
 
 describe("CaptureRepository", () => {
   const testDbPath = ":memory:";

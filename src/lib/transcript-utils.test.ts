@@ -6,7 +6,7 @@
  */
 
 import { describe, test, expect } from "bun:test";
-import { formatTime, groupByUtterance, type UtteranceGroup } from "./transcript-utils";
+import { formatTime, groupByUtterance } from "./transcript-utils";
 import type { TranscriptSegment } from "@/types/messages";
 
 describe("formatTime", () => {

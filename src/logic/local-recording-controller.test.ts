@@ -5,7 +5,7 @@
  * Related: src/logic/local-recording-controller.ts
  */
 
-import { describe, test, expect, beforeEach, mock } from "bun:test";
+import { describe, test, expect, mock } from "bun:test";
 import { createLocalRecordingController } from "./local-recording-controller";
 import { createMockOPFSStorageAdapter } from "../adapters/opfs-storage";
 import type { OPFSStorageAdapter } from "../adapters/opfs-storage";
@@ -40,6 +40,7 @@ describe("LocalRecordingController", () => {
       expect(state.isRecording).toBe(false);
       expect(state.sessionId).toBeNull();
       expect(state.totalChunks).toBe(0);
+      expect(state.pendingRecordings).toEqual([]);
       expect(state.error).toBeNull();
     });
   });
@@ -54,6 +55,7 @@ describe("LocalRecordingController", () => {
       expect(state.isRecording).toBe(true);
       expect(state.sessionId).toBe("session-1");
       expect(state.totalChunks).toBe(0);
+      expect(state.pendingRecordings).toEqual([]);
       expect(state.error).toBeNull();
       expect(onStateChange).toHaveBeenCalled();
     });
@@ -111,14 +113,6 @@ describe("LocalRecordingController", () => {
       const { controller } = createTestSetup({ storage });
       await controller.start("session-1");
 
-      // Override the writer to fail on the next write
-      const originalCreate = storage.createAudioFile;
-      let writeCount = 0;
-      // The writer was already created in start(), so we need to sabotage at a different level.
-      // Instead, we test by calling writeChunk on a disposed controller-like scenario.
-      // Let's directly test the error path by simulating a storage error:
-      const failingStorage = createMockOPFSStorageAdapter();
-      const failWriter = await failingStorage.createAudioFile("session-1");
       // We rely on the controller's internal writer; since we can't easily inject a failing writer
       // after start, we verify the best-effort behavior: error is recorded but isRecording stays true.
 
@@ -165,7 +159,28 @@ describe("LocalRecordingController", () => {
       expect(state.isRecording).toBe(false);
       expect(state.sessionId).toBe("session-1");
       expect(state.totalChunks).toBe(1);
+      expect(state.pendingRecordings).toHaveLength(1);
+      expect(state.pendingRecordings[0]!.sessionId).toBe("session-1");
+      expect(state.pendingRecordings[0]!.totalChunks).toBe(1);
       expect(state.error).toBeNull();
+    });
+
+    test("appends multiple stop-start recordings", async () => {
+      const { controller } = createTestSetup();
+
+      await controller.start("session-1");
+      await controller.writeChunk(new ArrayBuffer(100));
+      await controller.stop();
+
+      await controller.start("session-1");
+      await controller.writeChunk(new ArrayBuffer(100));
+      await controller.writeChunk(new ArrayBuffer(100));
+      await controller.stop();
+
+      const state = controller.getState();
+      expect(state.pendingRecordings).toHaveLength(2);
+      expect(state.pendingRecordings[0]!.totalChunks).toBe(1);
+      expect(state.pendingRecordings[1]!.totalChunks).toBe(2);
     });
 
     test("no-op when not recording", async () => {
@@ -183,9 +198,34 @@ describe("LocalRecordingController", () => {
       await controller.writeChunk(new Uint8Array([1, 2, 3]).buffer);
       await controller.stop();
 
-      const file = await storage.getAudioFile("session-1");
+      const recordingId = controller.getState().pendingRecordings[0]!.recordingId;
+      const file = await storage.getAudioFile(recordingId);
       expect(file).not.toBeNull();
       expect(file!.size).toBe(3);
+    });
+  });
+
+  describe("removePendingRecording", () => {
+    test("removes only the specified pending recording", async () => {
+      const { controller } = createTestSetup();
+
+      await controller.start("session-1");
+      await controller.writeChunk(new ArrayBuffer(100));
+      await controller.stop();
+
+      await controller.start("session-1");
+      await controller.writeChunk(new ArrayBuffer(100));
+      await controller.stop();
+
+      const [first, second] = controller.getState().pendingRecordings;
+      expect(first).toBeDefined();
+      expect(second).toBeDefined();
+
+      controller.removePendingRecording(first!.recordingId);
+
+      const state = controller.getState();
+      expect(state.pendingRecordings).toHaveLength(1);
+      expect(state.pendingRecordings[0]!.recordingId).toBe(second!.recordingId);
     });
   });
 
@@ -203,6 +243,7 @@ describe("LocalRecordingController", () => {
       expect(state.isRecording).toBe(false);
       expect(state.sessionId).toBeNull();
       expect(state.totalChunks).toBe(0);
+      expect(state.pendingRecordings).toEqual([]);
       expect(state.error).toBeNull();
     });
 
@@ -215,6 +256,7 @@ describe("LocalRecordingController", () => {
       expect(state.isRecording).toBe(false);
       expect(state.sessionId).toBeNull();
       expect(state.totalChunks).toBe(0);
+      expect(state.pendingRecordings).toEqual([]);
       expect(state.error).toBeNull();
     });
   });

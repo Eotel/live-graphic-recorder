@@ -7,6 +7,7 @@
 
 import { MessageSquare } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useTranslation } from "react-i18next";
 
 interface TopicIndicatorProps {
   topics: string[];
@@ -14,7 +15,8 @@ interface TopicIndicatorProps {
 }
 
 export function TopicIndicator({ topics, className }: TopicIndicatorProps) {
-  const currentTopic = topics[0] || "No topic detected";
+  const { t } = useTranslation();
+  const currentTopic = topics[0] || t("summary.noTopicDetected");
 
   return (
     <div className={cn("flex items-center gap-2", className)}>

@@ -8,6 +8,7 @@ export function createWsContext(userId: string, sessionId: string): WSContext {
     userId,
     sessionId,
     meetingId: null,
+    meetingMode: null,
     session: createSession(sessionId),
     deepgram: null,
     analysis: null,

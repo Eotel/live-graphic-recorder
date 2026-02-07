@@ -13,6 +13,8 @@
 | T04  | A04   | DONE   | 2026-02-06 23:44 | 2026-02-06 23:54 | MeetingHeader の confirm を container へ移管  |
 | T05  | A05   | DONE   | 2026-02-06 23:45 | 2026-02-06 23:54 | useAttachMediaStream 分離と test 追加         |
 | T06  | A06   | DONE   | 2026-02-06 23:46 | 2026-02-06 23:54 | useMeetingSession に deprecation コメント追加 |
+| T07  | A07   | DONE   | 2026-02-06 23:58 | 2026-02-07 00:20 | AppShell を container/view へ再分割           |
+| T08  | A08   | DONE   | 2026-02-07 00:00 | 2026-02-07 00:20 | app-store を AppShell 状態ソースへ段階移行    |
 
 ## Agent Updates
 
@@ -48,3 +50,15 @@
 ### A06
 
 - `src/hooks/useMeetingSession.ts` に deprecation コメントを追加。
+
+### A07
+
+- `src/app/container/AppShell.tsx` を薄いエントリへ変更。
+- `src/app/view/AppShellView.tsx` / `src/app/view/AppShellRecordingView.tsx` / `src/app/view/AppShellSelectView.tsx` を追加し UI を view 層へ分離。
+- `src/app/container/useAppShellController.ts` を 270 行へ整理し責務分割を実施。
+
+### A08
+
+- `src/app/view-model/app-store.ts` に section 更新 action (`setAuthState` ほか) と `onDownloadReportError` 依存を追加。
+- `src/app/container/useAppShellStore.ts` / `src/app/container/useAppShellStoreBridge.ts` を追加し AppShell と app-store の同期を段階導入。
+- `src/app/view-model/app-store.test.ts` に section action / report error callback のテストを追加。

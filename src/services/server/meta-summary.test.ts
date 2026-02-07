@@ -14,7 +14,7 @@ import {
   type MetaSummaryGenerationResult,
 } from "./meta-summary";
 import { existsSync, rmSync } from "node:fs";
-import { META_SUMMARY_INTERVAL_MS, META_SUMMARY_SESSION_THRESHOLD } from "@/config/constants";
+import { META_SUMMARY_INTERVAL_MS } from "@/config/constants";
 
 describe("shouldTriggerMetaSummary", () => {
   const testDbPath = ":memory:";

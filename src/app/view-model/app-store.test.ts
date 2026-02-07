@@ -53,7 +53,7 @@ describe("createAppStore", () => {
     const store = createAppStore(
       {},
       {
-        meeting: { isConnected: true, meetingId: "meeting-1" },
+        meeting: { isConnected: true, meetingId: "meeting-1", mode: "record" },
         media: { hasPermission: true },
       },
     );

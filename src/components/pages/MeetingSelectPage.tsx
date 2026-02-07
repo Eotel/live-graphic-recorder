@@ -8,6 +8,8 @@
 import { useState, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import type { MeetingInfo } from "@/types/messages";
+import { useTranslation } from "react-i18next";
+import { formatRelativeMeetingDate } from "@/i18n/format";
 
 export interface MeetingSelectPageProps {
   meetings?: MeetingInfo[] | null;
@@ -20,43 +22,6 @@ export interface MeetingSelectPageProps {
   onRetry?: () => void;
 }
 
-function normalizeTimestamp(timestamp: number): number {
-  // Heuristic: treat 10-digit epoch as seconds.
-  if (timestamp > 0 && timestamp < 1_000_000_000_000) {
-    return timestamp * 1000;
-  }
-  return timestamp;
-}
-
-function formatDate(timestamp: number | null | undefined): string {
-  if (typeof timestamp !== "number" || !Number.isFinite(timestamp)) {
-    return "Unknown";
-  }
-
-  const normalized = normalizeTimestamp(timestamp);
-  const date = new Date(normalized);
-  if (!Number.isFinite(date.getTime())) {
-    return "Unknown";
-  }
-
-  const now = new Date();
-  const diffMs = now.getTime() - normalized;
-  const startOfDay = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
-  const diffDays = Math.floor((startOfDay(now) - startOfDay(date)) / (1000 * 60 * 60 * 24));
-
-  if (diffMs < 0) {
-    return date.toLocaleDateString([], { month: "short", day: "numeric" });
-  } else if (diffDays === 0) {
-    return `Today ${date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`;
-  } else if (diffDays === 1) {
-    return `Yesterday ${date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`;
-  } else if (diffDays < 7) {
-    return `${diffDays} days ago`;
-  } else {
-    return date.toLocaleDateString([], { month: "short", day: "numeric" });
-  }
-}
-
 export function MeetingSelectPage({
   meetings,
   isLoading,
@@ -67,6 +32,7 @@ export function MeetingSelectPage({
   onRefresh,
   onRetry,
 }: MeetingSelectPageProps) {
+  const { t, i18n } = useTranslation();
   const meetingList = meetings ?? [];
   const showInitialLoading = isLoading && meetingList.length === 0;
   const showInlineLoading = isLoading && meetingList.length > 0;
@@ -120,14 +86,16 @@ export function MeetingSelectPage({
             className="bg-card rounded-lg p-6 w-full max-w-sm mx-4 shadow-lg"
             onClick={(e) => e.stopPropagation()}
           >
-            <h2 className="text-lg font-semibold text-foreground mb-4">New Meeting</h2>
+            <h2 className="text-lg font-semibold text-foreground mb-4">
+              {t("meeting.newMeetingDialogTitle")}
+            </h2>
             <input
               ref={titleInputRef}
               type="text"
               value={titleInput}
               onChange={(e) => setTitleInput(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder="Meeting title (optional)"
+              placeholder={t("meeting.titlePlaceholderOptional")}
               className="w-full px-3 py-2 rounded-md border border-input bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
             />
             <div className="flex gap-3 mt-4">
@@ -137,10 +105,10 @@ export function MeetingSelectPage({
                 type="button"
                 className="flex-1"
               >
-                Cancel
+                {t("common.cancel")}
               </Button>
               <Button onClick={handleConfirmNewMeeting} type="button" className="flex-1">
-                Start
+                {t("common.start")}
               </Button>
             </div>
           </div>
@@ -149,7 +117,7 @@ export function MeetingSelectPage({
 
       <div className="w-full max-w-md flex flex-col gap-8">
         {/* App Title */}
-        <h1 className="text-3xl font-bold text-center text-foreground">Live Graphic Recorder</h1>
+        <h1 className="text-3xl font-bold text-center text-foreground">{t("common.appName")}</h1>
 
         {/* New Meeting Button */}
         <Button
@@ -158,19 +126,21 @@ export function MeetingSelectPage({
           type="button"
           className="w-full py-6 text-lg"
         >
-          Start New Meeting
+          {t("meeting.startNewMeeting")}
         </Button>
 
         {/* Past Meetings Section */}
         <div className="flex flex-col gap-4">
           <div className="flex items-center justify-between">
-            <h2 className="text-sm font-medium text-muted-foreground">Past Meetings</h2>
+            <h2 className="text-sm font-medium text-muted-foreground">
+              {t("meeting.pastMeetings")}
+            </h2>
             <Button
               variant="ghost"
               size="sm"
               onClick={onRefresh}
               type="button"
-              aria-label="Refresh"
+              aria-label={t("meeting.refresh")}
             >
               ↻
             </Button>
@@ -186,25 +156,25 @@ export function MeetingSelectPage({
                 onClick={retryAction}
                 className="mt-2 h-7 px-2 text-xs"
               >
-                Retry
+                {t("common.retry")}
               </Button>
             </div>
           )}
 
           {!errorMessage && !isConnected && (
-            <p className="text-xs text-muted-foreground">
-              Connection is unstable. You can refresh to retry.
-            </p>
+            <p className="text-xs text-muted-foreground">{t("meeting.listConnectionUnstable")}</p>
           )}
 
           {showInlineLoading && (
-            <p className="text-xs text-muted-foreground text-center">Updating past meetings...</p>
+            <p className="text-xs text-muted-foreground text-center">{t("meeting.listUpdating")}</p>
           )}
 
           {showInitialLoading ? (
-            <p className="text-sm text-muted-foreground text-center py-8">Loading...</p>
+            <p className="text-sm text-muted-foreground text-center py-8">{t("common.loading")}</p>
           ) : meetingList.length === 0 ? (
-            <p className="text-sm text-muted-foreground text-center py-8">No past meetings</p>
+            <p className="text-sm text-muted-foreground text-center py-8">
+              {t("meeting.noPastMeetings")}
+            </p>
           ) : (
             <div className="flex flex-col gap-2 max-h-96 overflow-y-auto">
               {meetingList.map((meeting) => (
@@ -214,9 +184,15 @@ export function MeetingSelectPage({
                   type="button"
                   className="w-full text-left px-4 py-3 rounded-lg border border-border bg-card hover:bg-accent hover:text-accent-foreground transition-colors"
                 >
-                  <div className="font-medium truncate">{meeting.title || "Untitled Meeting"}</div>
+                  <div className="font-medium truncate">
+                    {meeting.title || t("meeting.untitled")}
+                  </div>
                   <div className="text-xs text-muted-foreground mt-1">
-                    {formatDate(meeting.startedAt)}
+                    {formatRelativeMeetingDate(
+                      meeting.startedAt,
+                      i18n.resolvedLanguage ?? i18n.language,
+                      t("meeting.unknownDate"),
+                    )}
                   </div>
                 </button>
               ))}

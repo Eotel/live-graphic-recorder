@@ -2,12 +2,10 @@
  * Tests for MeetingController.
  */
 
-import { describe, test, expect, mock, beforeEach } from "bun:test";
+import { describe, test, expect, mock } from "bun:test";
 import { createMeetingController } from "./meeting-controller";
-import type { WebSocketAdapter, WebSocketInstance } from "../adapters/types";
-import { WebSocketReadyState } from "../adapters/types";
+import type { WebSocketAdapter } from "../adapters/types";
 import { createControllableMockWebSocket } from "../adapters/websocket";
-import type { MeetingControllerState, MeetingControllerCallbacks } from "./types";
 
 function createMockWsAdapter(): WebSocketAdapter & {
   lastInstance: ReturnType<typeof createControllableMockWebSocket> | null;
@@ -15,7 +13,7 @@ function createMockWsAdapter(): WebSocketAdapter & {
   const adapter = {
     lastInstance: null as ReturnType<typeof createControllableMockWebSocket> | null,
     buildUrl: (path: string) => `ws://localhost${path}`,
-    create: (url: string) => {
+    create: (_url: string) => {
       const mock = createControllableMockWebSocket();
       adapter.lastInstance = mock;
       return mock.instance;

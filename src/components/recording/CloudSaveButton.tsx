@@ -10,40 +10,38 @@ import { Button } from "@/components/ui/button";
 import { useTranslation } from "react-i18next";
 
 export interface CloudSaveButtonProps {
-  sessionId: string | null;
   meetingId: string | null;
   isRecording: boolean;
   isUploading: boolean;
   progress: number;
   error: string | null;
-  hasLocalRecording: boolean;
-  onUpload: (sessionId: string, meetingId: string) => void;
+  pendingCount: number;
+  onUpload: (meetingId: string) => void;
   onCancel: () => void;
 }
 
 export function CloudSaveButton({
-  sessionId,
   meetingId,
   isRecording,
   isUploading,
   progress,
   error,
-  hasLocalRecording,
+  pendingCount,
   onUpload,
   onCancel,
 }: CloudSaveButtonProps) {
   const { t } = useTranslation();
-  const canUpload = !isRecording && !isUploading && hasLocalRecording && sessionId && meetingId;
+  const canUpload = !isRecording && !isUploading && pendingCount > 0 && meetingId;
 
   function handleClick() {
     if (isUploading) {
       onCancel();
     } else if (canUpload) {
-      onUpload(sessionId!, meetingId!);
+      onUpload(meetingId!);
     }
   }
 
-  if (!hasLocalRecording && !isUploading && !error) {
+  if (pendingCount <= 0 && !isUploading && !error) {
     return null;
   }
 
@@ -72,7 +70,9 @@ export function CloudSaveButton({
           ) : (
             <>
               <Upload className="size-4" />
-              {t("recording.saveToCloud")}
+              {pendingCount > 1
+                ? `${t("recording.saveToCloud")} (${pendingCount})`
+                : t("recording.saveToCloud")}
             </>
           )}
         </Button>

@@ -7,6 +7,7 @@
 import { Zap, Crown } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { ImageModelPreset } from "@/types/messages";
+import { useTranslation } from "react-i18next";
 
 interface ImageModelToggleProps {
   value: ImageModelPreset;
@@ -25,8 +26,9 @@ export function ImageModelToggle({
   disabled = false,
   className,
 }: ImageModelToggleProps) {
+  const { t } = useTranslation();
   const isDisabled = disabled;
-  const toggleTooltip = `Flash（速度） / Pro（品質）\n使用中: ${model}`;
+  const toggleTooltip = t("graphics.tooltip", { model });
 
   return (
     <div
@@ -46,13 +48,13 @@ export function ImageModelToggle({
         )}
       >
         <Zap className="size-4" />
-        Flash
+        {t("graphics.flash")}
       </button>
       <button
         type="button"
         onClick={() => onChange("pro")}
         disabled={isDisabled || !proAvailable}
-        title={proAvailable ? undefined : "Proモデルが未設定です（GEMINI_IMAGE_MODEL_PRO）"}
+        title={proAvailable ? undefined : t("graphics.proNotConfigured")}
         className={cn(
           "flex items-center gap-2 rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
           value === "pro"
@@ -62,7 +64,7 @@ export function ImageModelToggle({
         )}
       >
         <Crown className="size-4" />
-        Pro
+        {t("graphics.pro")}
       </button>
     </div>
   );

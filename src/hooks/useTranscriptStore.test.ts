@@ -2,7 +2,7 @@
  * Tests for useTranscriptStore hook.
  */
 
-import { describe, test, expect, mock } from "bun:test";
+import { describe, test, expect } from "bun:test";
 import { renderHook, act } from "@testing-library/react";
 import { useTranscriptStore } from "./useTranscriptStore";
 

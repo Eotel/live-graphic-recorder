@@ -15,6 +15,7 @@ export interface UseLocalRecordingReturn extends LocalRecordingState {
   start(sessionId: string): Promise<void>;
   writeChunk(chunk: ArrayBuffer): Promise<void>;
   stop(): Promise<void>;
+  removePendingRecording(recordingId: string): void;
   reset(): void;
 }
 
@@ -37,6 +38,7 @@ export function useLocalRecording(storageOverride?: OPFSStorageAdapter): UseLoca
     isRecording: false,
     sessionId: null,
     totalChunks: 0,
+    pendingRecordings: [],
     error: null,
   });
 
@@ -87,6 +89,10 @@ export function useLocalRecording(storageOverride?: OPFSStorageAdapter): UseLoca
     await controllerRef.current?.stop();
   }, []);
 
+  const removePendingRecording = useCallback((recordingId: string) => {
+    controllerRef.current?.removePendingRecording(recordingId);
+  }, []);
+
   const reset = useCallback(() => {
     controllerRef.current?.reset();
   }, []);
@@ -96,6 +102,7 @@ export function useLocalRecording(storageOverride?: OPFSStorageAdapter): UseLoca
     start,
     writeChunk,
     stop,
+    removePendingRecording,
     reset,
   };
 }

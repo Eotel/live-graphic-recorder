@@ -6,7 +6,6 @@
 
 import { describe, test, expect, mock } from "bun:test";
 import { createPaneStateController } from "./pane-state-controller";
-import type { PaneId } from "./pane-state-controller";
 
 describe("createPaneStateController", () => {
   test("initial state has no expanded pane and no popouts", () => {

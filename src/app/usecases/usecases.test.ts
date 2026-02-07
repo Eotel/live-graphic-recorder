@@ -67,7 +67,7 @@ describe("selectMeetingUsecase", () => {
   });
 
   test("starts selected meeting when connected", () => {
-    const startMeeting = mock((_title: undefined, _meetingId: string) => {});
+    const startMeeting = mock((_title: undefined, _meetingId: string, _mode: "view") => {});
 
     const run = selectMeetingUsecase({
       isConnected: () => true,
@@ -78,7 +78,7 @@ describe("selectMeetingUsecase", () => {
     const result = run("meeting-1");
 
     expect(result).toBe("started");
-    expect(startMeeting).toHaveBeenCalledWith(undefined, "meeting-1");
+    expect(startMeeting).toHaveBeenCalledWith(undefined, "meeting-1", "view");
   });
 });
 
@@ -86,7 +86,6 @@ describe("recordingLifecycleUsecase", () => {
   test("start and stop orchestrate session/local recording", () => {
     const startSession = mock(() => {});
     const stopSession = mock(() => {});
-    const resetLocalRecording = mock(() => {});
     const startLocalRecording = mock((_sessionId: string) => {});
     const stopLocalRecording = mock(() => {});
     const onRecordingStopped = mock((_hasLocalFile: boolean) => {});
@@ -94,7 +93,6 @@ describe("recordingLifecycleUsecase", () => {
     const lifecycle = recordingLifecycleUsecase({
       startSession,
       stopSession,
-      resetLocalRecording,
       startLocalRecording,
       stopLocalRecording,
       getSessionId: () => "session-1",
@@ -106,7 +104,6 @@ describe("recordingLifecycleUsecase", () => {
     const hasLocalFile = lifecycle.stop();
 
     expect(startSession).toHaveBeenCalledTimes(1);
-    expect(resetLocalRecording).toHaveBeenCalledTimes(1);
     expect(startLocalRecording).toHaveBeenCalledWith("session-1");
     expect(stopSession).toHaveBeenCalledTimes(1);
     expect(stopLocalRecording).toHaveBeenCalledTimes(1);

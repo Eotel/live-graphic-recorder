@@ -22,10 +22,6 @@ export function shouldClearLocalFileOnUpload(
   return isUploadedForCurrentSession(uploadedSessionId, localSessionId);
 }
 
-export function hasUnsavedRecording(
-  isRecording: boolean,
-  hasLocalFile: boolean,
-  localSessionId: string | null,
-): boolean {
-  return isRecording || (hasLocalFile && localSessionId !== null);
+export function hasUnsavedRecording(isRecording: boolean, hasLocalFile: boolean): boolean {
+  return isRecording || hasLocalFile;
 }

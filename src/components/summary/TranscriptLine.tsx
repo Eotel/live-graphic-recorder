@@ -8,6 +8,7 @@
 import { useEffect, useState } from "react";
 import { cn } from "@/lib/utils";
 import { formatTime } from "@/lib/transcript-utils";
+import { useTranslation } from "react-i18next";
 
 interface TranscriptLineProps {
   text: string;
@@ -47,11 +48,14 @@ export function TranscriptLine({
   isInterim = false,
   className,
 }: TranscriptLineProps) {
+  const { t } = useTranslation();
   const hasSpeaker = speaker !== undefined;
   const hasTime = startTime !== undefined;
   const speakerColor = hasSpeaker ? getSpeakerColor(speaker) : "";
   const speakerAlias = hasSpeaker ? (speakerAliases[speaker] ?? "") : "";
-  const displayName = hasSpeaker ? speakerAlias || `Speaker ${speaker + 1}` : "";
+  const displayName = hasSpeaker
+    ? speakerAlias || t("summary.speakerWithIndex", { index: speaker + 1 })
+    : "";
   const [isEditingLabel, setIsEditingLabel] = useState(false);
   const [draftLabel, setDraftLabel] = useState(speakerAlias);
 
@@ -111,8 +115,8 @@ export function TranscriptLine({
                 "flex-shrink-0 h-6 w-28 rounded border border-border bg-background px-1.5 text-xs font-medium",
                 speakerColor,
               )}
-              aria-label={`Edit speaker ${speaker + 1} label`}
-              placeholder={`Speaker ${speaker + 1}`}
+              aria-label={t("summary.editSpeakerLabel", { index: speaker + 1 })}
+              placeholder={t("summary.speakerWithIndex", { index: speaker + 1 })}
               autoFocus
             />
           ) : onSpeakerLabelEdit ? (
@@ -123,7 +127,7 @@ export function TranscriptLine({
                 "flex-shrink-0 font-medium text-xs text-left hover:underline focus:outline-none focus-visible:ring-1 focus-visible:ring-ring rounded-sm",
                 speakerColor,
               )}
-              aria-label={`Edit speaker ${speaker + 1} label`}
+              aria-label={t("summary.editSpeakerLabel", { index: speaker + 1 })}
             >
               {displayName}:
             </button>

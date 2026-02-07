@@ -21,7 +21,7 @@ describe("TranscriptLine", () => {
     });
 
     test("renders without speaker or time info", () => {
-      const { container } = render(<TranscriptLine text="Plain text" />);
+      render(<TranscriptLine text="Plain text" />);
       expect(screen.getByText("Plain text")).toBeDefined();
       expect(screen.queryByText(/Speaker/)).toBeNull();
     });

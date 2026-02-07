@@ -5,7 +5,7 @@
  * Related: src/services/server/db/database.ts
  */
 
-import { describe, test, expect, beforeEach, afterEach } from "bun:test";
+import { describe, test, expect, afterEach } from "bun:test";
 import { Database } from "bun:sqlite";
 import { getDatabase, closeDatabase, resetDatabase } from "./database";
 

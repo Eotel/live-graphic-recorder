@@ -13,6 +13,7 @@ import type { TranscriptSegment, SummaryPage } from "@/types/messages";
 import { SummarySkeleton } from "./SummarySkeleton";
 import { TranscriptLine } from "./TranscriptLine";
 import { groupByUtterance } from "@/lib/transcript-utils";
+import { useTranslation } from "react-i18next";
 
 const SWIPE_MIN_DISTANCE_PX = 40;
 const SWIPE_HORIZONTAL_RATIO = 1.2;
@@ -40,6 +41,7 @@ export function SummaryPanel({
   isAnalyzing = false,
   className,
 }: SummaryPanelProps) {
+  const { t } = useTranslation();
   const { containerRef } = useAutoScroll({ enabled: true });
   const touchStartRef = useRef<{ x: number; y: number } | null>(null);
 
@@ -119,7 +121,7 @@ export function SummaryPanel({
       {/* Summary Section - fixed, never scrolls */}
       {showSkeleton ? (
         <div className="flex-shrink-0 mb-3">
-          <h3 className="text-sm font-semibold text-muted-foreground mb-2">Summary</h3>
+          <h3 className="text-sm font-semibold text-muted-foreground mb-2">{t("summary.title")}</h3>
           <SummarySkeleton />
         </div>
       ) : hasPages && currentPage ? (
@@ -128,7 +130,9 @@ export function SummaryPanel({
           onTouchStart={handleSummaryTouchStart}
           onTouchEnd={handleSummaryTouchEnd}
         >
-          <h3 className="text-sm font-semibold leading-none text-muted-foreground mb-2">Summary</h3>
+          <h3 className="text-sm font-semibold leading-none text-muted-foreground mb-2">
+            {t("summary.title")}
+          </h3>
           <ul className="space-y-1.5">
             {currentPage.points.map((point, index) => (
               <li key={index} className="flex items-start gap-2 text-sm">
@@ -145,7 +149,7 @@ export function SummaryPanel({
                   size="icon-sm"
                   className="size-6 rounded-sm text-muted-foreground hover:text-foreground"
                   onClick={goToPrevious}
-                  aria-label="Previous summary page"
+                  aria-label={t("summary.previousPage")}
                 >
                   {"<"}
                 </Button>
@@ -157,7 +161,7 @@ export function SummaryPanel({
                   size="icon-sm"
                   className="size-6 rounded-sm text-muted-foreground hover:text-foreground"
                   onClick={goToNext}
-                  aria-label="Next summary page"
+                  aria-label={t("summary.nextPage")}
                 >
                   {">"}
                 </Button>
@@ -175,7 +179,7 @@ export function SummaryPanel({
         )}
       >
         <h3 className="flex-shrink-0 text-sm font-semibold text-muted-foreground mb-2">
-          Live Transcript
+          {t("summary.liveTranscript")}
         </h3>
         <div
           ref={containerRef}
@@ -183,7 +187,7 @@ export function SummaryPanel({
         >
           {utteranceGroups.length === 0 ? (
             <span className="text-muted-foreground italic text-sm">
-              Start recording to see the transcript...
+              {t("summary.emptyTranscript")}
             </span>
           ) : (
             <div className="space-y-2">

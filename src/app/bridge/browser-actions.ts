@@ -1,9 +1,9 @@
-export function confirmDiscardUnsavedRecording(): boolean {
+export function confirmDiscardUnsavedRecording(message: string): boolean {
   if (typeof globalThis.confirm !== "function") {
     return true;
   }
 
-  return globalThis.confirm("You have unsaved local audio. Leave this meeting and discard it?");
+  return globalThis.confirm(message);
 }
 
 export function triggerAnchorDownload(url: string): void {
@@ -15,13 +15,11 @@ export function triggerAnchorDownload(url: string): void {
   anchor.remove();
 }
 
-export function alertReportDownloadError(error: unknown): void {
+export function alertReportDownloadError(error: unknown, prefixMessage: string): void {
   if (typeof globalThis.alert !== "function") {
     return;
   }
 
   const message = error instanceof Error ? error.message : "";
-  globalThis.alert(
-    `レポートのダウンロードに失敗しました。${message ? `\n\n${message}` : ""}`.trim(),
-  );
+  globalThis.alert(`${prefixMessage}${message ? `\n\n${message}` : ""}`.trim());
 }

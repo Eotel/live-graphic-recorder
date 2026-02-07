@@ -17,6 +17,7 @@ import { AudioLevelIndicator } from "./AudioLevelIndicator";
 import { useAudioLevel } from "@/hooks/useAudioLevel";
 import { cn } from "@/lib/utils";
 import type { MediaSourceType } from "@/types/messages";
+import { useTranslation } from "react-i18next";
 
 export interface DeviceSelectorProps {
   audioDevices: MediaDeviceInfo[];
@@ -45,6 +46,7 @@ export function DeviceSelector({
   sourceType = "camera",
   className,
 }: DeviceSelectorProps) {
+  const { t } = useTranslation();
   const { isActive: isAudioActive } = useAudioLevel(stream, {
     enabled: isRecording,
   });
@@ -68,14 +70,14 @@ export function DeviceSelector({
             disabled={disabled}
           >
             <SelectTrigger className="w-full" size="sm">
-              <SelectValue placeholder="Select microphone" />
+              <SelectValue placeholder={t("recording.selectMicrophone")} />
             </SelectTrigger>
             <SelectContent>
               {audioDevices
                 .filter((device) => device.deviceId)
                 .map((device, index) => (
                   <SelectItem key={device.deviceId} value={device.deviceId}>
-                    {device.label || `Microphone ${index + 1}`}
+                    {device.label || t("recording.microphoneWithIndex", { index: index + 1 })}
                   </SelectItem>
                 ))}
             </SelectContent>
@@ -92,14 +94,14 @@ export function DeviceSelector({
             disabled={disabled}
           >
             <SelectTrigger className="w-full" size="sm">
-              <SelectValue placeholder="Select camera" />
+              <SelectValue placeholder={t("recording.selectCamera")} />
             </SelectTrigger>
             <SelectContent>
               {videoDevices
                 .filter((device) => device.deviceId)
                 .map((device, index) => (
                   <SelectItem key={device.deviceId} value={device.deviceId}>
-                    {device.label || `Camera ${index + 1}`}
+                    {device.label || t("recording.cameraWithIndex", { index: index + 1 })}
                   </SelectItem>
                 ))}
             </SelectContent>

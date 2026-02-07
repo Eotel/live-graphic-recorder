@@ -14,7 +14,6 @@ import {
   createGeneratedImage,
   findGeneratedImagesBySessionId,
   findLatestGeneratedImageBySessionId,
-  type PersistedGeneratedImage,
 } from "./image";
 
 describe("ImageRepository", () => {

@@ -5,15 +5,30 @@
  * Related: src/logic/upload-controller.ts
  */
 
-import { describe, test, expect, beforeEach, mock } from "bun:test";
+import { describe, test, expect, mock } from "bun:test";
 import { createUploadController } from "./upload-controller";
 import { createMockOPFSStorageAdapter } from "../adapters/opfs-storage";
 import type { OPFSStorageAdapter } from "../adapters/opfs-storage";
-import type { UploadState } from "./upload-controller";
+import type { PendingUploadRecording, UploadState } from "./upload-controller";
 
-// ============================================================================
-// Test Helpers
-// ============================================================================
+function buildRecording(
+  recordingId: string,
+  sessionId: string,
+  createdAt: number,
+): PendingUploadRecording {
+  return {
+    recordingId,
+    sessionId,
+    totalChunks: 1,
+    createdAt,
+  };
+}
+
+async function setupWithAudioFile(storage: OPFSStorageAdapter, recordingId: string): Promise<void> {
+  const writer = await storage.createAudioFile(recordingId);
+  await writer.write(new Uint8Array([1, 2, 3, 4]).buffer);
+  await writer.close();
+}
 
 function createTestSetup(overrides?: {
   storage?: OPFSStorageAdapter;
@@ -25,7 +40,7 @@ function createTestSetup(overrides?: {
   const onStateChange = mock((state: UploadState) => {
     states.push(state);
   });
-  const onComplete = mock((_sessionId: string) => {});
+  const onComplete = mock((_recordingId: string) => {});
   const onError = mock((_error: Error) => {});
 
   const fetchFn =
@@ -46,310 +61,225 @@ function createTestSetup(overrides?: {
   return { controller, storage, states, onStateChange, onComplete, onError, fetchFn };
 }
 
-async function setupWithAudioFile(storage: OPFSStorageAdapter, sessionId: string): Promise<void> {
-  const writer = await storage.createAudioFile(sessionId);
-  await writer.write(new Uint8Array([1, 2, 3, 4]).buffer);
-  await writer.close();
-}
-
-// ============================================================================
-// Tests
-// ============================================================================
-
 describe("UploadController", () => {
-  describe("initial state", () => {
-    test("starts with idle state", () => {
-      const { controller } = createTestSetup();
-      const state = controller.getState();
+  test("starts with idle state", () => {
+    const { controller } = createTestSetup();
+    const state = controller.getState();
 
-      expect(state.isUploading).toBe(false);
-      expect(state.progress).toBe(0);
-      expect(state.error).toBeNull();
-      expect(state.lastUploadedSessionId).toBeNull();
-    });
+    expect(state.isUploading).toBe(false);
+    expect(state.progress).toBe(0);
+    expect(state.error).toBeNull();
+    expect(state.lastUploadedSessionId).toBeNull();
+    expect(state.lastUploadedAudioUrl).toBeNull();
+    expect(state.uploadedCount).toBe(0);
+    expect(state.totalCount).toBe(0);
   });
 
-  describe("upload", () => {
-    test("uploads file and transitions through states", async () => {
-      const { controller, storage, onComplete, fetchFn } = createTestSetup();
-      await setupWithAudioFile(storage, "session-1");
+  test("uploads all recordings in createdAt order and updates counters", async () => {
+    const { controller, storage, onComplete, fetchFn } = createTestSetup();
+    await setupWithAudioFile(storage, "r-late");
+    await setupWithAudioFile(storage, "r-early");
 
-      await controller.upload("session-1", "meeting-1");
+    const recordings = [
+      buildRecording("r-late", "session-2", 200),
+      buildRecording("r-early", "session-1", 100),
+    ];
 
-      expect(controller.getState().isUploading).toBe(false);
-      expect(controller.getState().progress).toBe(100);
-      expect(controller.getState().lastUploadedSessionId).toBe("session-1");
-      expect(controller.getState().error).toBeNull();
-      expect(onComplete).toHaveBeenCalledWith("session-1");
-      expect(fetchFn).toHaveBeenCalledTimes(1);
+    await controller.upload(recordings, "meeting-1");
+
+    expect(fetchFn).toHaveBeenCalledTimes(2);
+    expect(onComplete).toHaveBeenCalledTimes(2);
+    expect(onComplete).toHaveBeenNthCalledWith(1, "r-early");
+    expect(onComplete).toHaveBeenNthCalledWith(2, "r-late");
+
+    const state = controller.getState();
+    expect(state.isUploading).toBe(false);
+    expect(state.progress).toBe(100);
+    expect(state.error).toBeNull();
+    expect(state.uploadedCount).toBe(2);
+    expect(state.totalCount).toBe(2);
+    expect(state.lastUploadedSessionId).toBe("session-2");
+    expect(state.lastUploadedAudioUrl).toBe("/api/meetings/m1/audio/1");
+  });
+
+  test("sends each recording with matching X-Session-Id", async () => {
+    const capturedRequests: Request[] = [];
+    const customFetch = mock(async (input: RequestInfo | URL, init?: RequestInit) => {
+      capturedRequests.push(new Request(input, init));
+      return new Response(JSON.stringify({ id: 1, url: "/audio/1" }));
     });
 
-    test("sends correct request", async () => {
-      let capturedRequest: Request | null = null;
-      const customFetch = mock(async (input: RequestInfo | URL, init?: RequestInit) => {
-        capturedRequest = new Request(input, init);
-        return new Response(JSON.stringify({ id: 1, url: "/audio/1" }));
-      });
-
-      const { controller, storage } = createTestSetup({
-        fetchFn: customFetch as unknown as typeof fetch,
-      });
-      await setupWithAudioFile(storage, "session-1");
-
-      await controller.upload("session-1", "meeting-1");
-
-      expect(capturedRequest).not.toBeNull();
-      expect(capturedRequest!.url).toBe("http://localhost:3000/api/meetings/meeting-1/audio");
-      expect(capturedRequest!.method).toBe("POST");
-      expect(capturedRequest!.credentials).toBe("include");
-      expect(capturedRequest!.headers.get("content-type")).toBe("audio/webm");
-      expect(capturedRequest!.headers.get("x-session-id")).toBe("session-1");
+    const { controller, storage } = createTestSetup({
+      fetchFn: customFetch as unknown as typeof fetch,
     });
 
-    test("sets error when file not found in OPFS", async () => {
-      const { controller, onError } = createTestSetup();
+    await setupWithAudioFile(storage, "r-1");
+    await setupWithAudioFile(storage, "r-2");
 
-      await controller.upload("non-existent", "meeting-1");
+    await controller.upload(
+      [buildRecording("r-1", "session-1", 1), buildRecording("r-2", "session-2", 2)],
+      "meeting-1",
+    );
 
-      expect(controller.getState().isUploading).toBe(false);
-      expect(controller.getState().error).toBe("Audio file not found");
-      expect(onError).toHaveBeenCalled();
-    });
+    expect(capturedRequests).toHaveLength(2);
+    expect(capturedRequests[0]!.url).toBe("http://localhost:3000/api/meetings/meeting-1/audio");
+    expect(capturedRequests[0]!.headers.get("x-session-id")).toBe("session-1");
+    expect(capturedRequests[1]!.headers.get("x-session-id")).toBe("session-2");
+  });
 
-    test("sets error on fetch failure", async () => {
-      const failingFetch = mock(async () => {
-        throw new Error("Network error");
-      });
+  test("sets error when a recording file is missing", async () => {
+    const { controller, onError } = createTestSetup();
 
-      const { controller, storage, onError } = createTestSetup({
-        fetchFn: failingFetch as unknown as typeof fetch,
-      });
-      await setupWithAudioFile(storage, "session-1");
+    await controller.upload([buildRecording("missing", "session-1", 1)], "meeting-1");
 
-      await controller.upload("session-1", "meeting-1");
+    expect(controller.getState().isUploading).toBe(false);
+    expect(controller.getState().error).toBe("Audio file not found");
+    expect(onError).toHaveBeenCalledTimes(1);
+  });
 
-      expect(controller.getState().isUploading).toBe(false);
-      expect(controller.getState().error).toBe("Network error");
-      expect(onError).toHaveBeenCalled();
-    });
-
-    test("sets error on non-ok response", async () => {
-      const errorFetch = mock(async () => new Response("Server error", { status: 500 }));
-
-      const { controller, storage, onError } = createTestSetup({
-        fetchFn: errorFetch as unknown as typeof fetch,
-      });
-      await setupWithAudioFile(storage, "session-1");
-
-      await controller.upload("session-1", "meeting-1");
-
-      expect(controller.getState().isUploading).toBe(false);
-      expect(controller.getState().error).toContain("Upload failed");
-      expect(onError).toHaveBeenCalled();
-    });
-
-    test("deletes local file after successful upload", async () => {
-      const { controller, storage } = createTestSetup();
-      await setupWithAudioFile(storage, "session-1");
-
-      await controller.upload("session-1", "meeting-1");
-
-      const file = await storage.getAudioFile("session-1");
-      expect(file).toBeNull();
-    });
-
-    test("does not upload while already uploading", async () => {
-      const slowFetch = mock(
-        async () =>
-          new Promise<Response>((resolve) =>
-            setTimeout(() => resolve(new Response(JSON.stringify({ id: 1 }))), 100),
-          ),
-      );
-
-      const { controller, storage } = createTestSetup({
-        fetchFn: slowFetch as unknown as typeof fetch,
-      });
-      await setupWithAudioFile(storage, "session-1");
-      await setupWithAudioFile(storage, "session-2");
-
-      // Start first upload (don't await)
-      const upload1 = controller.upload("session-1", "meeting-1");
-
-      // Try second upload immediately
-      await controller.upload("session-2", "meeting-1");
-
-      await upload1;
-
-      // Only one fetch call should have been made
-      expect(slowFetch).toHaveBeenCalledTimes(1);
-    });
-
-    test("uses xhrFactory when provided and reports incremental progress", async () => {
-      class MockXhr {
-        method: string | null = null;
-        url: string | null = null;
-        requestHeaders = new Map<string, string>();
-        status = 0;
-        statusText = "OK";
-        withCredentials = false;
-        upload: { onprogress: ((event: any) => void) | null } = { onprogress: null };
-        onload: (() => void) | null = null;
-        onerror: (() => void) | null = null;
-        onabort: (() => void) | null = null;
-        private aborted = false;
-
-        open(method: string, url: string): void {
-          this.method = method;
-          this.url = url;
-        }
-
-        setRequestHeader(name: string, value: string): void {
-          this.requestHeaders.set(name, value);
-        }
-
-        send(_body: any): void {
-          setTimeout(() => {
-            if (this.aborted) return;
-            this.upload.onprogress?.({ lengthComputable: true, loaded: 1, total: 4 });
-            this.upload.onprogress?.({ lengthComputable: true, loaded: 2, total: 4 });
-            this.upload.onprogress?.({ lengthComputable: true, loaded: 3, total: 4 });
-            this.upload.onprogress?.({ lengthComputable: true, loaded: 4, total: 4 });
-            this.status = 200;
-            this.onload?.();
-          }, 0);
-        }
-
-        abort(): void {
-          if (this.aborted) return;
-          this.aborted = true;
-          this.onabort?.();
-        }
+  test("keeps remaining recordings when upload fails mid-batch", async () => {
+    let callCount = 0;
+    const flakyFetch = mock(async () => {
+      callCount += 1;
+      if (callCount === 2) {
+        return new Response("Server error", { status: 500, statusText: "Internal Server Error" });
       }
-
-      const fetchSpy = mock(async () => new Response("OK"));
-      const xhrInstances: MockXhr[] = [];
-      const xhrFactory = () => {
-        const xhr = new MockXhr();
-        xhrInstances.push(xhr);
-        return xhr as unknown as XMLHttpRequest;
-      };
-
-      const { controller, storage, states } = createTestSetup({
-        fetchFn: fetchSpy as unknown as typeof fetch,
-        xhrFactory,
+      return new Response(JSON.stringify({ id: callCount, url: `/audio/${callCount}` }), {
+        status: 200,
       });
-      await setupWithAudioFile(storage, "session-1");
-
-      await controller.upload("session-1", "meeting-1");
-
-      expect(fetchSpy).toHaveBeenCalledTimes(0);
-      expect(xhrInstances.length).toBe(1);
-      expect(xhrInstances[0]!.method).toBe("POST");
-      expect(xhrInstances[0]!.url).toBe("http://localhost:3000/api/meetings/meeting-1/audio");
-      expect(xhrInstances[0]!.withCredentials).toBe(true);
-      expect(xhrInstances[0]!.requestHeaders.get("Content-Type")).toBe("audio/webm");
-      expect(xhrInstances[0]!.requestHeaders.get("X-Session-Id")).toBe("session-1");
-
-      expect(states.some((s) => s.progress > 0 && s.progress < 95)).toBe(true);
-      expect(controller.getState().progress).toBe(100);
     });
+
+    const { controller, storage, onComplete } = createTestSetup({
+      fetchFn: flakyFetch as unknown as typeof fetch,
+    });
+    await setupWithAudioFile(storage, "r-1");
+    await setupWithAudioFile(storage, "r-2");
+
+    await controller.upload(
+      [buildRecording("r-1", "session-1", 1), buildRecording("r-2", "session-1", 2)],
+      "meeting-1",
+    );
+
+    expect(onComplete).toHaveBeenCalledTimes(1);
+    expect(onComplete).toHaveBeenCalledWith("r-1");
+    expect(controller.getState().error).toContain("Upload failed");
+
+    expect(await storage.getAudioFile("r-1")).toBeNull();
+    expect(await storage.getAudioFile("r-2")).not.toBeNull();
   });
 
-  describe("cancel", () => {
-    test("cancels an in-flight upload", async () => {
-      let resolveFetch: (() => void) | null = null;
-      const abortedFetch = mock(async (_url: RequestInfo | URL, init?: RequestInit) => {
-        const signal = init?.signal;
-        return new Promise<Response>((resolve, reject) => {
-          // Check if already aborted
-          if (signal?.aborted) {
-            reject(new DOMException("The operation was aborted.", "AbortError"));
-            return;
-          }
-          resolveFetch = () => resolve(new Response(JSON.stringify({ id: 1 })));
-          signal?.addEventListener("abort", () => {
-            reject(new DOMException("The operation was aborted.", "AbortError"));
-          });
+  test("does not start second upload while one is in progress", async () => {
+    const slowFetch = mock(
+      async () =>
+        new Promise<Response>((resolve) =>
+          setTimeout(() => resolve(new Response(JSON.stringify({ id: 1, url: "/audio/1" }))), 100),
+        ),
+    );
+
+    const { controller, storage } = createTestSetup({
+      fetchFn: slowFetch as unknown as typeof fetch,
+    });
+    await setupWithAudioFile(storage, "r-1");
+    await setupWithAudioFile(storage, "r-2");
+
+    const upload1 = controller.upload([buildRecording("r-1", "session-1", 1)], "meeting-1");
+    await controller.upload([buildRecording("r-2", "session-1", 2)], "meeting-1");
+    await upload1;
+
+    expect(slowFetch).toHaveBeenCalledTimes(1);
+    expect(await storage.getAudioFile("r-2")).not.toBeNull();
+  });
+
+  test("cancels an in-flight upload and keeps file", async () => {
+    const abortedFetch = mock(async (_url: RequestInfo | URL, init?: RequestInit) => {
+      const signal = init?.signal;
+      return new Promise<Response>((_resolve, reject) => {
+        if (signal?.aborted) {
+          reject(new DOMException("The operation was aborted.", "AbortError"));
+          return;
+        }
+        signal?.addEventListener("abort", () => {
+          reject(new DOMException("The operation was aborted.", "AbortError"));
         });
       });
-
-      const { controller, storage } = createTestSetup({
-        fetchFn: abortedFetch as unknown as typeof fetch,
-      });
-      await setupWithAudioFile(storage, "session-1");
-
-      const uploadPromise = controller.upload("session-1", "meeting-1");
-
-      // Wait for fetch to be called
-      await new Promise((r) => setTimeout(r, 10));
-
-      controller.cancel();
-
-      await uploadPromise;
-
-      expect(controller.getState().isUploading).toBe(false);
-      // File should NOT be deleted when cancelled
-      const file = await storage.getAudioFile("session-1");
-      expect(file).not.toBeNull();
     });
 
-    test("cancels an in-flight xhr upload", async () => {
-      class MockXhr {
-        status = 0;
-        statusText = "OK";
-        upload: { onprogress: ((event: any) => void) | null } = { onprogress: null };
-        onload: (() => void) | null = null;
-        onerror: (() => void) | null = null;
-        onabort: (() => void) | null = null;
-        private aborted = false;
-
-        open(_method: string, _url: string): void {}
-        setRequestHeader(_name: string, _value: string): void {}
-
-        send(_body: any): void {
-          // Keep request in-flight until aborted
-          setTimeout(() => {
-            if (this.aborted) return;
-            this.upload.onprogress?.({ lengthComputable: true, loaded: 1, total: 4 });
-          }, 0);
-        }
-
-        abort(): void {
-          if (this.aborted) return;
-          this.aborted = true;
-          this.onabort?.();
-        }
-      }
-
-      const { controller, storage } = createTestSetup({
-        xhrFactory: () => new MockXhr() as unknown as XMLHttpRequest,
-      });
-      await setupWithAudioFile(storage, "session-1");
-
-      const uploadPromise = controller.upload("session-1", "meeting-1");
-
-      await new Promise((r) => setTimeout(r, 10));
-      controller.cancel();
-
-      await uploadPromise;
-
-      expect(controller.getState().isUploading).toBe(false);
-      const file = await storage.getAudioFile("session-1");
-      expect(file).not.toBeNull();
+    const { controller, storage } = createTestSetup({
+      fetchFn: abortedFetch as unknown as typeof fetch,
     });
+    await setupWithAudioFile(storage, "r-1");
+
+    const uploadPromise = controller.upload([buildRecording("r-1", "session-1", 1)], "meeting-1");
+    await new Promise((r) => setTimeout(r, 10));
+    controller.cancel();
+    await uploadPromise;
+
+    expect(controller.getState().isUploading).toBe(false);
+    expect(await storage.getAudioFile("r-1")).not.toBeNull();
   });
 
-  describe("dispose", () => {
-    test("prevents further operations", async () => {
-      const { controller, storage, onStateChange } = createTestSetup();
-      await setupWithAudioFile(storage, "session-1");
+  test("uses xhrFactory and reports incremental progress", async () => {
+    class MockXhr {
+      method: string | null = null;
+      url: string | null = null;
+      requestHeaders = new Map<string, string>();
+      status = 0;
+      statusText = "OK";
+      responseText = JSON.stringify({ id: 1, url: "/audio/1" });
+      withCredentials = false;
+      upload: { onprogress: ((event: any) => void) | null } = { onprogress: null };
+      onload: (() => void) | null = null;
+      onerror: (() => void) | null = null;
+      onabort: (() => void) | null = null;
+      private aborted = false;
 
-      controller.dispose();
+      open(method: string, url: string): void {
+        this.method = method;
+        this.url = url;
+      }
 
-      const callCount = onStateChange.mock.calls.length;
-      await controller.upload("session-1", "meeting-1");
+      setRequestHeader(name: string, value: string): void {
+        this.requestHeaders.set(name, value);
+      }
 
-      expect(onStateChange.mock.calls.length).toBe(callCount);
-    });
+      send(_body: any): void {
+        setTimeout(() => {
+          if (this.aborted) return;
+          this.upload.onprogress?.({ lengthComputable: true, loaded: 1, total: 4 });
+          this.upload.onprogress?.({ lengthComputable: true, loaded: 2, total: 4 });
+          this.upload.onprogress?.({ lengthComputable: true, loaded: 3, total: 4 });
+          this.upload.onprogress?.({ lengthComputable: true, loaded: 4, total: 4 });
+          this.status = 200;
+          this.onload?.();
+        }, 0);
+      }
+
+      abort(): void {
+        if (this.aborted) return;
+        this.aborted = true;
+        this.onabort?.();
+      }
+    }
+
+    const xhrInstances: MockXhr[] = [];
+    const xhrFactory = () => {
+      const xhr = new MockXhr();
+      xhrInstances.push(xhr);
+      return xhr as unknown as XMLHttpRequest;
+    };
+
+    const { controller, storage, states } = createTestSetup({ xhrFactory });
+    await setupWithAudioFile(storage, "r-1");
+
+    await controller.upload([buildRecording("r-1", "session-1", 1)], "meeting-1");
+
+    expect(xhrInstances).toHaveLength(1);
+    expect(xhrInstances[0]!.method).toBe("POST");
+    expect(xhrInstances[0]!.url).toBe("http://localhost:3000/api/meetings/meeting-1/audio");
+    expect(xhrInstances[0]!.withCredentials).toBe(true);
+    expect(xhrInstances[0]!.requestHeaders.get("Content-Type")).toBe("audio/webm");
+    expect(xhrInstances[0]!.requestHeaders.get("X-Session-Id")).toBe("session-1");
+    expect(states.some((s) => s.progress > 0 && s.progress < 100)).toBe(true);
+    expect(controller.getState().progress).toBe(100);
   });
 });

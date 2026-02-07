@@ -7,7 +7,7 @@
 
 import { describe, test, expect, beforeEach, afterEach } from "bun:test";
 import { PersistenceService } from "./persistence";
-import { buildHierarchicalContext, type HierarchicalContext } from "./context-builder";
+import { buildHierarchicalContext } from "./context-builder";
 import { existsSync, rmSync } from "node:fs";
 import type { CameraFrame } from "@/types/messages";
 

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { buildMeetingHistoryMessage } from "./history-mapper";
+import { buildMeetingHistoryDeltaMessage, buildMeetingHistoryMessage } from "./history-mapper";
 
 describe("buildMeetingHistoryMessage", () => {
   test("maps persisted payloads to meeting history message", () => {
@@ -76,5 +76,26 @@ describe("buildMeetingHistoryMessage", () => {
       "/api/meetings/550e8400-e29b-41d4-a716-446655440000/captures/21",
     );
     expect(message.data.speakerAliases).toEqual({ "0": "司会" });
+  });
+
+  test("maps persisted payloads to meeting history delta message", () => {
+    const message = buildMeetingHistoryDeltaMessage("550e8400-e29b-41d4-a716-446655440000", {
+      transcripts: [],
+      analyses: [],
+      images: [],
+      captures: [],
+      metaSummaries: [],
+      speakerAliases: [],
+    });
+
+    expect(message.type).toBe("meeting:history:delta");
+    expect(message.data).toEqual({
+      transcripts: [],
+      analyses: [],
+      images: [],
+      captures: [],
+      metaSummaries: [],
+      speakerAliases: {},
+    });
   });
 });

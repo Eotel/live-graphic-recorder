@@ -14,7 +14,6 @@ import {
   createAudioRecording,
   findAudioRecordingByIdAndMeetingId,
   findAudioRecordingsBySessionId,
-  type PersistedAudioRecording,
 } from "./audio";
 
 describe("AudioRecordingRepository", () => {

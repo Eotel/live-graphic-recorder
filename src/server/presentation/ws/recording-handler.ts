@@ -1,6 +1,7 @@
 import type { ServerWebSocket } from "bun";
 import { createMeetingWsUsecase } from "@/server/application/ws/meeting-usecase";
 import { createModelWsUsecase } from "@/server/application/ws/model-usecase";
+import { createRecordingLockManager } from "@/server/application/ws/recording-lock-manager";
 import { createSessionWsUsecase } from "@/server/application/ws/session-usecase";
 import { createWsMessageRouter } from "@/server/presentation/ws/message-router";
 import { buildImageModelStatusMessage } from "@/server/presentation/ws/context";
@@ -24,8 +25,15 @@ interface RecordingWebSocketHandlers {
 export function createRecordingWebSocketHandlers(
   input: CreateRecordingWebSocketHandlersInput,
 ): RecordingWebSocketHandlers {
-  const meeting = createMeetingWsUsecase({ persistence: input.persistence });
-  const session = createSessionWsUsecase({ persistence: input.persistence });
+  const recordingLocks = createRecordingLockManager();
+  const meeting = createMeetingWsUsecase({
+    persistence: input.persistence,
+    recordingLocks,
+  });
+  const session = createSessionWsUsecase({
+    persistence: input.persistence,
+    recordingLocks,
+  });
   const model = createModelWsUsecase();
   const router = createWsMessageRouter({ meeting, session, model });
 
@@ -46,6 +54,7 @@ export function createRecordingWebSocketHandlers(
     close(ws) {
       const ctx = ws.data;
       session.cleanup(ctx);
+      meeting.releaseRecordingLock(ctx);
       console.log(`[WS] Session closed: ${ctx.sessionId}`);
     },
   };

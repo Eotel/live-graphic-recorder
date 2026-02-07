@@ -63,7 +63,6 @@ describe("createWebSocketAdapter", () => {
   describe("create", () => {
     test("creates WebSocket instance with arraybuffer binaryType", () => {
       let capturedUrl: string | undefined;
-      let binaryType: BinaryType | undefined;
 
       class MockWebSocket {
         binaryType: BinaryType = "blob";
@@ -84,7 +83,7 @@ describe("createWebSocketAdapter", () => {
       globalThis.WebSocket = MockWebSocket as unknown as typeof WebSocket;
 
       const adapter = createWebSocketAdapter();
-      const instance = adapter.create("ws://test.com/ws");
+      adapter.create("ws://test.com/ws");
 
       expect(capturedUrl).toBe("ws://test.com/ws");
     });

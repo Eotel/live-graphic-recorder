@@ -15,7 +15,6 @@ import {
   createTranscriptSegmentBatch,
   findTranscriptSegmentsBySessionId,
   markLastSegmentAsUtteranceEnd,
-  type PersistedTranscriptSegment,
 } from "./transcript";
 
 describe("TranscriptRepository", () => {

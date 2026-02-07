@@ -8,6 +8,7 @@
 import { Camera, Monitor, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { MediaSourceType } from "@/types/messages";
+import { useTranslation } from "react-i18next";
 
 interface MediaSourceToggleProps {
   value: MediaSourceType;
@@ -24,6 +25,7 @@ export function MediaSourceToggle({
   isLoading = false,
   className,
 }: MediaSourceToggleProps) {
+  const { t } = useTranslation();
   const isDisabled = disabled || isLoading;
 
   return (
@@ -47,7 +49,7 @@ export function MediaSourceToggle({
         ) : (
           <Camera className="size-4" />
         )}
-        Camera
+        {t("recording.camera")}
       </button>
       <button
         type="button"
@@ -66,7 +68,7 @@ export function MediaSourceToggle({
         ) : (
           <Monitor className="size-4" />
         )}
-        Screen
+        {t("recording.screen")}
       </button>
     </div>
   );

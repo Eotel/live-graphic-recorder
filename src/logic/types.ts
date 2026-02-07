@@ -8,10 +8,10 @@
 import type {
   MediaSourceType,
   TranscriptSegment,
-  AnalysisMessage,
-  ImageMessage,
   CameraFrame,
   ImageModelPreset,
+  MeetingMode,
+  MeetingHistoryCursor,
 } from "../types/messages";
 import type { MediaDevicesAdapter, MediaRecorderAdapter, StreamUtils } from "../adapters/types";
 
@@ -155,6 +155,7 @@ export interface MeetingState {
   meetingId: string | null;
   meetingTitle: string | null;
   sessionId: string | null;
+  mode: MeetingMode | null;
   meetingList: MeetingInfo[];
 }
 
@@ -188,9 +189,11 @@ export interface MeetingControllerActions {
   connect(): void;
   disconnect(): void;
   sendAudio(data: ArrayBuffer): void;
-  startMeeting(title?: string, meetingId?: string): void;
+  startMeeting(title?: string, meetingId?: string, mode?: MeetingMode): void;
   stopMeeting(): void;
   requestMeetingList(): void;
+  requestMeetingHistoryDelta(meetingId: string, cursor?: MeetingHistoryCursor): void;
+  setMeetingMode(mode: MeetingMode): void;
   updateMeetingTitle(title: string): void;
   updateSpeakerAlias(speaker: number, displayName: string): void;
   startSession(): void;
@@ -211,9 +214,22 @@ export interface MeetingControllerCallbacks {
   onImage?: (data: ImageData) => void;
   onError?: (message: string) => void;
   onUtteranceEnd?: (timestamp: number) => void;
-  onMeetingStatus?: (data: { meetingId: string; title?: string; sessionId: string }) => void;
+  onMeetingStatus?: (data: {
+    meetingId: string;
+    title?: string;
+    sessionId: string;
+    mode: MeetingMode;
+  }) => void;
   onMeetingList?: (meetings: MeetingInfo[]) => void;
   onMeetingHistory?: (data: {
+    transcripts: TranscriptSegment[];
+    analyses: AnalysisData[];
+    images: ImageData[];
+    captures: CaptureData[];
+    metaSummaries: MetaSummaryData[];
+    speakerAliases: Record<number, string>;
+  }) => void;
+  onMeetingHistoryDelta?: (data: {
     transcripts: TranscriptSegment[];
     analyses: AnalysisData[];
     images: ImageData[];

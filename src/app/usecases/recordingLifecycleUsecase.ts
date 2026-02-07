@@ -1,7 +1,6 @@
 export interface RecordingLifecycleDeps {
   startSession: () => void;
   stopSession: () => void;
-  resetLocalRecording: () => void;
   startLocalRecording: (sessionId: string) => void;
   stopLocalRecording: () => void;
   getSessionId: () => string | null;
@@ -19,7 +18,6 @@ export function recordingLifecycleUsecase(deps: RecordingLifecycleDeps): Recordi
   return {
     start: () => {
       deps.startSession();
-      deps.resetLocalRecording();
       const sessionId = deps.getSessionId();
       if (sessionId) {
         deps.startLocalRecording(sessionId);

@@ -26,6 +26,9 @@ function createUsecases() {
     list: () => calls.push("meeting:list"),
     update: () => calls.push("meeting:update"),
     updateSpeakerAlias: () => calls.push("meeting:alias"),
+    setMode: () => calls.push("meeting:mode:set"),
+    requestHistoryDelta: () => calls.push("meeting:history:delta:request"),
+    releaseRecordingLock: () => calls.push("meeting:recording:release"),
   };
   const session: SessionWsUsecase = {
     cleanup: () => {},
@@ -62,12 +65,32 @@ describe("createWsMessageRouter", () => {
 
   test("routes binary message to audio chunk handler", async () => {
     const { ws } = createFakeSocket();
+    ws.data.meetingMode = "record";
     const { calls, meeting, session, model } = createUsecases();
     const router = createWsMessageRouter({ meeting, session, model });
 
-    await router.route(ws, Buffer.from([1, 2, 3]));
+    await router.route(ws, new Uint8Array([1, 2, 3]).buffer);
 
     expect(calls).toEqual(["audio:chunk"]);
+  });
+
+  test("rejects binary message in read-only mode", async () => {
+    const { ws, sent } = createFakeSocket();
+    ws.data.meetingMode = "view";
+    const { calls, meeting, session, model } = createUsecases();
+    const router = createWsMessageRouter({ meeting, session, model });
+
+    await router.route(ws, new Uint8Array([1, 2, 3]).buffer);
+
+    expect(calls).toEqual([]);
+    expect(sent).toHaveLength(1);
+    expect(JSON.parse(sent[0] ?? "{}")).toEqual({
+      type: "error",
+      data: {
+        message: "This meeting is in read-only mode",
+        code: "READ_ONLY_MEETING",
+      },
+    });
   });
 
   test("sends error when message payload is invalid", async () => {

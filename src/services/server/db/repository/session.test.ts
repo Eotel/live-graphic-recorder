@@ -9,13 +9,7 @@ import { describe, test, expect, beforeEach, afterEach } from "bun:test";
 import { getDatabase, closeDatabase } from "../database";
 import { runMigrations } from "../migrations";
 import { createMeeting } from "./meeting";
-import {
-  createSession,
-  findSessionById,
-  findSessionsByMeetingId,
-  updateSession,
-  type PersistedSession,
-} from "./session";
+import { createSession, findSessionById, findSessionsByMeetingId, updateSession } from "./session";
 
 describe("SessionRepository", () => {
   const testDbPath = ":memory:";

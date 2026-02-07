@@ -53,7 +53,7 @@ try {
   const client = createClient(apiKey);
   const connection = client.listen.live(DEEPGRAM_CONFIG);
 
-  const connectionResult = await new Promise<string>((resolve, reject) => {
+  await new Promise<string>((resolve, reject) => {
     const timeout = setTimeout(() => {
       reject(new Error("Connection timeout (10s)"));
     }, 10000);

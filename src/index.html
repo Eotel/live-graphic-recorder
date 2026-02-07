@@ -5,6 +5,24 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <link rel="icon" type="image/svg+xml" href="./logo.svg" />
     <title>Live Graphic Recorder</title>
+    <script>
+      (() => {
+        const normalizeLanguage = (value) =>
+          typeof value === "string" && value.toLowerCase().startsWith("ja") ? "ja" : "en";
+
+        try {
+          const stored = localStorage.getItem("app_lang");
+          if (stored) {
+            document.documentElement.lang = normalizeLanguage(stored);
+            return;
+          }
+        } catch {
+          // ignore storage access errors
+        }
+
+        document.documentElement.lang = normalizeLanguage(navigator.language);
+      })();
+    </script>
     <script type="module" src="./frontend.tsx" async></script>
   </head>
   <body>

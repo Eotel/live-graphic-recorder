@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { ImageSkeleton } from "./ImageSkeleton";
 import type { GenerationPhase } from "@/types/messages";
+import { useTranslation } from "react-i18next";
 
 interface GraphicImage {
   base64?: string;
@@ -43,6 +44,7 @@ export function ImageCarousel({
   generationPhase = "idle",
   className,
 }: ImageCarouselProps) {
+  const { t } = useTranslation();
   const [currentIndex, setCurrentIndex] = useState(0);
   const [loadErrors, setLoadErrors] = useState<Set<number>>(new Set());
 
@@ -91,7 +93,7 @@ export function ImageCarousel({
               {loadErrors.has(clampedIndex) || !getImageSrc(currentImage) ? (
                 <div className="absolute inset-0 flex flex-col items-center justify-center text-muted-foreground">
                   <ImageIcon className="size-12 mb-2" />
-                  <p className="text-sm">Failed to load image</p>
+                  <p className="text-sm">{t("graphics.failedToLoadImage")}</p>
                 </div>
               ) : (
                 <img
@@ -108,7 +110,7 @@ export function ImageCarousel({
                     size="icon"
                     className="absolute left-2 top-1/2 -translate-y-1/2 bg-black/30 hover:bg-black/50 text-white opacity-0 pointer-events-none transition-opacity group-hover:opacity-100 group-hover:pointer-events-auto focus-visible:opacity-100 focus-visible:pointer-events-auto"
                     onClick={goToPrevious}
-                    aria-label="Previous image"
+                    aria-label={t("graphics.previousImage")}
                   >
                     <ChevronLeft className="size-6" />
                   </Button>
@@ -117,7 +119,7 @@ export function ImageCarousel({
                     size="icon"
                     className="absolute right-2 top-1/2 -translate-y-1/2 bg-black/30 hover:bg-black/50 text-white opacity-0 pointer-events-none transition-opacity group-hover:opacity-100 group-hover:pointer-events-auto focus-visible:opacity-100 focus-visible:pointer-events-auto"
                     onClick={goToNext}
-                    aria-label="Next image"
+                    aria-label={t("graphics.nextImage")}
                   >
                     <ChevronRight className="size-6" />
                   </Button>
@@ -127,7 +129,7 @@ export function ImageCarousel({
           ) : (
             <div className="absolute inset-0 flex flex-col items-center justify-center text-muted-foreground">
               <ImageIcon className="size-12 mb-2" />
-              <p className="text-sm">Graphic recordings will appear here</p>
+              <p className="text-sm">{t("graphics.placeholder")}</p>
             </div>
           )}
         </div>
@@ -152,7 +154,7 @@ export function ImageCarousel({
                 {thumbSrc ? (
                   <img
                     src={thumbSrc}
-                    alt={`Thumbnail ${index + 1}`}
+                    alt={t("graphics.thumbnailAlt", { index: index + 1 })}
                     className="w-full h-full object-cover"
                   />
                 ) : (

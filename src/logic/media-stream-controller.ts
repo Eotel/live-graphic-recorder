@@ -6,7 +6,6 @@
  */
 
 import type { MediaSourceType } from "../types/messages";
-import type { MediaDevicesAdapter, StreamUtils } from "../adapters/types";
 import type {
   MediaStreamControllerState,
   MediaStreamControllerActions,

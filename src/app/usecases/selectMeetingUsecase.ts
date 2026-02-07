@@ -3,7 +3,7 @@ import type { PendingMeetingAction } from "./createMeetingUsecase";
 export interface SelectMeetingUsecaseDeps {
   isConnected: () => boolean;
   connect: () => void;
-  startMeeting: (title: undefined, meetingId: string) => void;
+  startMeeting: (title: undefined, meetingId: string, mode: "view") => void;
   beforeStart?: () => void;
   onStarted?: () => void;
   setPendingAction?: (action: PendingMeetingAction | null) => void;
@@ -22,7 +22,7 @@ export function selectMeetingUsecase(
     }
 
     deps.beforeStart?.();
-    deps.startMeeting(undefined, meetingId);
+    deps.startMeeting(undefined, meetingId, "view");
     deps.onStarted?.();
     return "started";
   };

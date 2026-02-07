@@ -8,6 +8,7 @@
 import { VideoOff, Monitor } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { MediaSourceType } from "@/types/messages";
+import { useTranslation } from "react-i18next";
 
 interface CameraPreviewProps {
   videoRef: React.RefObject<HTMLVideoElement | null>;
@@ -24,8 +25,10 @@ export function CameraPreview({
   sourceType = "camera",
   className,
 }: CameraPreviewProps) {
+  const { t } = useTranslation();
   const Icon = sourceType === "camera" ? VideoOff : Monitor;
-  const placeholderText = sourceType === "camera" ? "Camera not available" : "Screen not shared";
+  const placeholderText =
+    sourceType === "camera" ? t("recording.cameraNotAvailable") : t("recording.screenNotShared");
 
   return (
     <div className={cn("relative h-full bg-muted rounded-lg overflow-hidden", className)}>
@@ -35,7 +38,7 @@ export function CameraPreview({
           {isRecording && (
             <div className="absolute top-3 right-3 flex items-center gap-2 bg-red-500 text-white text-xs font-medium px-2 py-1 rounded-full">
               <span className="size-2 rounded-full bg-white animate-pulse" />
-              REC
+              {t("recording.recIndicator")}
             </div>
           )}
         </>

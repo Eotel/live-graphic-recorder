@@ -7,6 +7,8 @@
 
 import { Button } from "@/components/ui/button";
 import type { MeetingInfo } from "@/types/messages";
+import { useTranslation } from "react-i18next";
+import { formatRelativeMeetingDate } from "@/i18n/format";
 
 export interface MeetingSelectorProps {
   meetings: MeetingInfo[];
@@ -18,22 +20,6 @@ export interface MeetingSelectorProps {
   className?: string;
 }
 
-function formatDate(timestamp: number): string {
-  const date = new Date(timestamp);
-  const now = new Date();
-  const diffDays = Math.floor((now.getTime() - timestamp) / (1000 * 60 * 60 * 24));
-
-  if (diffDays === 0) {
-    return `Today ${date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`;
-  } else if (diffDays === 1) {
-    return `Yesterday ${date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`;
-  } else if (diffDays < 7) {
-    return `${diffDays} days ago`;
-  } else {
-    return date.toLocaleDateString([], { month: "short", day: "numeric" });
-  }
-}
-
 export function MeetingSelector({
   meetings,
   activeMeetingId,
@@ -43,27 +29,31 @@ export function MeetingSelector({
   disabled,
   className = "",
 }: MeetingSelectorProps) {
+  const { t, i18n } = useTranslation();
+
   return (
     <div className={`flex flex-col gap-3 ${className}`}>
       <div className="flex items-center justify-between">
-        <h3 className="text-sm font-medium text-muted-foreground">Meeting</h3>
+        <h3 className="text-sm font-medium text-muted-foreground">{t("meeting.sectionTitle")}</h3>
         <Button
           variant="ghost"
           size="sm"
           onClick={onRefresh}
           disabled={disabled}
-          aria-label="Refresh meeting list"
+          aria-label={t("meeting.refreshMeetingList")}
         >
           ↻
         </Button>
       </div>
 
       <Button onClick={() => onNewMeeting()} disabled={disabled} className="w-full">
-        + New Meeting
+        + {t("meeting.newMeeting")}
       </Button>
 
       {meetings.length === 0 ? (
-        <p className="text-sm text-muted-foreground text-center py-4">No previous meetings</p>
+        <p className="text-sm text-muted-foreground text-center py-4">
+          {t("meeting.noPreviousMeetings")}
+        </p>
       ) : (
         <div className="flex flex-col gap-1 max-h-48 overflow-y-auto">
           {meetings.map((meeting) => {
@@ -79,8 +69,14 @@ export function MeetingSelector({
                     : "hover:bg-accent hover:text-accent-foreground"
                 } ${disabled ? "opacity-50 cursor-not-allowed" : ""}`}
               >
-                <div className="font-medium truncate">{meeting.title || "Untitled Meeting"}</div>
-                <div className="text-xs opacity-70">{formatDate(meeting.startedAt)}</div>
+                <div className="font-medium truncate">{meeting.title || t("meeting.untitled")}</div>
+                <div className="text-xs opacity-70">
+                  {formatRelativeMeetingDate(
+                    meeting.startedAt,
+                    i18n.resolvedLanguage ?? i18n.language,
+                    t("meeting.unknownDate"),
+                  )}
+                </div>
               </button>
             );
           })}

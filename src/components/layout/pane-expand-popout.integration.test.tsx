@@ -368,7 +368,7 @@ describe("Layout regression (R1-R3)", () => {
 
 describe("Core feature preservation (R7-R9)", () => {
   test("R7: hidden panes remain in DOM when another is expanded", () => {
-    const { container } = render(
+    render(
       <MainLayout
         expandedPane="camera"
         header={<div>Header</div>}

@@ -1,6 +1,6 @@
 import { hasUnsavedRecording } from "@/logic/unsaved-recording";
 import type { PaneId } from "@/logic/pane-state-controller";
-import type { MediaSourceType, MeetingInfo, SessionStatus } from "@/types/messages";
+import type { MediaSourceType, MeetingInfo, SessionStatus, MeetingMode } from "@/types/messages";
 import { createStore, type StoreApi } from "zustand/vanilla";
 
 export type AppView = "select" | "recording";
@@ -34,6 +34,7 @@ export interface AppStoreState {
     meetingId: string | null;
     meetingTitle: string | null;
     sessionId: string | null;
+    mode: MeetingMode | null;
     meetingList: MeetingInfo[];
     isListLoading: boolean;
     listError: string | null;
@@ -59,6 +60,9 @@ export interface AppStoreState {
     progress: number;
     error: string | null;
     lastUploadedSessionId: string | null;
+    lastUploadedAudioUrl: string | null;
+    uploadedCount: number;
+    totalCount: number;
   };
   ui: {
     expandedPane: PaneId | null;
@@ -128,6 +132,7 @@ function createDefaultState(): Omit<AppStoreSnapshot, "actions"> {
       meetingId: null,
       meetingTitle: null,
       sessionId: null,
+      mode: null,
       meetingList: [],
       isListLoading: false,
       listError: null,
@@ -153,6 +158,9 @@ function createDefaultState(): Omit<AppStoreSnapshot, "actions"> {
       progress: 0,
       error: null,
       lastUploadedSessionId: null,
+      lastUploadedAudioUrl: null,
+      uploadedCount: 0,
+      totalCount: 0,
     },
     ui: {
       expandedPane: null,
@@ -180,19 +188,19 @@ function createDefaultState(): Omit<AppStoreSnapshot, "actions"> {
 
 function computeDerived(state: Omit<AppStoreSnapshot, "actions">): AppStoreState["derived"] {
   const hasMeeting = Boolean(state.meeting.meetingId);
-  const hasUploadTarget = Boolean(state.recording.localSessionId && state.meeting.meetingId);
+  const hasUploadTarget = Boolean(state.recording.hasLocalFile && state.meeting.meetingId);
 
   return {
     hasMeeting,
     hasUnsavedRecording: hasUnsavedRecording(
       state.recording.isRecording,
       state.recording.hasLocalFile,
-      state.recording.localSessionId,
     ),
     canStartRecording:
       state.media.hasPermission &&
       state.meeting.isConnected &&
       hasMeeting &&
+      state.meeting.mode === "record" &&
       !state.recording.isRecording,
     canStopRecording: state.recording.isRecording,
     canDownloadReport: hasMeeting && !state.ui.isDownloadingReport,
@@ -303,6 +311,7 @@ export function createAppStore(
                 meeting: {
                   pendingAction: null,
                   view: "recording",
+                  mode: "record",
                   listError: null,
                 },
                 recording: {
@@ -324,6 +333,7 @@ export function createAppStore(
                 meeting: {
                   pendingAction: null,
                   view: "recording",
+                  mode: "view",
                   listError: null,
                 },
                 recording: {

@@ -8,7 +8,7 @@
  * Related: src/hooks/useTranscriptStore.ts, src/hooks/useSessionStore.ts, src/hooks/useMeetingController.ts
  */
 
-import { useCallback, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 import { useTranscriptStore } from "./useTranscriptStore";
 import { useSessionStore } from "./useSessionStore";
 import { useMeetingController } from "./useMeetingController";
@@ -17,6 +17,8 @@ import type {
   SummaryPage,
   TranscriptSegment,
   ImageModelPreset,
+  MeetingMode,
+  MeetingHistoryCursor,
 } from "../types/messages";
 
 export interface UseMeetingSessionReturn {
@@ -31,6 +33,7 @@ export interface UseMeetingSessionReturn {
     meetingId: string | null;
     meetingTitle: string | null;
     sessionId: string | null;
+    mode: MeetingMode | null;
     meetingList: Array<{
       id: string;
       title: string | null;
@@ -78,9 +81,11 @@ export interface UseMeetingSessionReturn {
   connect: () => void;
   disconnect: () => void;
   sendAudio: (data: ArrayBuffer) => void;
-  startMeeting: (title?: string, meetingId?: string) => void;
+  startMeeting: (title?: string, meetingId?: string, mode?: MeetingMode) => void;
   stopMeeting: () => void;
   requestMeetingList: () => void;
+  requestMeetingHistoryDelta: (meetingId: string, cursor?: MeetingHistoryCursor) => void;
+  setMeetingMode: (mode: MeetingMode) => void;
   updateMeetingTitle: (title: string) => void;
   updateSpeakerAlias: (speaker: number, displayName: string) => void;
   startSession: () => void;
@@ -88,6 +93,32 @@ export interface UseMeetingSessionReturn {
   sendCameraFrame: (data: CameraFrame) => void;
   setImageModelPreset: (preset: ImageModelPreset) => void;
   resetSession: () => void;
+}
+
+const VIEW_HISTORY_POLL_INTERVAL_MS = 5000;
+
+function uniqueAppend<T>(current: T[], incoming: T[], keyOf: (item: T) => string): T[] {
+  if (incoming.length === 0) return current;
+  const seen = new Set(current.map(keyOf));
+  const merged = [...current];
+  for (const item of incoming) {
+    const key = keyOf(item);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    merged.push(item);
+  }
+  return merged;
+}
+
+function maxTimestamp(values: Array<number | undefined>): number | undefined {
+  let max: number | undefined;
+  for (const value of values) {
+    if (!Number.isFinite(value)) continue;
+    if (typeof max === "undefined" || (value as number) > max) {
+      max = value as number;
+    }
+  }
+  return max;
 }
 
 /**
@@ -205,6 +236,78 @@ export function useMeetingSession(): UseMeetingSessionReturn {
     [transcriptStore, sessionStore],
   );
 
+  const handleMeetingHistoryDelta = useCallback(
+    (data: {
+      transcripts: TranscriptSegment[];
+      analyses: Array<{
+        summary: string[];
+        topics: string[];
+        tags: string[];
+        flow: number;
+        heat: number;
+        timestamp?: number;
+      }>;
+      images: Array<{ url?: string; prompt: string; timestamp: number }>;
+      captures: Array<{ url: string; timestamp: number }>;
+      metaSummaries: Array<{
+        summary: string[];
+        themes: string[];
+        startTime: number;
+        endTime: number;
+      }>;
+      speakerAliases: Record<number, string>;
+    }) => {
+      const mergedTranscripts = uniqueAppend(transcriptStore.segments, data.transcripts, (t) =>
+        JSON.stringify([
+          t.timestamp,
+          t.text,
+          t.isFinal,
+          t.speaker ?? null,
+          t.startTime ?? null,
+          t.isUtteranceEnd ?? false,
+        ]),
+      );
+      transcriptStore.loadHistory(mergedTranscripts);
+
+      const mergedAnalyses = uniqueAppend(sessionStore.analyses, data.analyses, (a) =>
+        JSON.stringify([a.timestamp ?? null, a.flow, a.heat, a.summary, a.topics, a.tags]),
+      );
+      const mergedImages = uniqueAppend(sessionStore.images, data.images, (i) =>
+        JSON.stringify([i.timestamp, i.url ?? null, i.prompt]),
+      );
+      const mergedCaptures = uniqueAppend(sessionStore.captures, data.captures, (c) =>
+        JSON.stringify([c.timestamp, c.url]),
+      );
+      const mergedMetaSummaries = uniqueAppend(
+        sessionStore.metaSummaries,
+        data.metaSummaries,
+        (m) => JSON.stringify([m.startTime, m.endTime, m.summary, m.themes]),
+      );
+
+      sessionStore.loadHistory({
+        analyses: mergedAnalyses,
+        images: mergedImages,
+        captures: mergedCaptures,
+        metaSummaries: mergedMetaSummaries,
+      });
+
+      transcriptStore.setSpeakerAliases(data.speakerAliases);
+
+      if (mergedAnalyses.length > 0) {
+        const latestAnalysis = mergedAnalyses[mergedAnalyses.length - 1];
+        if (latestAnalysis) {
+          latestAnalysisRef.current = {
+            topics: latestAnalysis.topics,
+            tags: latestAnalysis.tags,
+            flow: latestAnalysis.flow,
+            heat: latestAnalysis.heat,
+          };
+        }
+      }
+    },
+    [sessionStore, transcriptStore],
+  );
+
   const handleSpeakerAliases = useCallback(
     (speakerAliases: Record<number, string>) => {
       transcriptStore.setSpeakerAliases(speakerAliases);
@@ -219,8 +322,43 @@ export function useMeetingSession(): UseMeetingSessionReturn {
     onAnalysis: handleAnalysis,
     onImage: handleImage,
     onMeetingHistory: handleMeetingHistory,
+    onMeetingHistoryDelta: handleMeetingHistoryDelta,
     onSpeakerAliases: handleSpeakerAliases,
   });
+
+  useEffect(() => {
+    if (mc.meeting.mode !== "view") return;
+    const meetingId = mc.meeting.meetingId;
+    if (!meetingId) return;
+
+    const requestDelta = () => {
+      const cursor: MeetingHistoryCursor = {
+        transcriptTs: maxTimestamp(transcriptStore.segments.map((segment) => segment.timestamp)),
+        analysisTs: maxTimestamp(sessionStore.analyses.map((analysis) => analysis.timestamp)),
+        imageTs: maxTimestamp(sessionStore.images.map((image) => image.timestamp)),
+        captureTs: maxTimestamp(sessionStore.captures.map((capture) => capture.timestamp)),
+        metaSummaryEndTs: maxTimestamp(
+          sessionStore.metaSummaries.map((metaSummary) => metaSummary.endTime),
+        ),
+      };
+      mc.requestMeetingHistoryDelta(meetingId, cursor);
+    };
+
+    requestDelta();
+    const intervalId = setInterval(requestDelta, VIEW_HISTORY_POLL_INTERVAL_MS);
+    return () => {
+      clearInterval(intervalId);
+    };
+  }, [
+    mc.meeting.meetingId,
+    mc.meeting.mode,
+    mc.requestMeetingHistoryDelta,
+    sessionStore.analyses,
+    sessionStore.captures,
+    sessionStore.images,
+    sessionStore.metaSummaries,
+    transcriptStore.segments,
+  ]);
 
   // Reset session data
   const resetSession = useCallback(() => {
@@ -292,6 +430,8 @@ export function useMeetingSession(): UseMeetingSessionReturn {
     startMeeting: mc.startMeeting,
     stopMeeting: mc.stopMeeting,
     requestMeetingList: mc.requestMeetingList,
+    requestMeetingHistoryDelta: mc.requestMeetingHistoryDelta,
+    setMeetingMode: mc.setMeetingMode,
     updateMeetingTitle: mc.updateMeetingTitle,
     updateSpeakerAlias: mc.updateSpeakerAlias,
     startSession: mc.startSession,

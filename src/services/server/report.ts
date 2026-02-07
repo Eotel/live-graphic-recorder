@@ -180,7 +180,7 @@ function sanitizeFilenameComponent(input: string): string {
   // Remove characters forbidden on common filesystems and collapse whitespace.
   return (
     input
-      .replace(/[\\/:*?"<>|\u0000-\u001F]/g, "_")
+      .replace(/[\\/:*?"<>|\p{Cc}]/gu, "_")
       .replace(/\s+/g, " ")
       .trim()
       // Prevent extremely long filenames

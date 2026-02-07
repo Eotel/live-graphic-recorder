@@ -5,7 +5,7 @@
  * Related: src/hooks/useLocalRecording.ts
  */
 
-import { describe, test, expect, mock } from "bun:test";
+import { describe, test, expect } from "bun:test";
 import { renderHook, act } from "@testing-library/react";
 import { useLocalRecording } from "./useLocalRecording";
 
@@ -16,10 +16,12 @@ describe("useLocalRecording", () => {
     expect(result.current.isRecording).toBe(false);
     expect(result.current.sessionId).toBeNull();
     expect(result.current.totalChunks).toBe(0);
+    expect(result.current.pendingRecordings).toEqual([]);
     expect(result.current.error).toBeNull();
     expect(typeof result.current.start).toBe("function");
     expect(typeof result.current.writeChunk).toBe("function");
     expect(typeof result.current.stop).toBe("function");
+    expect(typeof result.current.removePendingRecording).toBe("function");
     expect(typeof result.current.reset).toBe("function");
   });
 
@@ -53,6 +55,7 @@ describe("useLocalRecording", () => {
 
     await act(async () => {
       await result.current.start("session-1");
+      await result.current.writeChunk(new ArrayBuffer(100));
     });
 
     await act(async () => {
@@ -61,6 +64,26 @@ describe("useLocalRecording", () => {
 
     expect(result.current.isRecording).toBe(false);
     expect(result.current.sessionId).toBe("session-1");
+    expect(result.current.pendingRecordings).toHaveLength(1);
+    expect(result.current.pendingRecordings[0]!.sessionId).toBe("session-1");
+  });
+
+  test("removePendingRecording removes uploaded item", async () => {
+    const { result } = renderHook(() => useLocalRecording());
+
+    await act(async () => {
+      await result.current.start("session-1");
+      await result.current.writeChunk(new ArrayBuffer(100));
+      await result.current.stop();
+    });
+
+    const recordingId = result.current.pendingRecordings[0]!.recordingId;
+
+    act(() => {
+      result.current.removePendingRecording(recordingId);
+    });
+
+    expect(result.current.pendingRecordings).toEqual([]);
   });
 
   test("cleanup disposes controller on unmount", async () => {

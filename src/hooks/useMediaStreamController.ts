@@ -5,7 +5,7 @@
  * Related: src/logic/media-stream-controller.ts, src/adapters/media-devices.ts
  */
 
-import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useRef, useSyncExternalStore } from "react";
 import type { MediaSourceType } from "../types/messages";
 import type { MediaStreamControllerState } from "../logic/types";
 import { createMediaStreamController } from "../logic/media-stream-controller";

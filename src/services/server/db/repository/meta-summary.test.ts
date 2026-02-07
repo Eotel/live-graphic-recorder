@@ -13,7 +13,6 @@ import {
   createMetaSummary,
   findMetaSummariesByMeetingId,
   findLatestMetaSummaryByMeetingId,
-  type PersistedMetaSummary,
 } from "./meta-summary";
 
 describe("MetaSummaryRepository", () => {

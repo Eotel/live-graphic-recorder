@@ -6,6 +6,7 @@
  */
 
 import { cn } from "@/lib/utils";
+import { useTranslation } from "react-i18next";
 
 interface FlowMeterProps {
   value: number; // 0-100
@@ -13,13 +14,14 @@ interface FlowMeterProps {
 }
 
 export function FlowMeter({ value, className }: FlowMeterProps) {
+  const { t } = useTranslation();
   const normalizedValue = Math.max(0, Math.min(100, value));
   const segments = 10;
   const filledSegments = Math.round((normalizedValue / 100) * segments);
 
   return (
     <div className={cn("flex items-center gap-2", className)}>
-      <span className="text-xs font-medium text-muted-foreground w-10">Flow</span>
+      <span className="text-xs font-medium text-muted-foreground w-10">{t("metrics.flow")}</span>
       <div className="flex gap-0.5">
         {Array.from({ length: segments }).map((_, i) => (
           <div

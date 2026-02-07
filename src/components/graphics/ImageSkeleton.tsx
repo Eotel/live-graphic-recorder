@@ -7,6 +7,7 @@
 
 import { ImageIcon, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useTranslation } from "react-i18next";
 
 interface ImageSkeletonProps {
   isRetrying?: boolean;
@@ -14,6 +15,8 @@ interface ImageSkeletonProps {
 }
 
 export function ImageSkeleton({ isRetrying = false, className }: ImageSkeletonProps) {
+  const { t } = useTranslation();
+
   return (
     <div className={cn("relative aspect-video bg-muted rounded-lg overflow-hidden", className)}>
       {/* Content */}
@@ -21,7 +24,9 @@ export function ImageSkeleton({ isRetrying = false, className }: ImageSkeletonPr
         <ImageIcon className="size-12 mb-2 opacity-50" />
         <div className="flex items-center gap-2">
           <Loader2 className="size-4 animate-spin" />
-          <span className="text-sm">{isRetrying ? "Retrying..." : "Generating image..."}</span>
+          <span className="text-sm">
+            {isRetrying ? t("graphics.retrying") : t("graphics.generatingImage")}
+          </span>
         </div>
       </div>
 

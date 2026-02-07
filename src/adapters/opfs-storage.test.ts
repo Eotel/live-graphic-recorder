@@ -5,8 +5,8 @@
  * Related: src/adapters/opfs-storage.ts
  */
 
-import { describe, test, expect, beforeEach, mock } from "bun:test";
-import type { OPFSStorageAdapter, OPFSAudioWriter } from "./opfs-storage";
+import { describe, test, expect, beforeEach } from "bun:test";
+import type { OPFSStorageAdapter } from "./opfs-storage";
 import { createMockOPFSStorageAdapter } from "./opfs-storage";
 
 describe("OPFSStorageAdapter (mock)", () => {

@@ -4,6 +4,7 @@
 
 import { Window } from "happy-dom";
 import "@testing-library/jest-dom";
+import { beforeEach } from "bun:test";
 
 const window = new Window({ url: "http://localhost:3000" });
 
@@ -14,6 +15,8 @@ Object.assign(globalThis, {
   navigator: window.navigator,
   location: window.location,
   history: window.history,
+  localStorage: window.localStorage,
+  sessionStorage: window.sessionStorage,
 
   // DOM APIs
   HTMLElement: window.HTMLElement,
@@ -70,4 +73,11 @@ Object.assign(globalThis, {
   clearTimeout: window.clearTimeout.bind(window),
   setInterval: window.setInterval.bind(window),
   clearInterval: window.clearInterval.bind(window),
+});
+
+const { i18n } = await import("../i18n/config");
+
+beforeEach(async () => {
+  localStorage.setItem("app_lang", "en");
+  await i18n.changeLanguage("en");
 });

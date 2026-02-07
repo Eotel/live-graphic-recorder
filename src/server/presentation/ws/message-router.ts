@@ -24,6 +24,16 @@ export function createWsMessageRouter(input: CreateWsMessageRouterInput): WsMess
     const ctx = ws.data;
 
     if (message instanceof ArrayBuffer || message instanceof Buffer) {
+      if (ctx.meetingMode !== "record") {
+        send(ws, {
+          type: "error",
+          data: {
+            message: "This meeting is in read-only mode",
+            code: "READ_ONLY_MEETING",
+          },
+        });
+        return;
+      }
       input.session.handleAudioChunk(ctx, message);
       return;
     }
@@ -44,8 +54,14 @@ export function createWsMessageRouter(input: CreateWsMessageRouterInput): WsMess
       case "meeting:stop":
         input.meeting.stop(ctx);
         break;
+      case "meeting:mode:set":
+        input.meeting.setMode(ws, ctx, parsed.data);
+        break;
       case "meeting:list:request":
         input.meeting.list(ws);
+        break;
+      case "meeting:history:request":
+        input.meeting.requestHistoryDelta(ws, ctx, parsed.data);
         break;
       case "meeting:update":
         input.meeting.update(ws, ctx, parsed.data);

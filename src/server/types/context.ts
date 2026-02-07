@@ -1,11 +1,12 @@
 import type { AnalysisService } from "@/services/server/analysis";
 import type { DeepgramService } from "@/services/server/deepgram";
-import type { ImageModelPreset, SessionState } from "@/types/messages";
+import type { ImageModelPreset, MeetingMode, SessionState } from "@/types/messages";
 
 export interface WSContext {
   userId: string;
   sessionId: string;
   meetingId: string | null;
+  meetingMode: MeetingMode | null;
   session: SessionState;
   deepgram: DeepgramService | null;
   analysis: AnalysisService | null;

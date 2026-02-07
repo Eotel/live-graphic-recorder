@@ -27,11 +27,10 @@ describe("unsaved recording guards", () => {
   });
 
   test("hasUnsavedRecording stays true while recording even without local file", () => {
-    expect(hasUnsavedRecording(true, false, null)).toBe(true);
+    expect(hasUnsavedRecording(true, false)).toBe(true);
   });
 
   test("hasUnsavedRecording is true for unuploaded local file", () => {
-    expect(hasUnsavedRecording(false, true, "session-1")).toBe(true);
-    expect(hasUnsavedRecording(false, true, null)).toBe(false);
+    expect(hasUnsavedRecording(false, true)).toBe(true);
   });
 });

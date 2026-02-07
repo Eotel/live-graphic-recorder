@@ -5,7 +5,7 @@
  * Related: src/services/server/gemini.ts
  */
 
-import { describe, test, expect, mock, beforeEach, afterEach } from "bun:test";
+import { describe, test, expect } from "bun:test";
 import { parseRetryDelay, isRateLimitError, sleep } from "./gemini";
 
 describe("GeminiService retry utilities", () => {

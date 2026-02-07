@@ -8,17 +8,20 @@
 import { Loader2 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
+import { useTranslation } from "react-i18next";
 
 interface SummarySkeletonProps {
   className?: string;
 }
 
 export function SummarySkeleton({ className }: SummarySkeletonProps) {
+  const { t } = useTranslation();
+
   return (
     <div className={cn("space-y-4", className)}>
       <div className="flex items-center gap-2 text-muted-foreground">
         <Loader2 className="size-4 animate-spin" />
-        <span className="text-sm">Analyzing...</span>
+        <span className="text-sm">{t("summary.analyzing")}</span>
       </div>
       <div className="space-y-3">
         <Skeleton className="h-4 w-full" />

@@ -16,6 +16,7 @@ export type MediaSourceType = "camera" | "screen";
 // ============================================================================
 
 export type ImageModelPreset = "flash" | "pro";
+export type MeetingMode = "record" | "view";
 
 // ============================================================================
 // Client → Server Messages
@@ -48,6 +49,30 @@ export interface MeetingStartMessage {
   data: {
     title?: string;
     meetingId?: string; // Optional: join existing meeting
+    mode?: MeetingMode;
+  };
+}
+
+export interface MeetingModeSetMessage {
+  type: "meeting:mode:set";
+  data: {
+    mode: MeetingMode;
+  };
+}
+
+export interface MeetingHistoryCursor {
+  transcriptTs?: number;
+  analysisTs?: number;
+  imageTs?: number;
+  captureTs?: number;
+  metaSummaryEndTs?: number;
+}
+
+export interface MeetingHistoryRequestMessage {
+  type: "meeting:history:request";
+  data: {
+    meetingId: string;
+    cursor?: MeetingHistoryCursor;
   };
 }
 
@@ -86,8 +111,10 @@ export type ClientMessage =
   | SessionStopMessage
   | CameraFrameMessage
   | MeetingStartMessage
+  | MeetingModeSetMessage
   | MeetingStopMessage
   | MeetingListRequestMessage
+  | MeetingHistoryRequestMessage
   | MeetingUpdateMessage
   | SpeakerAliasUpdateMessage
   | ImageModelSetMessage;
@@ -188,6 +215,7 @@ export interface MeetingStatusMessage {
     meetingId: string;
     title?: string;
     sessionId: string;
+    mode: MeetingMode;
   };
 }
 
@@ -216,37 +244,59 @@ export interface SpeakerAliasMessage {
 export interface MeetingHistoryMessage {
   type: "meeting:history";
   data: {
-    transcripts: Array<{
-      text: string;
-      timestamp: number;
-      isFinal: boolean;
-      speaker?: number;
-      startTime?: number;
-      isUtteranceEnd?: boolean;
-    }>;
-    analyses: Array<{
-      summary: string[];
-      topics: string[];
-      tags: string[];
-      flow: number;
-      heat: number;
-      timestamp: number;
-    }>;
-    images: Array<{
-      url: string;
-      prompt: string;
-      timestamp: number;
-    }>;
-    captures: Array<{
-      url: string;
-      timestamp: number;
-    }>;
-    metaSummaries: Array<{
-      summary: string[];
-      themes: string[];
-      startTime: number;
-      endTime: number;
-    }>;
+    transcripts: MeetingHistoryTranscripts;
+    analyses: MeetingHistoryAnalyses;
+    images: MeetingHistoryImages;
+    captures: MeetingHistoryCaptures;
+    metaSummaries: MeetingHistoryMetaSummaries;
+    speakerAliases: Record<string, string>;
+  };
+}
+
+export type MeetingHistoryTranscripts = Array<{
+  text: string;
+  timestamp: number;
+  isFinal: boolean;
+  speaker?: number;
+  startTime?: number;
+  isUtteranceEnd?: boolean;
+}>;
+
+export type MeetingHistoryAnalyses = Array<{
+  summary: string[];
+  topics: string[];
+  tags: string[];
+  flow: number;
+  heat: number;
+  timestamp: number;
+}>;
+
+export type MeetingHistoryImages = Array<{
+  url: string;
+  prompt: string;
+  timestamp: number;
+}>;
+
+export type MeetingHistoryCaptures = Array<{
+  url: string;
+  timestamp: number;
+}>;
+
+export type MeetingHistoryMetaSummaries = Array<{
+  summary: string[];
+  themes: string[];
+  startTime: number;
+  endTime: number;
+}>;
+
+export interface MeetingHistoryDeltaMessage {
+  type: "meeting:history:delta";
+  data: {
+    transcripts: MeetingHistoryTranscripts;
+    analyses: MeetingHistoryAnalyses;
+    images: MeetingHistoryImages;
+    captures: MeetingHistoryCaptures;
+    metaSummaries: MeetingHistoryMetaSummaries;
     speakerAliases: Record<string, string>;
   };
 }
@@ -263,7 +313,8 @@ export type ServerMessage =
   | MeetingStatusMessage
   | MeetingListMessage
   | SpeakerAliasMessage
-  | MeetingHistoryMessage;
+  | MeetingHistoryMessage
+  | MeetingHistoryDeltaMessage;
 
 // ============================================================================
 // Session State Types

@@ -4,6 +4,7 @@ import { checkAndGenerateMetaSummary } from "@/server/application/meta-summary";
 import { sanitizeErrorMessage } from "@/server/domain/common/error-sanitizer";
 import { send } from "@/server/presentation/ws/sender";
 import type { WSContext } from "@/server/types/context";
+import type { RecordingLockManager } from "@/server/application/ws/recording-lock-manager";
 import { createAnalysisService } from "@/services/server/analysis";
 import { createDeepgramService } from "@/services/server/deepgram";
 import {
@@ -32,6 +33,7 @@ import type {
 
 interface CreateSessionWsUsecaseInput {
   persistence: PersistenceService;
+  recordingLocks: RecordingLockManager;
 }
 
 export interface SessionWsUsecase {
@@ -55,7 +57,17 @@ function readCameraFrame(data: unknown): CameraFrame | null {
 }
 
 export function createSessionWsUsecase(input: CreateSessionWsUsecaseInput): SessionWsUsecase {
-  const { persistence } = input;
+  const { persistence, recordingLocks } = input;
+
+  function sendReadOnlyError(ws: ServerWebSocket<WSContext>): void {
+    send(ws, {
+      type: "error",
+      data: {
+        message: "This meeting is in read-only mode",
+        code: "READ_ONLY_MEETING",
+      },
+    });
+  }
 
   function cleanup(ctx: WSContext): void {
     if (ctx.checkInterval) {
@@ -69,6 +81,9 @@ export function createSessionWsUsecase(input: CreateSessionWsUsecaseInput): Sess
     if (ctx.analysis) {
       ctx.analysis.dispose();
       ctx.analysis = null;
+    }
+    if (ctx.meetingId) {
+      recordingLocks.release(ctx.meetingId, ctx.sessionId);
     }
   }
 
@@ -98,6 +113,24 @@ export function createSessionWsUsecase(input: CreateSessionWsUsecaseInput): Sess
   }
 
   async function start(ws: ServerWebSocket<WSContext>, ctx: WSContext): Promise<void> {
+    if (ctx.meetingMode !== "record") {
+      sendReadOnlyError(ws);
+      return;
+    }
+
+    const meetingId = ctx.meetingId;
+    const acquiredLock = Boolean(meetingId && recordingLocks.acquire(meetingId, ctx.sessionId));
+    if (meetingId && !acquiredLock) {
+      send(ws, {
+        type: "error",
+        data: {
+          message: "Another user is already recording this meeting",
+          code: "MEETING_ALREADY_RECORDING",
+        },
+      });
+      return;
+    }
+
     try {
       const openaiService = createOpenAIService();
       const geminiService = createGeminiService({
@@ -254,6 +287,9 @@ export function createSessionWsUsecase(input: CreateSessionWsUsecaseInput): Sess
 
       console.log(`[WS] Recording started: ${ctx.sessionId}`);
     } catch (error) {
+      if (meetingId) {
+        recordingLocks.release(meetingId, ctx.sessionId);
+      }
       console.error("[WS] Failed to start session:", error);
       send(ws, {
         type: "session:status",
@@ -271,6 +307,7 @@ export function createSessionWsUsecase(input: CreateSessionWsUsecaseInput): Sess
 
     if (ctx.meetingId) {
       persistence.stopSession(ctx.sessionId);
+      recordingLocks.release(ctx.meetingId, ctx.sessionId);
     }
 
     send(ws, {
@@ -282,6 +319,11 @@ export function createSessionWsUsecase(input: CreateSessionWsUsecaseInput): Sess
   }
 
   function handleCameraFrame(ws: ServerWebSocket<WSContext>, ctx: WSContext, data: unknown): void {
+    if (ctx.meetingMode !== "record") {
+      sendReadOnlyError(ws);
+      return;
+    }
+
     const frame = readCameraFrame(data);
     if (!frame) {
       send(ws, {

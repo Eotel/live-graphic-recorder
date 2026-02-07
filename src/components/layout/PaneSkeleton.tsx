@@ -7,6 +7,7 @@
 import type { PaneId } from "@/logic/pane-state-controller";
 import { ExternalLink } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useTranslation } from "react-i18next";
 
 interface PaneSkeletonProps {
   paneId: PaneId;
@@ -16,6 +17,8 @@ interface PaneSkeletonProps {
 }
 
 export function PaneSkeleton({ label, onFocus, className }: PaneSkeletonProps) {
+  const { t } = useTranslation();
+
   return (
     <div
       role={onFocus ? "button" : undefined}
@@ -35,8 +38,8 @@ export function PaneSkeleton({ label, onFocus, className }: PaneSkeletonProps) {
       )}
     >
       <ExternalLink className="size-8" />
-      <p className="text-sm font-medium">{label} is open in a separate window</p>
-      {onFocus && <p className="text-xs">Click to focus</p>}
+      <p className="text-sm font-medium">{t("layout.paneOpenInSeparateWindow", { label })}</p>
+      {onFocus && <p className="text-xs">{t("layout.clickToFocus")}</p>}
     </div>
   );
 }

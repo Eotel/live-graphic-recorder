@@ -6,7 +6,13 @@
  */
 
 import { useCallback, useEffect, useRef, useSyncExternalStore } from "react";
-import type { TranscriptSegment, CameraFrame, ImageModelPreset } from "../types/messages";
+import type {
+  TranscriptSegment,
+  CameraFrame,
+  ImageModelPreset,
+  MeetingMode,
+  MeetingHistoryCursor,
+} from "../types/messages";
 import type {
   MeetingControllerState,
   MeetingControllerCallbacks,
@@ -32,9 +38,22 @@ export interface UseMeetingControllerCallbacks {
   onImage?: (data: ImageData) => void;
   onError?: (message: string) => void;
   onUtteranceEnd?: (timestamp: number) => void;
-  onMeetingStatus?: (data: { meetingId: string; title?: string; sessionId: string }) => void;
+  onMeetingStatus?: (data: {
+    meetingId: string;
+    title?: string;
+    sessionId: string;
+    mode: MeetingMode;
+  }) => void;
   onMeetingList?: (meetings: MeetingInfo[]) => void;
   onMeetingHistory?: (data: {
+    transcripts: TranscriptSegment[];
+    analyses: AnalysisData[];
+    images: ImageData[];
+    captures: CaptureData[];
+    metaSummaries: MetaSummaryData[];
+    speakerAliases: Record<number, string>;
+  }) => void;
+  onMeetingHistoryDelta?: (data: {
     transcripts: TranscriptSegment[];
     analyses: AnalysisData[];
     images: ImageData[];
@@ -64,7 +83,7 @@ export interface UseMeetingControllerReturn extends MeetingControllerState {
   /**
    * Start a new meeting.
    */
-  startMeeting: (title?: string, meetingId?: string) => void;
+  startMeeting: (title?: string, meetingId?: string, mode?: MeetingMode) => void;
 
   /**
    * Stop the current meeting.
@@ -75,6 +94,16 @@ export interface UseMeetingControllerReturn extends MeetingControllerState {
    * Request the list of meetings.
    */
   requestMeetingList: () => void;
+
+  /**
+   * Request incremental meeting history using cursor.
+   */
+  requestMeetingHistoryDelta: (meetingId: string, cursor?: MeetingHistoryCursor) => void;
+
+  /**
+   * Set current meeting mode (record/view).
+   */
+  setMeetingMode: (mode: MeetingMode) => void;
 
   /**
    * Update the meeting title.
@@ -139,6 +168,7 @@ export function useMeetingController(
       meetingId: null,
       meetingTitle: null,
       sessionId: null,
+      mode: null,
       meetingList: [],
     },
   });
@@ -158,6 +188,7 @@ export function useMeetingController(
       onMeetingStatus: (data) => callbacksRef.current.onMeetingStatus?.(data),
       onMeetingList: (meetings) => callbacksRef.current.onMeetingList?.(meetings),
       onMeetingHistory: (data) => callbacksRef.current.onMeetingHistory?.(data),
+      onMeetingHistoryDelta: (data) => callbacksRef.current.onMeetingHistoryDelta?.(data),
       onSpeakerAliases: (speakerAliases) => callbacksRef.current.onSpeakerAliases?.(speakerAliases),
     };
 
@@ -224,6 +255,7 @@ export function useMeetingController(
           meetingId: null,
           meetingTitle: null,
           sessionId: null,
+          mode: null,
           meetingList: [],
         },
       };
@@ -252,8 +284,8 @@ export function useMeetingController(
   );
 
   const startMeeting = useCallback(
-    (title?: string, meetingId?: string) => {
-      ensureController()?.startMeeting(title, meetingId);
+    (title?: string, meetingId?: string, mode?: MeetingMode) => {
+      ensureController()?.startMeeting(title, meetingId, mode);
     },
     [ensureController],
   );
@@ -265,6 +297,20 @@ export function useMeetingController(
   const requestMeetingList = useCallback(() => {
     ensureController()?.requestMeetingList();
   }, [ensureController]);
+
+  const requestMeetingHistoryDelta = useCallback(
+    (meetingId: string, cursor?: MeetingHistoryCursor) => {
+      ensureController()?.requestMeetingHistoryDelta(meetingId, cursor);
+    },
+    [ensureController],
+  );
+
+  const setMeetingMode = useCallback(
+    (mode: MeetingMode) => {
+      ensureController()?.setMeetingMode(mode);
+    },
+    [ensureController],
+  );
 
   const updateMeetingTitle = useCallback(
     (title: string) => {
@@ -310,6 +356,8 @@ export function useMeetingController(
     startMeeting,
     stopMeeting,
     requestMeetingList,
+    requestMeetingHistoryDelta,
+    setMeetingMode,
     updateMeetingTitle,
     updateSpeakerAlias,
     startSession,
