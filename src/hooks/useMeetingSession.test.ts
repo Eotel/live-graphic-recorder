@@ -71,6 +71,8 @@ describe("useMeetingSession", () => {
     expect(typeof result.current.startMeeting).toBe("function");
     expect(typeof result.current.stopMeeting).toBe("function");
     expect(typeof result.current.requestMeetingList).toBe("function");
+    expect(typeof result.current.requestMeetingHistoryDelta).toBe("function");
+    expect(typeof result.current.setMeetingMode).toBe("function");
     expect(typeof result.current.updateMeetingTitle).toBe("function");
     expect(typeof result.current.updateSpeakerAlias).toBe("function");
     expect(typeof result.current.startSession).toBe("function");
@@ -143,6 +145,120 @@ describe("useMeetingSession", () => {
     }
 
     expect(result.current.speakerAliases).toEqual({ 0: "田中" });
+  });
+
+  test("applies meeting history delta by appending unique entries", async () => {
+    const { result } = renderHook(() => useMeetingSession());
+
+    act(() => {
+      result.current.connect();
+    });
+    await new Promise((r) => setTimeout(r, 10));
+
+    const ws = MockWebSocket.instances[0];
+    if (ws) {
+      act(() => {
+        ws.simulateMessage({
+          type: "meeting:history",
+          data: {
+            transcripts: [
+              {
+                text: "A",
+                timestamp: 1000,
+                isFinal: true,
+                speaker: 0,
+                startTime: 0,
+                isUtteranceEnd: true,
+              },
+            ],
+            analyses: [],
+            images: [],
+            captures: [],
+            metaSummaries: [],
+            speakerAliases: {},
+          },
+        });
+      });
+
+      act(() => {
+        ws.simulateMessage({
+          type: "meeting:history:delta",
+          data: {
+            transcripts: [
+              {
+                text: "A",
+                timestamp: 1000,
+                isFinal: true,
+                speaker: 0,
+                startTime: 0,
+                isUtteranceEnd: true,
+              },
+              {
+                text: "B",
+                timestamp: 2000,
+                isFinal: true,
+                speaker: 1,
+                startTime: 1,
+                isUtteranceEnd: true,
+              },
+            ],
+            analyses: [],
+            images: [],
+            captures: [],
+            metaSummaries: [],
+            speakerAliases: { 1: "佐藤" },
+          },
+        });
+      });
+    }
+
+    expect(result.current.transcriptSegments).toHaveLength(2);
+    expect(result.current.transcriptSegments[0]?.text).toBe("A");
+    expect(result.current.transcriptSegments[1]?.text).toBe("B");
+    expect(result.current.speakerAliases).toEqual({ 1: "佐藤" });
+  });
+
+  test("requests meeting history delta immediately in view mode", async () => {
+    const { result } = renderHook(() => useMeetingSession());
+
+    act(() => {
+      result.current.connect();
+    });
+    await new Promise((r) => setTimeout(r, 10));
+
+    const ws = MockWebSocket.instances[0];
+    if (!ws) {
+      throw new Error("WebSocket instance not found");
+    }
+
+    act(() => {
+      ws.simulateMessage({
+        type: "meeting:status",
+        data: {
+          meetingId: "550e8400-e29b-41d4-a716-446655440000",
+          title: "Weekly",
+          sessionId: "session-1",
+          mode: "view",
+        },
+      });
+    });
+
+    await new Promise((r) => setTimeout(r, 20));
+
+    const sentJson = ws.send.mock.calls
+      .map((args) => args[0])
+      .filter((arg): arg is string => typeof arg === "string")
+      .map((payload) => JSON.parse(payload));
+
+    const deltaRequests = sentJson.filter((msg) => msg.type === "meeting:history:request");
+    expect(deltaRequests.length).toBeGreaterThanOrEqual(1);
+    expect(deltaRequests[0]).toEqual({
+      type: "meeting:history:request",
+      data: {
+        meetingId: "550e8400-e29b-41d4-a716-446655440000",
+        cursor: {},
+      },
+    });
   });
 
   test("isAnalyzing and isGenerating derived states", async () => {

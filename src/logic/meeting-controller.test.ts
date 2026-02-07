@@ -42,6 +42,7 @@ describe("createMeetingController", () => {
     expect(state.imageModel.preset).toBe("flash");
     expect(state.imageModel.model).toBe(state.imageModel.available.flash);
     expect(state.meeting.meetingId).toBeNull();
+    expect(state.meeting.mode).toBeNull();
   });
 
   test("connect creates WebSocket and sets connected on open", () => {
@@ -269,6 +270,7 @@ describe("createMeetingController", () => {
           meetingId: "meeting-123",
           title: "Test Meeting",
           sessionId: "session-456",
+          mode: "view",
         },
       }),
     );
@@ -277,6 +279,7 @@ describe("createMeetingController", () => {
     expect(state.meeting.meetingId).toBe("meeting-123");
     expect(state.meeting.meetingTitle).toBe("Test Meeting");
     expect(state.meeting.sessionId).toBe("session-456");
+    expect(state.meeting.mode).toBe("view");
     expect(onMeetingStatus).toHaveBeenCalled();
   });
 
@@ -356,6 +359,44 @@ describe("createMeetingController", () => {
     });
   });
 
+  test("handles meeting:history:delta message", () => {
+    const wsAdapter = createMockWsAdapter();
+    const onStateChange = mock(() => {});
+    const onMeetingHistoryDelta = mock(() => {});
+
+    const controller = createMeetingController(
+      { wsAdapter, reconnect: { enabled: false, connectTimeoutMs: 0 } },
+      { onStateChange },
+      { onMeetingHistoryDelta },
+    );
+
+    controller.connect();
+    wsAdapter.lastInstance!.controls.simulateOpen();
+
+    wsAdapter.lastInstance!.controls.simulateMessage(
+      JSON.stringify({
+        type: "meeting:history:delta",
+        data: {
+          transcripts: [],
+          analyses: [],
+          images: [],
+          captures: [],
+          metaSummaries: [],
+          speakerAliases: {},
+        },
+      }),
+    );
+
+    expect(onMeetingHistoryDelta).toHaveBeenCalledWith({
+      transcripts: [],
+      analyses: [],
+      images: [],
+      captures: [],
+      metaSummaries: [],
+      speakerAliases: {},
+    });
+  });
+
   test("handles meeting:speaker-alias message", () => {
     const wsAdapter = createMockWsAdapter();
     const onStateChange = mock(() => {});
@@ -421,7 +462,7 @@ describe("createMeetingController", () => {
     controller.connect();
     wsAdapter.lastInstance!.controls.simulateOpen();
 
-    controller.startMeeting("Test Meeting", "meeting-123");
+    controller.startMeeting("Test Meeting", "meeting-123", "view");
 
     const messages = wsAdapter.lastInstance!.controls.getSentMessages();
     expect(messages).toHaveLength(1);
@@ -430,6 +471,7 @@ describe("createMeetingController", () => {
     expect(parsed.type).toBe("meeting:start");
     expect(parsed.data.title).toBe("Test Meeting");
     expect(parsed.data.meetingId).toBe("meeting-123");
+    expect(parsed.data.mode).toBe("view");
   });
 
   test("stopMeeting sends message and clears meeting state", () => {
@@ -452,6 +494,7 @@ describe("createMeetingController", () => {
           meetingId: "meeting-123",
           title: "Test",
           sessionId: "session-456",
+          mode: "record",
         },
       }),
     );
@@ -465,6 +508,7 @@ describe("createMeetingController", () => {
     const state = controller.getState();
     expect(state.meeting.meetingId).toBeNull();
     expect(state.meeting.meetingTitle).toBeNull();
+    expect(state.meeting.mode).toBeNull();
   });
 
   test("sendAudio sends binary data", () => {
@@ -504,6 +548,47 @@ describe("createMeetingController", () => {
     const messages = wsAdapter.lastInstance!.controls.getSentMessages();
     const parsed = JSON.parse(messages[0] as string);
     expect(parsed.type).toBe("meeting:list:request");
+  });
+
+  test("requestMeetingHistoryDelta sends message", () => {
+    const wsAdapter = createMockWsAdapter();
+    const onStateChange = mock(() => {});
+
+    const controller = createMeetingController(
+      { wsAdapter, reconnect: { enabled: false, connectTimeoutMs: 0 } },
+      { onStateChange },
+    );
+
+    controller.connect();
+    wsAdapter.lastInstance!.controls.simulateOpen();
+
+    controller.requestMeetingHistoryDelta("meeting-1", { transcriptTs: 1000 });
+
+    const messages = wsAdapter.lastInstance!.controls.getSentMessages();
+    const parsed = JSON.parse(messages[0] as string);
+    expect(parsed.type).toBe("meeting:history:request");
+    expect(parsed.data.meetingId).toBe("meeting-1");
+    expect(parsed.data.cursor.transcriptTs).toBe(1000);
+  });
+
+  test("setMeetingMode sends message", () => {
+    const wsAdapter = createMockWsAdapter();
+    const onStateChange = mock(() => {});
+
+    const controller = createMeetingController(
+      { wsAdapter, reconnect: { enabled: false, connectTimeoutMs: 0 } },
+      { onStateChange },
+    );
+
+    controller.connect();
+    wsAdapter.lastInstance!.controls.simulateOpen();
+
+    controller.setMeetingMode("record");
+
+    const messages = wsAdapter.lastInstance!.controls.getSentMessages();
+    const parsed = JSON.parse(messages[0] as string);
+    expect(parsed.type).toBe("meeting:mode:set");
+    expect(parsed.data.mode).toBe("record");
   });
 
   test("updateMeetingTitle sends message", () => {
