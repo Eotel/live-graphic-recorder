@@ -274,6 +274,39 @@ describe("SummaryPanel", () => {
       expect(screen.getByText("3/3")).toBeDefined();
     });
 
+    test("switches to list view and shows all summary pages", () => {
+      render(
+        <SummaryPanel summaryPages={createPages()} transcriptSegments={[]} interimText={null} />,
+      );
+
+      fireEvent.click(screen.getByRole("button", { name: /switch summary to list view/i }));
+
+      expect(screen.getByText("Page 1 Point A")).toBeDefined();
+      expect(screen.getByText("Page 2 Point A")).toBeDefined();
+      expect(screen.getByText("Page 3 Point A")).toBeDefined();
+      expect(screen.getByText("Page 1")).toBeDefined();
+      expect(screen.getByText("Page 2")).toBeDefined();
+      expect(screen.getByText("Page 3")).toBeDefined();
+
+      const listContainer = screen.getByTestId("summary-list-container");
+      expect(listContainer.className).toContain("overflow-y-auto");
+      expect(screen.queryByRole("button", { name: /previous/i })).toBeNull();
+      expect(screen.queryByRole("button", { name: /next/i })).toBeNull();
+    });
+
+    test("switches back to paged view from list view", () => {
+      render(
+        <SummaryPanel summaryPages={createPages()} transcriptSegments={[]} interimText={null} />,
+      );
+
+      fireEvent.click(screen.getByRole("button", { name: /switch summary to list view/i }));
+      fireEvent.click(screen.getByRole("button", { name: /switch summary to page view/i }));
+
+      expect(screen.getByRole("button", { name: /previous/i })).toBeDefined();
+      expect(screen.getByRole("button", { name: /next/i })).toBeDefined();
+      expect(screen.getByText("3/3")).toBeDefined();
+    });
+
     test("navigates to previous page when clicking previous button", () => {
       render(
         <SummaryPanel summaryPages={createPages()} transcriptSegments={[]} interimText={null} />,

@@ -17,6 +17,7 @@ import { useTranslation } from "react-i18next";
 
 const SWIPE_MIN_DISTANCE_PX = 40;
 const SWIPE_HORIZONTAL_RATIO = 1.2;
+type SummaryViewMode = "paged" | "list";
 
 interface SummaryPanelProps {
   summaryPages: SummaryPage[];
@@ -46,6 +47,7 @@ export function SummaryPanel({
   const touchStartRef = useRef<{ x: number; y: number } | null>(null);
 
   const [currentIndex, setCurrentIndex] = useState(0);
+  const [summaryViewMode, setSummaryViewMode] = useState<SummaryViewMode>("paged");
 
   // Auto-advance to latest page when new pages are added
   useEffect(() => {
@@ -79,6 +81,9 @@ export function SummaryPanel({
   const hasMultiplePages = summaryPages.length > 1;
   const currentPage = summaryPages[currentIndex];
   const showSkeleton = isAnalyzing && !hasPages;
+  const isPagedView = summaryViewMode === "paged";
+  const isListView = summaryViewMode === "list";
+  const canPaginate = hasMultiplePages && isPagedView;
 
   const goToPrevious = () => {
     setCurrentIndex((prev) => (prev > 0 ? prev - 1 : summaryPages.length - 1));
@@ -89,14 +94,14 @@ export function SummaryPanel({
   };
 
   const handleSummaryTouchStart = (event: TouchEvent<HTMLDivElement>) => {
-    if (!hasMultiplePages) return;
+    if (!canPaginate) return;
     const touch = event.changedTouches[0];
     if (!touch) return;
     touchStartRef.current = { x: touch.clientX, y: touch.clientY };
   };
 
   const handleSummaryTouchEnd = (event: TouchEvent<HTMLDivElement>) => {
-    if (!hasMultiplePages) return;
+    if (!canPaginate) return;
     const touchStart = touchStartRef.current;
     touchStartRef.current = null;
     if (!touchStart) return;
@@ -116,9 +121,13 @@ export function SummaryPanel({
     goToPrevious();
   };
 
+  const toggleSummaryViewMode = () => {
+    setSummaryViewMode((prev) => (prev === "paged" ? "list" : "paged"));
+  };
+
   return (
     <div className={cn("flex flex-col h-full overflow-hidden", className)}>
-      {/* Summary Section - fixed, never scrolls */}
+      {/* Summary Section */}
       {showSkeleton ? (
         <div className="flex-shrink-0 mb-3">
           <h3 className="text-sm font-semibold text-muted-foreground mb-2">{t("summary.title")}</h3>
@@ -126,46 +135,90 @@ export function SummaryPanel({
         </div>
       ) : hasPages && currentPage ? (
         <div
-          className="flex-shrink-0 mb-3 [touch-action:pan-y]"
+          className={cn("flex-shrink-0 mb-3", canPaginate && "[touch-action:pan-y]")}
           onTouchStart={handleSummaryTouchStart}
           onTouchEnd={handleSummaryTouchEnd}
         >
           <h3 className="text-sm font-semibold leading-none text-muted-foreground mb-2">
             {t("summary.title")}
           </h3>
-          <ul className="space-y-1.5">
-            {currentPage.points.map((point, index) => (
-              <li key={index} className="flex items-start gap-2 text-sm">
-                <span className="text-primary font-bold">-</span>
-                <span>{point}</span>
-              </li>
-            ))}
-          </ul>
-          {hasMultiplePages && (
-            <div className="mt-2 flex justify-center" data-testid="summary-page-pager">
-              <div className="inline-flex items-center gap-1 rounded-full border border-border/60 bg-muted/40 px-2 py-1">
-                <Button
-                  variant="ghost"
-                  size="icon-sm"
-                  className="size-6 rounded-sm text-muted-foreground hover:text-foreground"
-                  onClick={goToPrevious}
-                  aria-label={t("summary.previousPage")}
-                >
-                  {"<"}
-                </Button>
-                <span className="px-2 text-xs font-medium leading-none tabular-nums text-muted-foreground">
-                  {currentIndex + 1}/{summaryPages.length}
-                </span>
-                <Button
-                  variant="ghost"
-                  size="icon-sm"
-                  className="size-6 rounded-sm text-muted-foreground hover:text-foreground"
-                  onClick={goToNext}
-                  aria-label={t("summary.nextPage")}
-                >
-                  {">"}
-                </Button>
+          {isListView ? (
+            <div
+              className="max-h-56 overflow-y-auto rounded-md bg-muted/20 p-2 pr-3"
+              data-testid="summary-list-container"
+            >
+              <div className="space-y-3">
+                {summaryPages.map((page, pageIndex) => (
+                  <section
+                    key={`summary-page-${page.timestamp}-${pageIndex}`}
+                    className="space-y-1.5 border-l-2 border-border/60 pl-2"
+                  >
+                    <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                      {t("summary.pageLabel", { index: pageIndex + 1 })}
+                    </p>
+                    <ul className="space-y-1.5">
+                      {page.points.map((point, pointIndex) => (
+                        <li key={pointIndex} className="flex items-start gap-2 text-sm">
+                          <span className="text-primary font-bold">-</span>
+                          <span>{point}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </section>
+                ))}
               </div>
+            </div>
+          ) : (
+            <ul className="space-y-1.5">
+              {currentPage.points.map((point, index) => (
+                <li key={index} className="flex items-start gap-2 text-sm">
+                  <span className="text-primary font-bold">-</span>
+                  <span>{point}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+          {hasMultiplePages && (
+            <div
+              className="mt-2 flex items-center justify-center gap-2"
+              data-testid="summary-page-pager"
+            >
+              {isPagedView ? (
+                <div className="inline-flex items-center gap-1 rounded-full border border-border/60 bg-muted/40 px-2 py-1">
+                  <Button
+                    variant="ghost"
+                    size="icon-sm"
+                    className="size-6 rounded-sm text-muted-foreground hover:text-foreground"
+                    onClick={goToPrevious}
+                    aria-label={t("summary.previousPage")}
+                  >
+                    {"<"}
+                  </Button>
+                  <span className="px-2 text-xs font-medium leading-none tabular-nums text-muted-foreground">
+                    {currentIndex + 1}/{summaryPages.length}
+                  </span>
+                  <Button
+                    variant="ghost"
+                    size="icon-sm"
+                    className="size-6 rounded-sm text-muted-foreground hover:text-foreground"
+                    onClick={goToNext}
+                    aria-label={t("summary.nextPage")}
+                  >
+                    {">"}
+                  </Button>
+                </div>
+              ) : null}
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-8 rounded-full px-3 text-xs"
+                onClick={toggleSummaryViewMode}
+                aria-label={
+                  isPagedView ? t("summary.switchToListView") : t("summary.switchToPagedView")
+                }
+              >
+                {isPagedView ? t("summary.viewList") : t("summary.viewPaged")}
+              </Button>
             </div>
           )}
         </div>
