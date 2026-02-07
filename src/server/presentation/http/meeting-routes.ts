@@ -137,6 +137,39 @@ export function createMeetingRoutes(input: CreateMeetingRoutesInput): Record<str
     },
 
     "/api/meetings/:meetingId/audio": {
+      GET: async (req: Request) => {
+        const auth = requireAuthUser(input.auth, req);
+        if (auth instanceof Response) {
+          return auth;
+        }
+
+        const url = new URL(req.url);
+        const meetingId = extractMeetingId(url.pathname, AUDIO_UPLOAD_PATH_PATTERN);
+        if (meetingId instanceof Response) {
+          return meetingId;
+        }
+
+        const ownedMeeting = requireOwnedMeeting(input.persistence, meetingId, auth.userId);
+        if (ownedMeeting instanceof Response) {
+          return ownedMeeting;
+        }
+
+        const recordings = input.persistence.listAudioRecordingsByMeeting(
+          ownedMeeting.id,
+          auth.userId,
+        );
+
+        return Response.json({
+          recordings: recordings.map((recording) => ({
+            id: recording.id,
+            sessionId: recording.sessionId,
+            fileSizeBytes: recording.fileSizeBytes,
+            createdAt: recording.createdAt,
+            url: `/api/meetings/${ownedMeeting.id}/audio/${recording.id}`,
+          })),
+        });
+      },
+
       POST: async (req: Request) => {
         const auth = requireAuthUser(input.auth, req);
         if (auth instanceof Response) {

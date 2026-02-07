@@ -527,6 +527,17 @@ export function createMeetingWsUsecase(input: CreateMeetingWsUsecaseInput): Meet
       return;
     }
 
+    if (parsedData.mode === "view" && ctx.session.status === "recording") {
+      send(ws, {
+        type: "error",
+        data: {
+          message: "Stop recording before switching to view mode",
+          code: "RECORDING_IN_PROGRESS",
+        },
+      });
+      return;
+    }
+
     ctx.meetingMode = parsedData.mode;
     if (parsedData.mode === "view") {
       recordingLocks.release(ctx.meetingId, ctx.sessionId);

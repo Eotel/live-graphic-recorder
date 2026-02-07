@@ -1,12 +1,13 @@
 import { useEffect, useRef, useState } from "react";
-import { ChevronDown, FileDown, Loader2, Music } from "lucide-react";
+import { FileDown, Loader2, LogOut, Music, User } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
-import { Button } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
 import type { AudioDownloadOption } from "@/app/container/app-shell-types";
+import { Button } from "@/components/ui/button";
+import { toAppLanguage } from "@/i18n/config";
+import { cn } from "@/lib/utils";
 
-export interface DownloadMenuButtonProps {
+export interface FooterAccountMenuProps {
   hasMeeting: boolean;
   canDownloadAudio: boolean;
   isDownloadingReport: boolean;
@@ -16,9 +17,15 @@ export interface DownloadMenuButtonProps {
   onDownloadReport: () => Promise<void> | void;
   onOpenAudioList: () => Promise<void>;
   onDownloadAudio: (audioUrl: string) => void;
+  onLogout: () => Promise<void> | void;
 }
 
-export function DownloadMenuButton({
+const LANGUAGES = [
+  { code: "ja", label: "JA" },
+  { code: "en", label: "EN" },
+] as const;
+
+export function FooterAccountMenu({
   hasMeeting,
   canDownloadAudio,
   isDownloadingReport,
@@ -28,14 +35,15 @@ export function DownloadMenuButton({
   onDownloadReport,
   onOpenAudioList,
   onDownloadAudio,
-}: DownloadMenuButtonProps) {
-  const { t } = useTranslation();
+  onLogout,
+}: FooterAccountMenuProps) {
+  const { t, i18n } = useTranslation();
   const [isOpen, setIsOpen] = useState(false);
   const [selectedAudioUrl, setSelectedAudioUrl] = useState("");
   const containerRef = useRef<HTMLDivElement | null>(null);
 
+  const currentLanguage = toAppLanguage(i18n.resolvedLanguage ?? i18n.language);
   const canDownloadReport = hasMeeting && !isDownloadingReport;
-  const canOpenMenu = hasMeeting || canDownloadAudio;
   const canDownloadSelectedAudio =
     canDownloadAudio && selectedAudioUrl.length > 0 && !isAudioOptionsLoading;
 
@@ -49,6 +57,7 @@ export function DownloadMenuButton({
         setIsOpen(false);
       }
     };
+
     const handleEscape = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
         setIsOpen(false);
@@ -57,6 +66,7 @@ export function DownloadMenuButton({
 
     document.addEventListener("mousedown", handlePointerDown);
     document.addEventListener("keydown", handleEscape);
+
     return () => {
       document.removeEventListener("mousedown", handlePointerDown);
       document.removeEventListener("keydown", handleEscape);
@@ -75,6 +85,7 @@ export function DownloadMenuButton({
       setSelectedAudioUrl("");
       return;
     }
+
     setSelectedAudioUrl((current) => {
       if (audioOptions.some((option) => option.url === current)) {
         return current;
@@ -87,24 +98,60 @@ export function DownloadMenuButton({
     <div className="relative" ref={containerRef}>
       <Button
         variant="outline"
-        size="sm"
+        size="icon-sm"
         type="button"
-        disabled={!canOpenMenu}
+        aria-label={t("common.accountMenu")}
+        title={t("common.accountMenu")}
         aria-haspopup="menu"
         aria-expanded={isOpen}
         onClick={() => setIsOpen((value) => !value)}
-        className="gap-2"
+        className={cn(isOpen && "bg-accent text-accent-foreground")}
       >
-        {isDownloadingReport && <Loader2 className="h-4 w-4 animate-spin" />}
-        <span>{t("report.menu")}</span>
-        <ChevronDown className={cn("h-4 w-4 transition-transform", isOpen && "rotate-180")} />
+        <User className="h-4 w-4" />
       </Button>
 
       {isOpen && (
         <div
           role="menu"
-          className="absolute right-0 z-30 mt-2 w-72 rounded-md border border-border bg-popover p-1 shadow-md"
+          className="absolute bottom-full left-0 z-30 mb-2 w-72 rounded-md border border-border bg-popover p-1 shadow-md"
         >
+          <div className="px-2 py-1">
+            <p className="mb-1 text-[11px] font-medium text-muted-foreground">
+              {t("common.language")}
+            </p>
+            <div
+              role="group"
+              aria-label={t("common.language")}
+              className="inline-flex rounded-md border border-border bg-background p-0.5"
+            >
+              {LANGUAGES.map((language) => {
+                const isActive = currentLanguage === language.code;
+                return (
+                  <button
+                    key={language.code}
+                    type="button"
+                    role="menuitemradio"
+                    aria-checked={isActive}
+                    className={cn(
+                      "rounded-sm px-2 py-1 text-xs font-medium transition-colors",
+                      isActive
+                        ? "bg-primary text-primary-foreground"
+                        : "text-muted-foreground hover:text-foreground",
+                    )}
+                    onClick={() => {
+                      setIsOpen(false);
+                      void i18n.changeLanguage(language.code);
+                    }}
+                  >
+                    {language.label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          <div className="my-1 h-px bg-border" />
+
           <button
             type="button"
             role="menuitem"
@@ -118,7 +165,11 @@ export function DownloadMenuButton({
               void onDownloadReport();
             }}
           >
-            <FileDown className="h-4 w-4" />
+            {isDownloadingReport ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <FileDown className="h-4 w-4" />
+            )}
             {t("report.download")}
           </button>
 
@@ -147,11 +198,11 @@ export function DownloadMenuButton({
 
             {!isAudioOptionsLoading && audioOptions.length > 0 ? (
               <div className="space-y-2">
-                <label className="sr-only" htmlFor="audio-download-select">
+                <label className="sr-only" htmlFor="footer-audio-download-select">
                   {t("report.audioSelectLabel")}
                 </label>
                 <select
-                  id="audio-download-select"
+                  id="footer-audio-download-select"
                   value={selectedAudioUrl}
                   onChange={(event) => setSelectedAudioUrl(event.target.value)}
                   className="w-full rounded-md border border-input bg-background px-2 py-1.5 text-sm"
@@ -182,8 +233,25 @@ export function DownloadMenuButton({
               {t("report.downloadSelectedAudio")}
             </button>
           </div>
+
+          <div className="my-1 h-px bg-border" />
+
+          <button
+            type="button"
+            role="menuitem"
+            className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left text-sm text-destructive transition-colors hover:bg-destructive/10"
+            onClick={() => {
+              setIsOpen(false);
+              void onLogout();
+            }}
+          >
+            <LogOut className="h-4 w-4" />
+            {t("common.logout")}
+          </button>
         </div>
       )}
     </div>
   );
 }
+
+export default FooterAccountMenu;

@@ -79,3 +79,13 @@ export function findAudioRecordingsBySessionId(
     .all(sessionId) as AudioRecordingRow[];
   return rows.map(rowToAudioRecording);
 }
+
+export function findAudioRecordingsByMeetingId(
+  db: Database,
+  meetingId: string,
+): PersistedAudioRecording[] {
+  const rows = db
+    .query("SELECT * FROM audio_recordings WHERE meeting_id = ? ORDER BY created_at DESC, id DESC")
+    .all(meetingId) as AudioRecordingRow[];
+  return rows.map(rowToAudioRecording);
+}

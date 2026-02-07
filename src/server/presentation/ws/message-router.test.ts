@@ -106,4 +106,36 @@ describe("createWsMessageRouter", () => {
       data: { message: "Invalid message format" },
     });
   });
+
+  test("routes meeting:mode:set message", async () => {
+    const { ws } = createFakeSocket();
+    const { calls, meeting, session, model } = createUsecases();
+    const router = createWsMessageRouter({ meeting, session, model });
+
+    await router.route(
+      ws,
+      JSON.stringify({
+        type: "meeting:mode:set",
+        data: { mode: "record" },
+      }),
+    );
+
+    expect(calls).toEqual(["meeting:mode:set"]);
+  });
+
+  test("routes meeting:history:request message", async () => {
+    const { ws } = createFakeSocket();
+    const { calls, meeting, session, model } = createUsecases();
+    const router = createWsMessageRouter({ meeting, session, model });
+
+    await router.route(
+      ws,
+      JSON.stringify({
+        type: "meeting:history:request",
+        data: { meetingId: "meeting-1" },
+      }),
+    );
+
+    expect(calls).toEqual(["meeting:history:delta:request"]);
+  });
 });

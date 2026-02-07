@@ -245,10 +245,12 @@ describe("useMeetingSession", () => {
 
     await new Promise((r) => setTimeout(r, 20));
 
-    const sentJson = ws.send.mock.calls
-      .map((args) => args[0])
-      .filter((arg): arg is string => typeof arg === "string")
-      .map((payload) => JSON.parse(payload));
+    const sentJson = (ws.send.mock.calls as unknown[]).flatMap((call) => {
+      if (!Array.isArray(call)) return [];
+      const payload = call[0];
+      if (typeof payload !== "string") return [];
+      return [JSON.parse(payload)];
+    });
 
     const deltaRequests = sentJson.filter((msg) => msg.type === "meeting:history:request");
     expect(deltaRequests.length).toBeGreaterThanOrEqual(1);

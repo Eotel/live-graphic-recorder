@@ -60,6 +60,7 @@ import {
 import {
   createAudioRecording,
   findAudioRecordingByIdAndMeetingId,
+  findAudioRecordingsByMeetingId,
   type PersistedAudioRecording,
 } from "./db/repository/audio";
 import {
@@ -488,6 +489,13 @@ export class PersistenceService {
       return null;
     }
     return findAudioRecordingByIdAndMeetingId(this.db, audioId, meetingId);
+  }
+
+  listAudioRecordingsByMeeting(meetingId: string, ownerUserId?: string): PersistedAudioRecording[] {
+    if (!this.isMeetingOwnedByUser(meetingId, ownerUserId)) {
+      return [];
+    }
+    return findAudioRecordingsByMeetingId(this.db, meetingId);
   }
 
   // ============================================================================

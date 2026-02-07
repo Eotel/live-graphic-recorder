@@ -538,6 +538,49 @@ describe("PersistenceService", () => {
         service.persistAudioRecordingFromStream(sessionId, meetingId, createStream([]), 1024),
       ).rejects.toThrow("Empty body");
     });
+
+    test("lists meeting audio recordings in newest-first order", async () => {
+      const sessionId2 = "audio-session-2";
+      service.createSession(meetingId, sessionId2);
+
+      const first = await service.persistAudioRecordingFromStream(
+        sessionId,
+        meetingId,
+        createStream([64]),
+        1024,
+      );
+      const second = await service.persistAudioRecordingFromStream(
+        sessionId2,
+        meetingId,
+        createStream([128]),
+        1024,
+      );
+
+      const recordings = service.listAudioRecordingsByMeeting(meetingId);
+
+      expect(recordings.map((recording) => recording.id)).toEqual([second.id, first.id]);
+      expect(recordings[0]!.meetingId).toBe(meetingId);
+      expect(recordings[1]!.meetingId).toBe(meetingId);
+    });
+
+    test("returns empty list for non-owner when listing meeting audio recordings", async () => {
+      const ownedMeeting = service.createMeeting("Owned Meeting", "owner-user");
+      const ownedSessionId = "owned-audio-session";
+      service.createSession(ownedMeeting.id, ownedSessionId);
+      await service.persistAudioRecordingFromStream(
+        ownedSessionId,
+        ownedMeeting.id,
+        createStream([64]),
+        1024,
+      );
+
+      const denied = service.listAudioRecordingsByMeeting(ownedMeeting.id, "other-user");
+      const allowed = service.listAudioRecordingsByMeeting(ownedMeeting.id, "owner-user");
+
+      expect(denied).toEqual([]);
+      expect(allowed).toHaveLength(1);
+      expect(allowed[0]!.meetingId).toBe(ownedMeeting.id);
+    });
   });
 
   describe("Meeting transcript aggregation", () => {

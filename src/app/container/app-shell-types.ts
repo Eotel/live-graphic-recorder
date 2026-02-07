@@ -9,6 +9,14 @@ import type { UseMeetingSessionReturn } from "@/hooks/useMeetingSession";
 import type { AppStoreSnapshot } from "@/app/view-model/app-store";
 import type { PaneId } from "@/logic/pane-state-controller";
 
+export interface AudioDownloadOption {
+  id: number;
+  url: string;
+  createdAt: number;
+  fileSizeBytes: number;
+  label: string;
+}
+
 export interface AppShellAuthViewModel {
   status: UseAuthReturn["status"];
   isSubmitting: boolean;
@@ -25,6 +33,9 @@ export interface AppShellViewModel {
   recording: UseRecordingControllerReturn;
   localRecording: UseLocalRecordingReturn;
   audioUpload: UseAudioUploadReturn;
+  audioDownloadOptions: AudioDownloadOption[];
+  isAudioListLoading: boolean;
+  audioListError: string | null;
   paneState: PaneStateController & PaneState;
   popouts: {
     summary: UsePopoutWindowReturn;
@@ -44,7 +55,8 @@ export interface AppShellViewModel {
   onUpload: (meetingId: string) => void;
   onCancelUpload: () => void;
   onDownloadReport: () => Promise<void>;
-  onDownloadAudio: () => void;
+  onOpenAudioList: () => Promise<void>;
+  onDownloadAudio: (audioUrl: string) => void;
   onBackRequested: () => void;
   onLogout: () => Promise<void>;
 }

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { usePaneState } from "@/hooks/usePaneState";
 import { usePopoutWindow } from "@/hooks/usePopoutWindow";
@@ -16,7 +16,7 @@ import { recordingLifecycleUsecase } from "@/app/usecases";
 import { shouldAutoConnect } from "@/logic/connection-guards";
 import type { CameraFrame } from "@/types/messages";
 import type { PaneId } from "@/logic/pane-state-controller";
-import type { AppShellViewModel } from "./app-shell-types";
+import type { AppShellViewModel, AudioDownloadOption } from "./app-shell-types";
 import { useAppShellStore } from "./useAppShellStore";
 import { useAppShellStoreBridge } from "./useAppShellStoreBridge";
 import { useMeetingListFlow } from "./useMeetingListFlow";
@@ -24,6 +24,43 @@ import { useSessionNavigation } from "./useSessionNavigation";
 import { useTranslation } from "react-i18next";
 
 export type { AppShellViewModel } from "./app-shell-types";
+
+interface AudioRecordingsApiPayload {
+  recordings?: Array<{
+    id?: unknown;
+    sessionId?: unknown;
+    fileSizeBytes?: unknown;
+    createdAt?: unknown;
+    url?: unknown;
+  }>;
+}
+
+function formatAudioFileSize(bytes: number): string {
+  if (!Number.isFinite(bytes) || bytes < 0) {
+    return "0 B";
+  }
+  if (bytes < 1024) {
+    return `${Math.round(bytes)} B`;
+  }
+  if (bytes < 1024 * 1024) {
+    return `${(bytes / 1024).toFixed(1)} KB`;
+  }
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function formatAudioCreatedAt(createdAt: number): string {
+  if (!Number.isFinite(createdAt) || createdAt <= 0) {
+    return "--";
+  }
+
+  return new Date(createdAt).toLocaleString(undefined, {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
 
 export function useAppShellController(): AppShellViewModel {
   const { t } = useTranslation();
@@ -43,6 +80,9 @@ export function useAppShellController(): AppShellViewModel {
 
   const audioUpload = useAudioUpload({ onComplete: handleUploadComplete });
   const paneState = usePaneState();
+  const [audioDownloadOptions, setAudioDownloadOptions] = useState<AudioDownloadOption[]>([]);
+  const [isAudioListLoading, setIsAudioListLoading] = useState(false);
+  const [audioListError, setAudioListError] = useState<string | null>(null);
 
   const summaryPopout = usePopoutWindow({
     title: t("layout.paneSummary"),
@@ -242,30 +282,100 @@ export function useAppShellController(): AppShellViewModel {
     await appActions.downloadReport();
   }, [appActions]);
 
-  const onDownloadAudio = useCallback(() => {
-    const audioUrl = audioUpload.lastUploadedAudioUrl;
+  useEffect(() => {
+    setAudioDownloadOptions([]);
+    setAudioListError(null);
+    setIsAudioListLoading(false);
+  }, [appState.meeting.meetingId]);
+
+  const onOpenAudioList = useCallback(async () => {
     const meetingId = appState.meeting.meetingId;
-    if (!audioUrl || !meetingId || typeof window === "undefined") {
+    if (!meetingId || typeof window === "undefined") {
+      setAudioDownloadOptions([]);
       return;
     }
 
-    let parsed: URL;
     try {
-      parsed = new URL(audioUrl, window.location.origin);
+      setIsAudioListLoading(true);
+      setAudioListError(null);
+      const response = await fetch(`/api/meetings/${meetingId}/audio`, {
+        method: "GET",
+        credentials: "include",
+      });
+      if (!response.ok) {
+        throw new Error(`Failed to load audio list: ${response.status} ${response.statusText}`);
+      }
+
+      const payload = (await response.json()) as AudioRecordingsApiPayload;
+      const recordings = Array.isArray(payload.recordings) ? payload.recordings : [];
+      const options: AudioDownloadOption[] = [];
+
+      for (const recording of recordings) {
+        if (typeof recording?.id !== "number") continue;
+        if (typeof recording?.sessionId !== "string") continue;
+        if (typeof recording?.fileSizeBytes !== "number") continue;
+        if (typeof recording?.createdAt !== "number") continue;
+        if (typeof recording?.url !== "string") continue;
+
+        let parsed: URL;
+        try {
+          parsed = new URL(recording.url, window.location.origin);
+        } catch {
+          continue;
+        }
+
+        if (!parsed.pathname.startsWith(`/api/meetings/${meetingId}/audio/`)) {
+          continue;
+        }
+
+        const url =
+          parsed.origin === window.location.origin
+            ? `${parsed.pathname}${parsed.search}`
+            : parsed.toString();
+        options.push({
+          id: recording.id,
+          url,
+          createdAt: recording.createdAt,
+          fileSizeBytes: recording.fileSizeBytes,
+          label: `${formatAudioCreatedAt(recording.createdAt)} · ${formatAudioFileSize(recording.fileSizeBytes)}`,
+        });
+      }
+
+      setAudioDownloadOptions(options);
     } catch {
-      return;
+      setAudioDownloadOptions([]);
+      setAudioListError(t("report.audioLoadFailed"));
+    } finally {
+      setIsAudioListLoading(false);
     }
+  }, [appState.meeting.meetingId, t]);
 
-    if (!parsed.pathname.startsWith(`/api/meetings/${meetingId}/audio/`)) {
-      return;
-    }
+  const onDownloadAudio = useCallback(
+    (audioUrl: string) => {
+      const meetingId = appState.meeting.meetingId;
+      if (!audioUrl || !meetingId || typeof window === "undefined") {
+        return;
+      }
 
-    const downloadUrl =
-      parsed.origin === window.location.origin
-        ? `${parsed.pathname}${parsed.search}`
-        : parsed.toString();
-    triggerAnchorDownload(downloadUrl);
-  }, [appState.meeting.meetingId, audioUpload.lastUploadedAudioUrl]);
+      let parsed: URL;
+      try {
+        parsed = new URL(audioUrl, window.location.origin);
+      } catch {
+        return;
+      }
+
+      if (!parsed.pathname.startsWith(`/api/meetings/${meetingId}/audio/`)) {
+        return;
+      }
+
+      const downloadUrl =
+        parsed.origin === window.location.origin
+          ? `${parsed.pathname}${parsed.search}`
+          : parsed.toString();
+      triggerAnchorDownload(downloadUrl);
+    },
+    [appState.meeting.meetingId],
+  );
 
   return {
     auth: {
@@ -281,6 +391,9 @@ export function useAppShellController(): AppShellViewModel {
     recording,
     localRecording,
     audioUpload,
+    audioDownloadOptions,
+    isAudioListLoading,
+    audioListError,
     paneState,
     popouts: {
       summary: summaryPopout,
@@ -300,6 +413,7 @@ export function useAppShellController(): AppShellViewModel {
     onUpload,
     onCancelUpload,
     onDownloadReport,
+    onOpenAudioList,
     onDownloadAudio,
     onBackRequested,
     onLogout,

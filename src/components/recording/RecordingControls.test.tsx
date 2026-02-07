@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, mock, test } from "bun:test";
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import type { ComponentProps } from "react";
 
 import { RecordingControls } from "./RecordingControls";
@@ -18,6 +18,7 @@ describe("RecordingControls", () => {
     sourceType: "camera",
     elapsedTime: undefined,
     hasMeeting: true,
+    onResumeMeeting: mock(() => {}),
     onRequestPermission: mock(() => {}),
     onStart: mock(() => {}),
     onStop: mock(() => {}),
@@ -64,5 +65,24 @@ describe("RecordingControls", () => {
 
     expect(screen.getByRole("button", { name: "Start Recording" })).toBeTruthy();
     expect(screen.queryByText("00:42")).toBeNull();
+  });
+
+  test("shows resume meeting button instead of grant button in read-only mode", () => {
+    const onResumeMeeting = mock(() => {});
+    render(
+      <RecordingControls
+        {...baseProps}
+        readOnly={true}
+        hasPermission={false}
+        onResumeMeeting={onResumeMeeting}
+      />,
+    );
+
+    const button = screen.getByRole("button", { name: "Resume Meeting" });
+    expect(button).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Grant Camera & Mic Access" })).toBeNull();
+
+    fireEvent.click(button);
+    expect(onResumeMeeting).toHaveBeenCalledTimes(1);
   });
 });

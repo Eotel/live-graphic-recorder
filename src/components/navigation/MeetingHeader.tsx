@@ -89,7 +89,9 @@ export function MeetingHeader({ title, onBackRequested, onUpdateTitle }: Meeting
         <button
           type="button"
           onClick={handleTitleClick}
-          className="text-sm font-medium text-foreground truncate max-w-[60vw] hover:underline cursor-pointer"
+          className={`text-sm font-medium text-foreground truncate max-w-[60vw] ${
+            onUpdateTitle ? "hover:underline cursor-pointer" : "cursor-default"
+          }`}
           title={onUpdateTitle ? t("meeting.clickToEditTitle") : undefined}
         >
           {displayTitle}

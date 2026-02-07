@@ -1,9 +1,8 @@
 import { MainLayout } from "@/components/layout/MainLayout";
 import { PaneToolbar } from "@/components/layout/PaneToolbar";
 import { PopoutPane } from "@/components/layout/PopoutPane";
-import { Button } from "@/components/ui/button";
 import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from "@/components/ui/resizable";
-import { DownloadMenuButton } from "@/components/navigation/DownloadMenuButton";
+import { FooterAccountMenu } from "@/components/navigation/FooterAccountMenu";
 import { RecordingControls } from "@/components/recording/RecordingControls";
 import { CloudSaveButton } from "@/components/recording/CloudSaveButton";
 import { CameraPreview } from "@/components/recording/CameraPreview";
@@ -17,36 +16,22 @@ import { HeatMeter } from "@/components/metrics/HeatMeter";
 import { ImageCarousel } from "@/components/graphics/ImageCarousel";
 import { ImageModelToggle } from "@/components/graphics/ImageModelToggle";
 import { MeetingHeader } from "@/components/navigation/MeetingHeader";
-import { LanguageToggle } from "@/components/navigation/LanguageToggle";
 import { PaneContext } from "@/contexts/PaneContext";
 import type { AppShellViewModel } from "@/app/container/useAppShellController";
-import { useTranslation } from "react-i18next";
 
 interface AppShellRecordingViewProps {
   viewModel: AppShellViewModel;
 }
 
-function isAudioDownloadUrlForMeeting(audioUrl: string | null, meetingId: string | null): boolean {
-  if (!audioUrl || !meetingId) {
-    return false;
-  }
-  const origin = typeof window !== "undefined" ? window.location.origin : "http://localhost";
-  try {
-    const parsed = new URL(audioUrl, origin);
-    return parsed.pathname.startsWith(`/api/meetings/${meetingId}/audio/`);
-  } catch {
-    return false;
-  }
-}
-
 export function AppShellRecordingView({ viewModel }: AppShellRecordingViewProps) {
-  const { t } = useTranslation();
   const {
     appState,
     session,
     media,
     localRecording,
-    audioUpload,
+    audioDownloadOptions,
+    isAudioListLoading,
+    audioListError,
     paneState,
     popouts,
     error,
@@ -57,6 +42,7 @@ export function AppShellRecordingView({ viewModel }: AppShellRecordingViewProps)
     onUpload,
     onCancelUpload,
     onDownloadReport,
+    onOpenAudioList,
     onDownloadAudio,
     onResumeMeeting,
     onBackRequested,
@@ -68,10 +54,7 @@ export function AppShellRecordingView({ viewModel }: AppShellRecordingViewProps)
   const graphicsPaneMode = paneState.getPaneMode("graphics");
   const meetingIdForReport = appState.meeting.meetingId;
   const isReadOnlyMeeting = appState.meeting.mode === "view";
-  const canDownloadAudio = isAudioDownloadUrlForMeeting(
-    audioUpload.lastUploadedAudioUrl,
-    meetingIdForReport,
-  );
+  const canDownloadAudio = audioDownloadOptions.length > 0;
 
   return (
     <PaneContext.Provider value={paneState}>
@@ -85,30 +68,9 @@ export function AppShellRecordingView({ viewModel }: AppShellRecordingViewProps)
                 onBackRequested={onBackRequested}
                 onUpdateTitle={isReadOnlyMeeting ? undefined : session.updateMeetingTitle}
               />
-              {isReadOnlyMeeting && (
-                <div className="flex items-center gap-2">
-                  <span className="rounded-full border border-amber-300 bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-700">
-                    {t("meeting.readOnlyBadge")}
-                  </span>
-                  <Button size="sm" type="button" onClick={onResumeMeeting}>
-                    {t("meeting.resumeMeeting")}
-                  </Button>
-                </div>
-              )}
               <TopicIndicator topics={session.topics} />
             </div>
-            <div className="flex items-center gap-6">
-              <LanguageToggle />
-              <Button variant="outline" size="sm" type="button" onClick={onLogout}>
-                {t("common.logout")}
-              </Button>
-              <DownloadMenuButton
-                hasMeeting={Boolean(meetingIdForReport)}
-                canDownloadAudio={canDownloadAudio}
-                isDownloadingReport={appState.ui.isDownloadingReport}
-                onDownloadReport={onDownloadReport}
-                onDownloadAudio={onDownloadAudio}
-              />
+            <div className="flex items-center gap-4">
               <FlowMeter value={session.flow} />
               <HeatMeter value={session.heat} />
             </div>
@@ -290,33 +252,49 @@ export function AppShellRecordingView({ viewModel }: AppShellRecordingViewProps)
           </PopoutPane>
         }
         footer={
-          <div className="flex flex-wrap items-center justify-center gap-4">
-            <RecordingControls
-              sessionStatus={appState.recording.sessionStatus}
-              isRecording={appState.recording.isRecording}
-              hasPermission={appState.media.hasPermission}
-              isLoading={appState.media.isLoading}
-              error={error}
-              sourceType={appState.media.sourceType}
-              elapsedTime={appState.recording.elapsedTime}
-              hasMeeting={appState.derived.hasMeeting}
-              readOnly={isReadOnlyMeeting}
-              onRequestPermission={onRequestPermission}
-              onStart={onStartRecording}
-              onStop={onStopRecording}
+          <div className="flex w-full flex-wrap items-center gap-4">
+            <FooterAccountMenu
+              hasMeeting={Boolean(meetingIdForReport)}
+              canDownloadAudio={canDownloadAudio}
+              isDownloadingReport={appState.ui.isDownloadingReport}
+              audioOptions={audioDownloadOptions}
+              isAudioOptionsLoading={isAudioListLoading}
+              audioOptionsError={audioListError}
+              onDownloadReport={onDownloadReport}
+              onOpenAudioList={onOpenAudioList}
+              onDownloadAudio={onDownloadAudio}
+              onLogout={onLogout}
             />
-            {!isReadOnlyMeeting && (
-              <CloudSaveButton
-                meetingId={meetingIdForReport}
+
+            <div className="flex min-w-0 flex-1 flex-wrap items-center justify-center gap-4">
+              <RecordingControls
+                sessionStatus={appState.recording.sessionStatus}
                 isRecording={appState.recording.isRecording}
-                isUploading={appState.upload.isUploading}
-                progress={appState.upload.progress}
-                error={appState.upload.error}
-                pendingCount={localRecording.pendingRecordings.length}
-                onUpload={onUpload}
-                onCancel={onCancelUpload}
+                hasPermission={appState.media.hasPermission}
+                isLoading={appState.media.isLoading}
+                error={error}
+                sourceType={appState.media.sourceType}
+                elapsedTime={appState.recording.elapsedTime}
+                hasMeeting={appState.derived.hasMeeting}
+                readOnly={isReadOnlyMeeting}
+                onResumeMeeting={onResumeMeeting}
+                onRequestPermission={onRequestPermission}
+                onStart={onStartRecording}
+                onStop={onStopRecording}
               />
-            )}
+              {!isReadOnlyMeeting && (
+                <CloudSaveButton
+                  meetingId={meetingIdForReport}
+                  isRecording={appState.recording.isRecording}
+                  isUploading={appState.upload.isUploading}
+                  progress={appState.upload.progress}
+                  error={appState.upload.error}
+                  pendingCount={localRecording.pendingRecordings.length}
+                  onUpload={onUpload}
+                  onCancel={onCancelUpload}
+                />
+              )}
+            </div>
           </div>
         }
       />

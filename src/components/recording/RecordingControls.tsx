@@ -24,6 +24,8 @@ interface RecordingControlsProps {
   hasMeeting?: boolean;
   /** Read-only meeting mode. */
   readOnly?: boolean;
+  /** Resume read-only meeting and switch to record mode. */
+  onResumeMeeting?: () => void;
   onRequestPermission: () => void;
   onStart: () => void;
   onStop: () => void;
@@ -39,6 +41,7 @@ export function RecordingControls({
   elapsedTime,
   hasMeeting = true,
   readOnly = false,
+  onResumeMeeting,
   onRequestPermission,
   onStart,
   onStop,
@@ -51,7 +54,14 @@ export function RecordingControls({
 
   let primaryControl: ReactNode;
 
-  if (!hasPermission) {
+  if (readOnly) {
+    primaryControl = (
+      <Button onClick={onResumeMeeting} size="lg" className="gap-2" disabled={!hasMeeting}>
+        <Circle className="size-4" />
+        {t("meeting.resumeMeeting")}
+      </Button>
+    );
+  } else if (!hasPermission) {
     primaryControl = (
       <Button
         onClick={onRequestPermission}

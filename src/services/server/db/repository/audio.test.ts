@@ -13,6 +13,7 @@ import { createSession } from "./session";
 import {
   createAudioRecording,
   findAudioRecordingByIdAndMeetingId,
+  findAudioRecordingsByMeetingId,
   findAudioRecordingsBySessionId,
 } from "./audio";
 
@@ -121,6 +122,64 @@ describe("AudioRecordingRepository", () => {
       const recordings = findAudioRecordingsBySessionId(db, sessionId);
 
       expect(recordings).toHaveLength(2);
+    });
+  });
+
+  describe("findAudioRecordingsByMeetingId", () => {
+    test("returns recordings for the meeting ordered by newest first", () => {
+      const db = getDatabase(testDbPath);
+      const first = createAudioRecording(db, {
+        sessionId,
+        meetingId,
+        filePath: "audio/first.webm",
+        fileSizeBytes: 100,
+      });
+      const second = createAudioRecording(db, {
+        sessionId,
+        meetingId,
+        filePath: "audio/second.webm",
+        fileSizeBytes: 200,
+      });
+      const third = createAudioRecording(db, {
+        sessionId,
+        meetingId,
+        filePath: "audio/third.webm",
+        fileSizeBytes: 300,
+      });
+
+      db.run("UPDATE audio_recordings SET created_at = ? WHERE id = ?", [1_000, first.id]);
+      db.run("UPDATE audio_recordings SET created_at = ? WHERE id = ?", [2_000, second.id]);
+      db.run("UPDATE audio_recordings SET created_at = ? WHERE id = ?", [3_000, third.id]);
+
+      const recordings = findAudioRecordingsByMeetingId(db, meetingId);
+
+      expect(recordings).toHaveLength(3);
+      expect(recordings.map((recording) => recording.id)).toEqual([third.id, second.id, first.id]);
+    });
+
+    test("does not return recordings from other meetings", () => {
+      const db = getDatabase(testDbPath);
+      const otherMeeting = createMeeting(db, { title: "Other Meeting" });
+      const otherSession = createSession(db, { meetingId: otherMeeting.id });
+
+      createAudioRecording(db, {
+        sessionId,
+        meetingId,
+        filePath: "audio/owned.webm",
+        fileSizeBytes: 100,
+      });
+      createAudioRecording(db, {
+        sessionId: otherSession.id,
+        meetingId: otherMeeting.id,
+        filePath: "audio/other.webm",
+        fileSizeBytes: 200,
+      });
+
+      const recordings = findAudioRecordingsByMeetingId(db, meetingId);
+
+      expect(recordings).toHaveLength(1);
+      expect(recordings[0]!.meetingId).toBe(meetingId);
+      expect(recordings[0]!.filePath).toBe("audio/owned.webm");
     });
   });
 
