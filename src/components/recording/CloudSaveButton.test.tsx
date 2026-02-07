@@ -93,7 +93,7 @@ describe("CloudSaveButton", () => {
     expect((button as HTMLButtonElement).disabled).toBe(true);
   });
 
-  test("should render completion state when progress is 100 and upload is not active", () => {
+  test("should not render button after upload completion when no local recording remains", () => {
     render(
       <CloudSaveButton
         {...defaultProps}
@@ -106,10 +106,7 @@ describe("CloudSaveButton", () => {
       />,
     );
 
-    const button = screen.getByRole("button", { name: "Saved" });
-    expect(button).toBeTruthy();
-    expect((button as HTMLButtonElement).disabled).toBe(true);
-
-    expect(screen.getAllByRole("button").length).toBe(1);
+    expect(screen.queryByRole("button", { name: "Saved" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Save to Cloud" })).toBeNull();
   });
 });

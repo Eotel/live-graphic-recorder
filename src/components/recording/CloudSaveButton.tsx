@@ -5,8 +5,9 @@
  * Related: src/hooks/useAudioUpload.ts, src/hooks/useLocalRecording.ts
  */
 
-import { Upload, Loader2, Check, X, AlertCircle } from "lucide-react";
+import { Upload, Loader2, X, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useTranslation } from "react-i18next";
 
 export interface CloudSaveButtonProps {
   sessionId: string | null;
@@ -31,8 +32,8 @@ export function CloudSaveButton({
   onUpload,
   onCancel,
 }: CloudSaveButtonProps) {
+  const { t } = useTranslation();
   const canUpload = !isRecording && !isUploading && hasLocalRecording && sessionId && meetingId;
-  const isComplete = progress === 100 && !isUploading && !error;
 
   function handleClick() {
     if (isUploading) {
@@ -42,7 +43,7 @@ export function CloudSaveButton({
     }
   }
 
-  if (!hasLocalRecording && !isUploading && !isComplete && !error) {
+  if (!hasLocalRecording && !isUploading && !error) {
     return null;
   }
 
@@ -59,30 +60,30 @@ export function CloudSaveButton({
         <Button
           onClick={handleClick}
           disabled={!canUpload && !isUploading}
-          variant={isComplete ? "outline" : isUploading ? "secondary" : "default"}
+          variant={isUploading ? "secondary" : "default"}
           size="sm"
           className="gap-2"
         >
           {isUploading ? (
             <>
               <Loader2 className="size-4 animate-spin" />
-              Uploading... {progress}%
-            </>
-          ) : isComplete ? (
-            <>
-              <Check className="size-4" />
-              Saved
+              {t("recording.uploadingWithProgress", { progress })}
             </>
           ) : (
             <>
               <Upload className="size-4" />
-              Save to Cloud
+              {t("recording.saveToCloud")}
             </>
           )}
         </Button>
 
         {isUploading && (
-          <Button onClick={onCancel} variant="ghost" size="sm">
+          <Button
+            onClick={onCancel}
+            variant="ghost"
+            size="sm"
+            aria-label={t("recording.cancelUpload")}
+          >
             <X className="size-4" />
           </Button>
         )}
