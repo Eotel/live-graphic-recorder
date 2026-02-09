@@ -1,0 +1,36 @@
+# AWS configuration
+aws_region  = "ap-northeast-1"
+aws_profile = "shiftone"
+
+# Environment
+environment   = "prod"
+instance_name = "live-graphic-recorder-prod"
+
+# Instance
+instance_type    = "t4g.medium"
+root_volume_size = 30
+
+# Network security
+# Replace with your global IP (/32).
+# Example: allowed_ssh_cidr = "203.0.113.10/32"
+allowed_ssh_cidr = "xxx.xxx.xxx.xxx/32"
+
+# DNS
+root_domain            = "shiftone.app"
+cloudflare_record_name = "live-graphic-recorder.ccbt"
+
+# Cloudflare
+# Export token before apply:
+# export CLOUDFLARE_API_TOKEN="..."
+cloudflare_zone_id = "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+
+# Local SSH key output path
+private_key_dir = "~/.ssh/keys/eotel"
+
+# EC2 app bootstrap parameters
+app_dir  = "/opt/live-graphic-recorder"
+app_user = "ubuntu"
+app_port = 3000
+
+create_eip   = true
+enable_https = true

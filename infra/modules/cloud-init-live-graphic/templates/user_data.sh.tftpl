@@ -1,0 +1,59 @@
+#!/bin/bash
+set -euxo pipefail
+
+export DEBIAN_FRONTEND=noninteractive
+
+apt-get update
+apt-get install -y ca-certificates curl git unzip gnupg caddy
+
+if [ ! -x "/home/${app_user}/.bun/bin/bun" ]; then
+  su - ${app_user} -c 'curl -fsSL https://bun.sh/install | bash'
+fi
+
+mkdir -p ${app_dir}
+chown -R ${app_user}:${app_user} ${app_dir}
+
+if [ ! -f "${app_dir}/.env.example" ]; then
+  cat > "${app_dir}/.env.example" <<'EOF'
+NODE_ENV=production
+HOST=127.0.0.1
+PORT=3000
+OPENAI_API_KEY=
+DEEPGRAM_API_KEY=
+GOOGLE_API_KEY=
+AUTH_JWT_SECRET=
+WS_ALLOWED_ORIGINS=
+EOF
+  chown ${app_user}:${app_user} "${app_dir}/.env.example"
+fi
+
+cat > /etc/systemd/system/live-graphic-recorder.service <<EOF
+[Unit]
+Description=Live Graphic Recorder Bun Service
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=${app_user}
+WorkingDirectory=${app_dir}
+EnvironmentFile=-${app_dir}/.env
+ExecStart=/home/${app_user}/.bun/bin/bun run start
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+cat > /etc/caddy/Caddyfile <<EOF
+${fqdn} {
+  encode zstd gzip
+  reverse_proxy 127.0.0.1:${app_port}
+}
+EOF
+
+systemctl daemon-reload
+systemctl enable live-graphic-recorder.service
+systemctl enable caddy
+systemctl restart caddy
