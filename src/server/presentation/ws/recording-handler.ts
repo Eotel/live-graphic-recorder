@@ -19,7 +19,7 @@ interface RecordingWebSocketHandlers {
     ws: ServerWebSocket<WSContext>,
     message: string | Buffer | ArrayBuffer,
   ) => Promise<void>;
-  close: (ws: ServerWebSocket<WSContext>, code: number, reason: string) => void;
+  close: (ws: ServerWebSocket<WSContext>, code?: number, reason?: string) => void;
 }
 
 export function createRecordingWebSocketHandlers(
@@ -57,7 +57,7 @@ export function createRecordingWebSocketHandlers(
       meeting.releaseRecordingLock(ctx);
       const reasonText = reason && reason.length > 0 ? reason : "(empty)";
       console.log(
-        `[WS] Session closed: ${ctx.sessionId}, code=${code}, reason=${reasonText}, meeting=${ctx.meetingId ?? "n/a"}, mode=${ctx.meetingMode ?? "n/a"}, status=${ctx.session.status}`,
+        `[WS] Session closed: ${ctx.sessionId}, code=${code ?? "n/a"}, reason=${reasonText}, meeting=${ctx.meetingId ?? "n/a"}, mode=${ctx.meetingMode ?? "n/a"}, status=${ctx.session.status}`,
       );
     },
   };

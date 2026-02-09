@@ -136,9 +136,8 @@ export function createDeepgramService(events: DeepgramServiceEvents): DeepgramSe
     if (audio instanceof ArrayBuffer) {
       return audio;
     }
-    const view = new Uint8Array(audio.buffer, audio.byteOffset, audio.byteLength);
-    const copied = new Uint8Array(view.byteLength);
-    copied.set(view);
+    const copied = new Uint8Array(audio.byteLength);
+    copied.set(audio);
     return copied.buffer;
   }
 
