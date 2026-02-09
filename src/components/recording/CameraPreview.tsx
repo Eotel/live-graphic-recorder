@@ -11,7 +11,7 @@ import type { MediaSourceType } from "@/types/messages";
 import { useTranslation } from "react-i18next";
 
 interface CameraPreviewProps {
-  videoRef: React.RefObject<HTMLVideoElement | null>;
+  videoRef: React.Ref<HTMLVideoElement>;
   hasPermission: boolean;
   isRecording: boolean;
   sourceType?: MediaSourceType;

@@ -69,7 +69,14 @@ export function useAppShellController(): AppShellViewModel {
   const media = useMediaStreamController();
   const localRecording = useLocalRecording();
 
-  const { appStore, appState, appActions } = useAppShellStore();
+  const { appStore, appState, appActions } = useAppShellStore({
+    updateMeetingTitle: session.updateMeetingTitle,
+    setImageModelPreset: session.setImageModelPreset,
+    setAudioDevice: media.setAudioDevice,
+    setVideoDevice: media.setVideoDevice,
+    switchSourceType: media.switchSourceType,
+    switchVideoSource: media.switchVideoSource,
+  });
 
   const localRecordingRef = useRef(localRecording);
   localRecordingRef.current = localRecording;
@@ -181,6 +188,7 @@ export function useAppShellController(): AppShellViewModel {
   const { formattedTime: elapsedTime } = useElapsedTime({ enabled: recording.isRecording });
 
   useAppShellStoreBridge({
+    appStore,
     appActions,
     auth,
     session,
@@ -232,7 +240,7 @@ export function useAppShellController(): AppShellViewModel {
   );
 
   useCameraCapture({
-    videoRef: media.videoRef,
+    videoRef: media.videoElementRef,
     isRecording: recording.isRecording,
     onFrameCaptured,
   });

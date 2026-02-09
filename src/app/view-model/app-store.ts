@@ -1,6 +1,16 @@
 import { hasUnsavedRecording } from "@/logic/unsaved-recording";
 import type { PaneId } from "@/logic/pane-state-controller";
-import type { MediaSourceType, MeetingInfo, SessionStatus, MeetingMode } from "@/types/messages";
+import type {
+  GenerationPhase,
+  ImageModelPreset,
+  MediaSourceType,
+  MeetingInfo,
+  SessionStatus,
+  MeetingMode,
+  SummaryPage,
+  SttConnectionState,
+  TranscriptSegment,
+} from "@/types/messages";
 import { createStore, type StoreApi } from "zustand/vanilla";
 
 export type AppView = "select" | "recording";
@@ -16,6 +26,12 @@ export interface AppStoreDependencies {
   downloadReport?: (meetingId: string) => Promise<void> | void;
   refreshMeetings?: () => Promise<MeetingInfo[] | void> | MeetingInfo[] | void;
   togglePaneMode?: (paneId: PaneId, mode: PaneMode) => Promise<void> | void;
+  updateMeetingTitle?: (title: string) => Promise<void> | void;
+  setImageModelPreset?: (preset: ImageModelPreset) => Promise<void> | void;
+  setAudioDevice?: (deviceId: string) => Promise<void> | void;
+  setVideoDevice?: (deviceId: string) => Promise<void> | void;
+  switchSourceType?: (type: MediaSourceType) => Promise<void> | void;
+  switchVideoSource?: (type: MediaSourceType) => Promise<boolean> | boolean;
   onDownloadReportError?: (error: unknown) => void;
   reportUnlockDelayMs?: number;
 }
@@ -53,7 +69,44 @@ export interface AppStoreState {
     isLoading: boolean;
     isSwitching: boolean;
     sourceType: MediaSourceType;
+    audioDevices: MediaDeviceInfo[];
+    videoDevices: MediaDeviceInfo[];
+    selectedAudioDeviceId: string | null;
+    selectedVideoDeviceId: string | null;
     error: string | null;
+  };
+  session: {
+    summaryPages: SummaryPage[];
+    transcriptSegments: TranscriptSegment[];
+    interimText: string;
+    interimSpeaker: number | undefined;
+    interimStartTime: number | undefined;
+    isAnalyzing: boolean;
+    sttStatus: {
+      state: SttConnectionState;
+      retryAttempt?: number;
+      message?: string;
+    } | null;
+    topics: string[];
+    tags: string[];
+    flow: number;
+    heat: number;
+    images: Array<{
+      base64?: string;
+      url?: string;
+      prompt: string;
+      timestamp: number;
+    }>;
+    generationPhase: GenerationPhase;
+    isGenerating: boolean;
+    imageModel: {
+      preset: ImageModelPreset;
+      model: string;
+      available: {
+        flash: string;
+        pro?: string;
+      };
+    };
   };
   upload: {
     isUploading: boolean;
@@ -88,6 +141,7 @@ export interface AppStoreActions {
   setMeetingState: (meeting: Partial<AppStoreState["meeting"]>) => void;
   setRecordingState: (recording: Partial<AppStoreState["recording"]>) => void;
   setMediaState: (media: Partial<AppStoreState["media"]>) => void;
+  setSessionState: (session: Partial<AppStoreState["session"]>) => void;
   setUploadState: (upload: Partial<AppStoreState["upload"]>) => void;
   setUiState: (ui: Partial<AppStoreState["ui"]>) => void;
   selectMeeting: (meetingId: string) => Promise<void>;
@@ -98,6 +152,11 @@ export interface AppStoreActions {
   downloadReport: () => Promise<boolean>;
   refreshMeetings: () => Promise<void>;
   togglePaneMode: (paneId: PaneId, mode: PaneMode) => Promise<void>;
+  updateMeetingTitle: (title: string) => Promise<void>;
+  setImageModelPreset: (preset: ImageModelPreset) => Promise<void>;
+  setAudioDevice: (deviceId: string) => Promise<void>;
+  setVideoDevice: (deviceId: string) => Promise<void>;
+  changeMediaSource: (type: MediaSourceType) => void;
 }
 
 export type AppStoreSnapshot = AppStoreState & {
@@ -111,6 +170,7 @@ export interface AppStoreSnapshotPatch {
   meeting?: Partial<AppStoreState["meeting"]>;
   recording?: Partial<AppStoreState["recording"]>;
   media?: Partial<AppStoreState["media"]>;
+  session?: Partial<AppStoreState["session"]>;
   upload?: Partial<AppStoreState["upload"]>;
   ui?: Partial<AppStoreState["ui"]>;
 }
@@ -151,7 +211,34 @@ function createDefaultState(): Omit<AppStoreSnapshot, "actions"> {
       isLoading: false,
       isSwitching: false,
       sourceType: "camera",
+      audioDevices: [],
+      videoDevices: [],
+      selectedAudioDeviceId: null,
+      selectedVideoDeviceId: null,
       error: null,
+    },
+    session: {
+      summaryPages: [],
+      transcriptSegments: [],
+      interimText: "",
+      interimSpeaker: undefined,
+      interimStartTime: undefined,
+      isAnalyzing: false,
+      sttStatus: null,
+      topics: [],
+      tags: [],
+      flow: 50,
+      heat: 50,
+      images: [],
+      generationPhase: "idle",
+      isGenerating: false,
+      imageModel: {
+        preset: "flash",
+        model: "",
+        available: {
+          flash: "",
+        },
+      },
     },
     upload: {
       isUploading: false,
@@ -217,6 +304,24 @@ function applyPatch(
     meeting: patch.meeting ? { ...current.meeting, ...patch.meeting } : current.meeting,
     recording: patch.recording ? { ...current.recording, ...patch.recording } : current.recording,
     media: patch.media ? { ...current.media, ...patch.media } : current.media,
+    session: patch.session
+      ? {
+          ...current.session,
+          ...patch.session,
+          imageModel: patch.session.imageModel
+            ? {
+                ...current.session.imageModel,
+                ...patch.session.imageModel,
+                available: patch.session.imageModel.available
+                  ? {
+                      ...current.session.imageModel.available,
+                      ...patch.session.imageModel.available,
+                    }
+                  : current.session.imageModel.available,
+              }
+            : current.session.imageModel,
+        }
+      : current.session,
     upload: patch.upload ? { ...current.upload, ...patch.upload } : current.upload,
     ui: patch.ui
       ? {
@@ -279,6 +384,15 @@ export function createAppStore(
         set((state) => ({
           ...applyPatch(state, {
             media,
+          }),
+          actions: state.actions,
+        }));
+      },
+
+      setSessionState: (session) => {
+        set((state) => ({
+          ...applyPatch(state, {
+            session,
           }),
           actions: state.actions,
         }));
@@ -554,6 +668,30 @@ export function createAppStore(
         }));
 
         await deps.togglePaneMode?.(paneId, mode);
+      },
+
+      updateMeetingTitle: async (title) => {
+        await deps.updateMeetingTitle?.(title);
+      },
+
+      setImageModelPreset: async (preset) => {
+        await deps.setImageModelPreset?.(preset);
+      },
+
+      setAudioDevice: async (deviceId) => {
+        await deps.setAudioDevice?.(deviceId);
+      },
+
+      setVideoDevice: async (deviceId) => {
+        await deps.setVideoDevice?.(deviceId);
+      },
+
+      changeMediaSource: (type) => {
+        if (get().recording.isRecording) {
+          void deps.switchVideoSource?.(type);
+          return;
+        }
+        void deps.switchSourceType?.(type);
       },
     };
 

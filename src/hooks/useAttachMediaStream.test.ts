@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
-import { renderHook } from "@testing-library/react";
+import { act, renderHook } from "@testing-library/react";
 import { useAttachMediaStream } from "./useAttachMediaStream";
 
 function createVideoElement(playImpl: () => Promise<void>) {
@@ -19,6 +19,7 @@ function createVideoElement(playImpl: () => Promise<void>) {
     value: playImpl,
   });
 
+  document.body.appendChild(video);
   return video;
 }
 
@@ -33,15 +34,18 @@ describe("useAttachMediaStream", () => {
 
   afterEach(() => {
     console.warn = originalWarn;
+    document.body.innerHTML = "";
   });
 
   test("attaches stream to video and plays when stream exists", () => {
     const stream = {} as MediaStream;
     const playMock = mock(() => Promise.resolve());
     const video = createVideoElement(playMock);
-    const videoRef = { current: video } as React.RefObject<HTMLVideoElement | null>;
+    const { result } = renderHook(() => useAttachMediaStream(stream));
 
-    renderHook(() => useAttachMediaStream(videoRef, stream));
+    act(() => {
+      result.current.videoRef(video);
+    });
 
     expect(video.srcObject).toBe(stream);
     expect(playMock).toHaveBeenCalledTimes(1);
@@ -57,8 +61,10 @@ describe("useAttachMediaStream", () => {
     const warnMock = mock(() => {});
     console.warn = warnMock as typeof console.warn;
 
-    const videoRef = { current: video } as React.RefObject<HTMLVideoElement | null>;
-    renderHook(() => useAttachMediaStream(videoRef, stream));
+    const { result } = renderHook(() => useAttachMediaStream(stream));
+    act(() => {
+      result.current.videoRef(video);
+    });
 
     await Promise.resolve();
 
@@ -75,11 +81,36 @@ describe("useAttachMediaStream", () => {
     const warnMock = mock(() => {});
     console.warn = warnMock as typeof console.warn;
 
-    const videoRef = { current: video } as React.RefObject<HTMLVideoElement | null>;
-    renderHook(() => useAttachMediaStream(videoRef, stream));
+    const { result } = renderHook(() => useAttachMediaStream(stream));
+    act(() => {
+      result.current.videoRef(video);
+    });
 
     await Promise.resolve();
 
     expect(warnMock).toHaveBeenCalledTimes(0);
+  });
+
+  test("re-attaches stream when ref target changes without stream change", () => {
+    const stream = {} as MediaStream;
+    const firstPlayMock = mock(() => Promise.resolve());
+    const secondPlayMock = mock(() => Promise.resolve());
+    const firstVideo = createVideoElement(firstPlayMock);
+    const secondVideo = createVideoElement(secondPlayMock);
+
+    const { result } = renderHook(() => useAttachMediaStream(stream));
+
+    act(() => {
+      result.current.videoRef(firstVideo);
+    });
+    expect(firstVideo.srcObject).toBe(stream);
+
+    act(() => {
+      result.current.videoRef(secondVideo);
+    });
+
+    expect(secondVideo.srcObject).toBe(stream);
+    expect(secondPlayMock).toHaveBeenCalledTimes(1);
+    expect(result.current.videoElementRef.current).toBe(secondVideo);
   });
 });

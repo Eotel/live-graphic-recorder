@@ -22,9 +22,14 @@ export interface UseMediaStreamControllerOptions {
 
 export interface UseMediaStreamControllerReturn extends MediaStreamControllerState {
   /**
-   * Video element ref to attach the stream to.
+   * Video element callback ref to attach the stream to.
    */
-  videoRef: React.RefObject<HTMLVideoElement | null>;
+  videoRef: React.RefCallback<HTMLVideoElement>;
+
+  /**
+   * Latest attached video element reference.
+   */
+  videoElementRef: React.RefObject<HTMLVideoElement | null>;
 
   /**
    * Request permission to access camera/microphone or screen.
@@ -69,8 +74,6 @@ export function useMediaStreamController(
   options: UseMediaStreamControllerOptions = {},
 ): UseMediaStreamControllerReturn {
   const { initialSourceType = "camera" } = options;
-
-  const videoRef = useRef<HTMLVideoElement | null>(null);
 
   // Create controller with stable reference
   const controllerRef = useRef<ReturnType<typeof createMediaStreamController> | null>(null);
@@ -120,7 +123,7 @@ export function useMediaStreamController(
 
   const state = useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
 
-  useAttachMediaStream(videoRef, state.stream);
+  const { videoRef, videoElementRef } = useAttachMediaStream(state.stream);
 
   // Cleanup on unmount (or StrictMode effect remount)
   useEffect(() => {
@@ -158,6 +161,7 @@ export function useMediaStreamController(
   return {
     ...state,
     videoRef,
+    videoElementRef,
     requestPermission,
     stopStream,
     setAudioDevice,

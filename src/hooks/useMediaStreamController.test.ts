@@ -5,7 +5,7 @@
  * Related: src/hooks/useMediaStreamController.ts, src/logic/media-stream-controller.ts
  */
 
-import { describe, test, expect, mock, beforeEach, afterAll } from "bun:test";
+import { describe, test, expect, mock, beforeEach, afterEach, afterAll } from "bun:test";
 import { renderHook, act } from "@testing-library/react";
 import { StrictMode, createElement } from "react";
 import type { MediaDevicesAdapter, StreamUtils } from "../adapters/types";
@@ -50,6 +50,29 @@ function createMockCameraStream() {
   ]);
 }
 
+type MediaProvider = MediaSource | Blob | MediaStream;
+
+function createVideoElement(playImpl: () => Promise<void>) {
+  const video = document.createElement("video");
+  let attachedStream: MediaStream | null = null;
+
+  Object.defineProperty(video, "srcObject", {
+    configurable: true,
+    get: () => attachedStream,
+    set: (value: MediaProvider | null) => {
+      attachedStream = value as MediaStream | null;
+    },
+  });
+
+  Object.defineProperty(video, "play", {
+    configurable: true,
+    value: playImpl,
+  });
+
+  document.body.appendChild(video);
+  return video;
+}
+
 const mockGetUserMedia = mock(() =>
   Promise.resolve(createMockCameraStream() as unknown as MediaStream),
 );
@@ -80,6 +103,10 @@ describe("useMediaStreamController", () => {
   beforeEach(() => {
     mockGetUserMedia.mockClear();
     mockStopTracks.mockClear();
+  });
+
+  afterEach(() => {
+    document.body.innerHTML = "";
   });
 
   test("GIVEN initial render WHEN requestPermission THEN hasPermission becomes true", async () => {
@@ -133,6 +160,34 @@ describe("useMediaStreamController", () => {
     const { unmount } = renderHook(() => useMediaStreamController());
     unmount();
     // Should not crash
+  });
+
+  test("re-attaches stream when video element ref target changes", async () => {
+    const firstPlayMock = mock(() => Promise.resolve());
+    const secondPlayMock = mock(() => Promise.resolve());
+    const firstVideo = createVideoElement(firstPlayMock);
+    const secondVideo = createVideoElement(secondPlayMock);
+
+    const { result } = renderHook(() => useMediaStreamController());
+
+    act(() => {
+      result.current.videoRef(firstVideo);
+    });
+
+    await act(async () => {
+      const ok = await result.current.requestPermission();
+      expect(ok).toBe(true);
+    });
+
+    expect(firstVideo.srcObject).toBe(result.current.stream);
+
+    act(() => {
+      result.current.videoRef(secondVideo);
+    });
+
+    expect(secondVideo.srcObject).toBe(result.current.stream);
+    expect(secondPlayMock).toHaveBeenCalledTimes(1);
+    expect(result.current.videoElementRef.current).toBe(secondVideo);
   });
 });
 

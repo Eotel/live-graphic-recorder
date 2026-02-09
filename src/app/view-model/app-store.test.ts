@@ -91,7 +91,19 @@ describe("createAppStore", () => {
       user: { id: "u1", email: "user@example.com" },
     });
     actions.setMeetingState({ meetingId: "meeting-1", view: "recording" });
-    actions.setMediaState({ hasPermission: true, isLoading: false });
+    actions.setMediaState({
+      hasPermission: true,
+      isLoading: false,
+      audioDevices: [],
+      videoDevices: [],
+      selectedAudioDeviceId: "audio-1",
+      selectedVideoDeviceId: "video-1",
+    });
+    actions.setSessionState({
+      topics: ["Architecture"],
+      flow: 70,
+      heat: 55,
+    });
     actions.setRecordingState({
       isRecording: false,
       sessionStatus: "idle",
@@ -107,8 +119,44 @@ describe("createAppStore", () => {
     expect(state.upload.isUploading).toBe(true);
     expect(state.ui.expandedPane).toBe("summary");
     expect(state.ui.popoutPanes).toEqual(["camera"]);
+    expect(state.session.topics).toEqual(["Architecture"]);
+    expect(state.media.selectedAudioDeviceId).toBe("audio-1");
     expect(state.derived.hasMeeting).toBe(true);
     expect(state.derived.hasUnsavedRecording).toBe(true);
+  });
+
+  test("delegates session/media commands to dependencies", async () => {
+    const updateMeetingTitle = mock(async (_title: string) => {});
+    const setImageModelPreset = mock(async (_preset: "flash" | "pro") => {});
+    const setAudioDevice = mock(async (_deviceId: string) => {});
+    const setVideoDevice = mock(async (_deviceId: string) => {});
+    const switchSourceType = mock((_type: "camera" | "screen") => {});
+    const switchVideoSource = mock(async (_type: "camera" | "screen") => true);
+
+    const store = createAppStore({
+      updateMeetingTitle,
+      setImageModelPreset,
+      setAudioDevice,
+      setVideoDevice,
+      switchSourceType,
+      switchVideoSource,
+    });
+    const { actions } = store.getState();
+
+    await actions.updateMeetingTitle("New Title");
+    await actions.setImageModelPreset("pro");
+    await actions.setAudioDevice("audio-2");
+    await actions.setVideoDevice("video-2");
+    actions.changeMediaSource("screen");
+    actions.setRecordingState({ isRecording: true });
+    actions.changeMediaSource("camera");
+
+    expect(updateMeetingTitle).toHaveBeenCalledWith("New Title");
+    expect(setImageModelPreset).toHaveBeenCalledWith("pro");
+    expect(setAudioDevice).toHaveBeenCalledWith("audio-2");
+    expect(setVideoDevice).toHaveBeenCalledWith("video-2");
+    expect(switchSourceType).toHaveBeenCalledWith("screen");
+    expect(switchVideoSource).toHaveBeenCalledWith("camera");
   });
 
   test("downloadReport sets and clears lock", async () => {

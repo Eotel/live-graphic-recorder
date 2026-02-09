@@ -1,24 +1,56 @@
-import { useEffect } from "react";
+import { useCallback, useEffect, useRef } from "react";
 
-export function useAttachMediaStream(
-  videoRef: React.RefObject<HTMLVideoElement | null>,
-  stream: MediaStream | null,
-): void {
-  useEffect(() => {
-    const video = videoRef.current;
-    if (!video) {
-      return;
+interface AttachMediaStreamResult {
+  videoRef: React.RefCallback<HTMLVideoElement>;
+  videoElementRef: React.RefObject<HTMLVideoElement | null>;
+}
+
+function attachStream(video: HTMLVideoElement, stream: MediaStream | null): void {
+  video.srcObject = stream;
+  if (!stream) {
+    return;
+  }
+
+  void video.play().catch((error: unknown) => {
+    if (error instanceof Error && error.name !== "NotAllowedError") {
+      console.warn("Video play failed:", error);
     }
+  });
+}
 
-    video.srcObject = stream;
-    if (!stream) {
-      return;
-    }
+export function useAttachMediaStream(stream: MediaStream | null): AttachMediaStreamResult {
+  const videoElementsRef = useRef<HTMLVideoElement[]>([]);
+  const videoElementRef = useRef<HTMLVideoElement | null>(null);
+  const streamRef = useRef<MediaStream | null>(stream);
 
-    void video.play().catch((error: unknown) => {
-      if (error instanceof Error && error.name !== "NotAllowedError") {
-        console.warn("Video play failed:", error);
+  const syncConnectedVideoElements = useCallback(() => {
+    videoElementsRef.current = videoElementsRef.current.filter((video) => video.isConnected);
+    videoElementRef.current = videoElementsRef.current.at(-1) ?? null;
+  }, []);
+
+  const videoRef = useCallback(
+    (video: HTMLVideoElement | null) => {
+      if (!video) {
+        syncConnectedVideoElements();
+        return;
       }
-    });
-  }, [videoRef, stream]);
+
+      if (!videoElementsRef.current.includes(video)) {
+        videoElementsRef.current.push(video);
+      }
+      syncConnectedVideoElements();
+      attachStream(video, streamRef.current);
+    },
+    [syncConnectedVideoElements],
+  );
+
+  useEffect(() => {
+    streamRef.current = stream;
+    syncConnectedVideoElements();
+    for (const video of videoElementsRef.current) {
+      attachStream(video, stream);
+    }
+  }, [stream, syncConnectedVideoElements]);
+
+  return { videoRef, videoElementRef };
 }
