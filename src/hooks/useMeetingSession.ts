@@ -19,6 +19,7 @@ import type {
   ImageModelPreset,
   MeetingMode,
   MeetingHistoryCursor,
+  SttConnectionState,
 } from "../types/messages";
 
 export interface UseMeetingSessionReturn {
@@ -26,6 +27,11 @@ export interface UseMeetingSessionReturn {
   isConnected: boolean;
   sessionStatus: "idle" | "recording" | "processing" | "error";
   generationPhase: "idle" | "analyzing" | "generating" | "retrying";
+  sttStatus: {
+    state: SttConnectionState;
+    retryAttempt?: number;
+    message?: string;
+  } | null;
   error: string | null;
 
   // Meeting state
@@ -397,6 +403,7 @@ export function useMeetingSession(): UseMeetingSessionReturn {
     isConnected: mc.isConnected,
     sessionStatus: mc.sessionStatus,
     generationPhase: mc.generationPhase,
+    sttStatus: mc.sttStatus,
     error: mc.error,
 
     // Meeting state

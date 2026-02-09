@@ -12,7 +12,7 @@ import {
   type ListenLiveClient,
 } from "@deepgram/sdk";
 import { DEEPGRAM_CONFIG } from "@/config/constants";
-import type { TranscriptSegment } from "@/types/messages";
+import type { SttConnectionState, TranscriptSegment } from "@/types/messages";
 
 interface DeepgramWord {
   word: string;
@@ -20,6 +20,18 @@ interface DeepgramWord {
   end: number;
   confidence: number;
   speaker?: number;
+}
+
+export interface DeepgramCloseInfo {
+  code?: number;
+  reason?: string;
+  wasClean?: boolean;
+}
+
+export interface DeepgramStatusInfo {
+  state: SttConnectionState;
+  retryAttempt?: number;
+  message?: string;
 }
 
 /**
@@ -35,11 +47,40 @@ function extractSpeakerInfo(words?: DeepgramWord[]): { speaker?: number; startTi
   };
 }
 
+function normalizeCloseInfo(event: unknown): DeepgramCloseInfo {
+  if (!event || typeof event !== "object") {
+    return {};
+  }
+  const code = (event as { code?: unknown }).code;
+  const reason = (event as { reason?: unknown }).reason;
+  const wasClean = (event as { wasClean?: unknown }).wasClean;
+  return {
+    code: typeof code === "number" ? code : undefined,
+    reason: typeof reason === "string" ? reason : undefined,
+    wasClean: typeof wasClean === "boolean" ? wasClean : undefined,
+  };
+}
+
+function closeInfoMessage(info: DeepgramCloseInfo): string {
+  const parts: string[] = [];
+  if (typeof info.code === "number") {
+    parts.push(`code=${info.code}`);
+  }
+  if (typeof info.reason === "string" && info.reason.length > 0) {
+    parts.push(`reason=${info.reason}`);
+  }
+  if (typeof info.wasClean === "boolean") {
+    parts.push(`wasClean=${info.wasClean}`);
+  }
+  return parts.length > 0 ? parts.join(", ") : "unknown";
+}
+
 export interface DeepgramServiceEvents {
   onTranscript: (segment: TranscriptSegment) => void;
   onUtteranceEnd: (timestamp: number) => void;
   onError: (error: Error) => void;
-  onClose: () => void;
+  onClose: (info: DeepgramCloseInfo) => void;
+  onStatusChange?: (status: DeepgramStatusInfo) => void;
 }
 
 export interface DeepgramService {
@@ -48,6 +89,13 @@ export interface DeepgramService {
   stop: () => void;
   isConnected: () => boolean;
 }
+
+const CONNECT_TIMEOUT_MS = 10000;
+const KEEP_ALIVE_INTERVAL_MS = 8000;
+const RECONNECT_INITIAL_BACKOFF_MS = 1000;
+const RECONNECT_MAX_BACKOFF_MS = 8000;
+const RECONNECT_JITTER_RATIO = 0.2;
+const RECONNECT_MAX_ATTEMPTS = 10;
 
 export function createDeepgramService(events: DeepgramServiceEvents): DeepgramService {
   const apiKey = process.env["DEEPGRAM_API_KEY"];
@@ -58,52 +106,148 @@ export function createDeepgramService(events: DeepgramServiceEvents): DeepgramSe
   let client: DeepgramClient | null = null;
   let connection: ListenLiveClient | null = null;
   let connected = false;
+  let started = false;
+  let manuallyStopped = false;
+  let reconnectAttempt = 0;
+  let connectPromise: Promise<void> | null = null;
+  let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   let keepAliveInterval: ReturnType<typeof setInterval> | null = null;
-  // Buffer for audio data received before connection is ready
   const pendingAudioBuffer: (ArrayBuffer | Buffer)[] = [];
 
-  async function start(): Promise<void> {
-    client = createClient(apiKey);
+  function emitStatus(status: DeepgramStatusInfo): void {
+    events.onStatusChange?.(status);
+  }
 
-    connection = client.listen.live(DEEPGRAM_CONFIG);
+  function clearKeepAlive(): void {
+    if (keepAliveInterval) {
+      clearInterval(keepAliveInterval);
+      keepAliveInterval = null;
+    }
+  }
+
+  function clearReconnectTimer(): void {
+    if (reconnectTimer) {
+      clearTimeout(reconnectTimer);
+      reconnectTimer = null;
+    }
+  }
+
+  function toSendableAudio(audio: ArrayBuffer | Buffer): ArrayBuffer {
+    if (audio instanceof ArrayBuffer) {
+      return audio;
+    }
+    const view = new Uint8Array(audio.buffer, audio.byteOffset, audio.byteLength);
+    const copied = new Uint8Array(view.byteLength);
+    copied.set(view);
+    return copied.buffer;
+  }
+
+  function flushPendingAudio(conn: ListenLiveClient): void {
+    if (pendingAudioBuffer.length === 0) return;
+    for (const bufferedAudio of pendingAudioBuffer) {
+      conn.send(toSendableAudio(bufferedAudio));
+    }
+    pendingAudioBuffer.length = 0;
+  }
+
+  function computeReconnectDelayMs(attempt: number): number {
+    const base = RECONNECT_INITIAL_BACKOFF_MS * Math.pow(2, Math.max(0, attempt - 1));
+    const capped = Math.min(RECONNECT_MAX_BACKOFF_MS, base);
+    const jitter = capped * RECONNECT_JITTER_RATIO;
+    const delta = jitter > 0 ? (Math.random() * 2 - 1) * jitter : 0;
+    return Math.max(0, Math.round(capped + delta));
+  }
+
+  function scheduleReconnect(reason?: string): void {
+    if (!started || manuallyStopped) return;
+    if (reconnectTimer) return;
+
+    if (reconnectAttempt >= RECONNECT_MAX_ATTEMPTS) {
+      const message =
+        reason && reason.length > 0
+          ? `Deepgram reconnect failed after ${RECONNECT_MAX_ATTEMPTS} attempts: ${reason}`
+          : `Deepgram reconnect failed after ${RECONNECT_MAX_ATTEMPTS} attempts`;
+      emitStatus({
+        state: "failed",
+        retryAttempt: reconnectAttempt,
+        message,
+      });
+      events.onError(new Error(message));
+      return;
+    }
+
+    reconnectAttempt += 1;
+    const delayMs = computeReconnectDelayMs(reconnectAttempt);
+    emitStatus({
+      state: "reconnecting",
+      retryAttempt: reconnectAttempt,
+      message: reason,
+    });
+
+    reconnectTimer = setTimeout(() => {
+      reconnectTimer = null;
+      void openConnection().catch((err) => {
+        if (!started || manuallyStopped) return;
+        const message = err instanceof Error ? err.message : String(err);
+        scheduleReconnect(message);
+      });
+    }, delayMs);
+  }
+
+  async function openConnection(): Promise<void> {
+    if (!client) {
+      client = createClient(apiKey);
+    }
+
+    const conn = client.listen.live(DEEPGRAM_CONFIG);
+    connection = conn;
 
     return new Promise((resolve, reject) => {
-      const conn = connection;
-      if (!conn) {
-        reject(new Error("Failed to create connection"));
-        return;
-      }
+      let settled = false;
+
+      const resolveOnce = () => {
+        if (settled) return;
+        settled = true;
+        resolve();
+      };
+      const rejectOnce = (error: Error) => {
+        if (settled) return;
+        settled = true;
+        reject(error);
+      };
+
+      const timeoutTimer = setTimeout(() => {
+        if (settled || manuallyStopped || connection !== conn) return;
+        const timeoutError = new Error("Deepgram connection timeout");
+        events.onError(timeoutError);
+        rejectOnce(timeoutError);
+        scheduleReconnect(timeoutError.message);
+        try {
+          conn.requestClose();
+        } catch {
+          // no-op
+        }
+      }, CONNECT_TIMEOUT_MS);
 
       conn.on(LiveTranscriptionEvents.Open, () => {
-        console.log("[Deepgram] Connection opened");
+        if (connection !== conn) return;
+        clearTimeout(timeoutTimer);
         connected = true;
-
-        // Flush any buffered audio data (including WebM header)
-        if (pendingAudioBuffer.length > 0) {
-          for (const bufferedAudio of pendingAudioBuffer) {
-            const data =
-              bufferedAudio instanceof ArrayBuffer
-                ? bufferedAudio
-                : bufferedAudio.buffer.slice(
-                    bufferedAudio.byteOffset,
-                    bufferedAudio.byteOffset + bufferedAudio.byteLength,
-                  );
-            conn.send(data);
-          }
-          pendingAudioBuffer.length = 0;
-        }
-
-        // Send keepalive every 8 seconds to prevent timeout during audio gaps
+        reconnectAttempt = 0;
+        clearKeepAlive();
         keepAliveInterval = setInterval(() => {
-          if (connection && connected) {
+          if (connection === conn && connected && !manuallyStopped) {
             connection.keepAlive();
           }
-        }, 8000);
+        }, KEEP_ALIVE_INTERVAL_MS);
 
-        resolve();
+        flushPendingAudio(conn);
+        emitStatus({ state: "connected" });
+        resolveOnce();
       });
 
       conn.on(LiveTranscriptionEvents.Transcript, (data) => {
+        if (connection !== conn) return;
         const transcript = data.channel?.alternatives?.[0];
         if (transcript?.transcript) {
           const { speaker, startTime } = extractSpeakerInfo(transcript.words as DeepgramWord[]);
@@ -118,51 +262,96 @@ export function createDeepgramService(events: DeepgramServiceEvents): DeepgramSe
       });
 
       conn.on(LiveTranscriptionEvents.UtteranceEnd, () => {
+        if (connection !== conn) return;
         events.onUtteranceEnd(Date.now());
       });
 
       conn.on(LiveTranscriptionEvents.Error, (error) => {
-        console.error("[Deepgram] Error:", error);
-        events.onError(error instanceof Error ? error : new Error(String(error)));
-      });
-
-      conn.on(LiveTranscriptionEvents.Close, () => {
-        connected = false;
-        events.onClose();
-      });
-
-      // Timeout for connection
-      setTimeout(() => {
+        if (connection !== conn) return;
+        const normalizedError = error instanceof Error ? error : new Error(String(error));
+        events.onError(normalizedError);
         if (!connected) {
-          reject(new Error("Deepgram connection timeout"));
+          clearTimeout(timeoutTimer);
+          rejectOnce(normalizedError);
         }
-      }, 10000);
+      });
+
+      conn.on(LiveTranscriptionEvents.Close, (event) => {
+        if (connection === conn) {
+          connection = null;
+        } else {
+          return;
+        }
+
+        clearTimeout(timeoutTimer);
+        clearKeepAlive();
+        const wasConnected = connected;
+        connected = false;
+
+        const closeInfo = normalizeCloseInfo(event);
+        events.onClose(closeInfo);
+
+        if (manuallyStopped || !started) {
+          if (!wasConnected) {
+            rejectOnce(
+              new Error(`Deepgram connection closed before open (${closeInfoMessage(closeInfo)})`),
+            );
+          }
+          return;
+        }
+
+        const reason = closeInfoMessage(closeInfo);
+        if (!wasConnected) {
+          rejectOnce(new Error(`Deepgram connection closed before open (${reason})`));
+        }
+        scheduleReconnect(reason);
+      });
     });
+  }
+
+  async function start(): Promise<void> {
+    manuallyStopped = false;
+    started = true;
+    clearReconnectTimer();
+
+    if (!connectPromise) {
+      connectPromise = openConnection().finally(() => {
+        connectPromise = null;
+      });
+    }
+
+    await connectPromise;
   }
 
   function sendAudio(audio: ArrayBuffer | Buffer): void {
     if (connection && connected) {
-      const data =
-        audio instanceof ArrayBuffer
-          ? audio
-          : audio.buffer.slice(audio.byteOffset, audio.byteOffset + audio.byteLength);
-      connection.send(data);
-    } else if (connection && !connected) {
-      // Connection is being established, buffer the audio (including WebM header)
+      connection.send(toSendableAudio(audio));
+      return;
+    }
+
+    if (started && !manuallyStopped) {
       pendingAudioBuffer.push(audio);
     }
   }
 
   function stop(): void {
-    if (keepAliveInterval) {
-      clearInterval(keepAliveInterval);
-      keepAliveInterval = null;
-    }
-    if (connection) {
-      connection.requestClose();
-      connection = null;
-    }
+    manuallyStopped = true;
+    started = false;
     connected = false;
+    reconnectAttempt = 0;
+    clearReconnectTimer();
+    clearKeepAlive();
+    pendingAudioBuffer.length = 0;
+
+    if (connection) {
+      const conn = connection;
+      connection = null;
+      try {
+        conn.requestClose();
+      } catch {
+        // no-op
+      }
+    }
     client = null;
   }
 

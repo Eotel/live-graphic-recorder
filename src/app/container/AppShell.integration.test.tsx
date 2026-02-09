@@ -120,7 +120,9 @@ const disconnectMock = mock(() => {
 const stopMeetingMock = mock(() => {});
 const resetSessionMock = mock(() => {});
 const requestMeetingListMock = mock(() => {});
+const requestMeetingHistoryDeltaMock = mock((_meetingId: string, _cursor?: unknown) => {});
 const startMeetingMock = mock((_title?: string, _meetingId?: string) => {});
+const setMeetingModeMock = mock((_mode: "record" | "view") => {});
 const startSessionMock = mock(() => {});
 const stopSessionMock = mock(() => {});
 const sendAudioMock = mock((_data: ArrayBuffer) => {});
@@ -185,7 +187,9 @@ function clearAllMocks(): void {
   stopMeetingMock.mockClear();
   resetSessionMock.mockClear();
   requestMeetingListMock.mockClear();
+  requestMeetingHistoryDeltaMock.mockClear();
   startMeetingMock.mockClear();
+  setMeetingModeMock.mockClear();
   startSessionMock.mockClear();
   stopSessionMock.mockClear();
   sendAudioMock.mockClear();
@@ -239,11 +243,13 @@ mock.module("@/hooks/useMeetingSession", () => ({
       isConnected: state.isConnected,
       sessionStatus: "idle" as const,
       generationPhase: "idle" as const,
+      sttStatus: null,
       error: null,
       meeting: {
         meetingId: state.meetingId,
         meetingTitle: state.meetingTitle,
         sessionId: state.sessionId,
+        mode: "record" as const,
         meetingList: state.meetingList,
       },
       transcriptSegments: [],
@@ -273,6 +279,8 @@ mock.module("@/hooks/useMeetingSession", () => ({
       startMeeting: startMeetingMock,
       stopMeeting: stopMeetingMock,
       requestMeetingList: requestMeetingListMock,
+      requestMeetingHistoryDelta: requestMeetingHistoryDeltaMock,
+      setMeetingMode: setMeetingModeMock,
       updateMeetingTitle: updateMeetingTitleMock,
       updateSpeakerAlias: updateSpeakerAliasMock,
       startSession: startSessionMock,
@@ -299,6 +307,7 @@ mock.module("@/hooks/useMediaStreamController", () => ({
     selectedVideoDeviceId: null,
     sourceType: "camera" as const,
     videoRef: { current: null },
+    videoElementRef: { current: null },
     requestPermission: async () => true,
     stopStream: () => {},
     setAudioDevice: async (_deviceId: string) => {},

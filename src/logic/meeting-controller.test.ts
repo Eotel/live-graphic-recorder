@@ -38,6 +38,7 @@ describe("createMeetingController", () => {
     expect(state.reconnectAttempt).toBe(0);
     expect(state.sessionStatus).toBe("idle");
     expect(state.generationPhase).toBe("idle");
+    expect(state.sttStatus).toBeNull();
     expect(state.error).toBeNull();
     expect(state.imageModel.preset).toBe("flash");
     expect(state.imageModel.model).toBe(state.imageModel.available.flash);
@@ -215,6 +216,36 @@ describe("createMeetingController", () => {
     );
 
     expect(controller.getState().generationPhase).toBe("analyzing");
+  });
+
+  test("handles stt:status message", () => {
+    const wsAdapter = createMockWsAdapter();
+    const onStateChange = mock(() => {});
+
+    const controller = createMeetingController(
+      { wsAdapter, reconnect: { enabled: false, connectTimeoutMs: 0 } },
+      { onStateChange },
+    );
+
+    controller.connect();
+    wsAdapter.lastInstance!.controls.simulateOpen();
+
+    wsAdapter.lastInstance!.controls.simulateMessage(
+      JSON.stringify({
+        type: "stt:status",
+        data: {
+          state: "reconnecting",
+          retryAttempt: 2,
+          message: "temporary upstream close",
+        },
+      }),
+    );
+
+    expect(controller.getState().sttStatus).toEqual({
+      state: "reconnecting",
+      retryAttempt: 2,
+      message: "temporary upstream close",
+    });
   });
 
   test("handles image:model:status message", () => {
@@ -803,6 +834,76 @@ describe("createMeetingController", () => {
     expect(createSpy.mock.calls.length).toBeGreaterThanOrEqual(2);
     expect(controller.getState().connectionState).toBe("reconnecting");
     expect(controller.getState().reconnectAttempt).toBe(1);
+
+    controller.dispose();
+  });
+
+  test("restores meeting and recording after reconnect", async () => {
+    const wsAdapter = createMockWsAdapter();
+    const onStateChange = mock(() => {});
+
+    const controller = createMeetingController(
+      {
+        wsAdapter,
+        reconnect: {
+          enabled: true,
+          connectTimeoutMs: 0,
+          initialBackoffMs: 1,
+          maxBackoffMs: 1,
+          jitterRatio: 0,
+        },
+      },
+      { onStateChange },
+    );
+
+    controller.connect();
+    const firstSocket = wsAdapter.lastInstance;
+    if (!firstSocket) {
+      throw new Error("first websocket not created");
+    }
+    firstSocket.controls.simulateOpen();
+
+    firstSocket.controls.simulateMessage(
+      JSON.stringify({
+        type: "meeting:status",
+        data: {
+          meetingId: "meeting-restore-1",
+          title: "Restore Target",
+          sessionId: "session-restore-1",
+          mode: "record",
+        },
+      }),
+    );
+    firstSocket.controls.simulateMessage(
+      JSON.stringify({
+        type: "session:status",
+        data: { status: "recording" },
+      }),
+    );
+
+    firstSocket.controls.simulateClose();
+    await new Promise((r) => setTimeout(r, 10));
+
+    const secondSocket = wsAdapter.lastInstance;
+    if (!secondSocket || secondSocket === firstSocket) {
+      throw new Error("reconnect websocket not created");
+    }
+
+    secondSocket.controls.simulateOpen();
+
+    const payloads = secondSocket.controls
+      .getSentMessages()
+      .filter((msg) => typeof msg === "string")
+      .map((msg) => JSON.parse(msg as string));
+
+    const meetingStart = payloads.find((m) => m.type === "meeting:start");
+    const sessionStart = payloads.find((m) => m.type === "session:start");
+
+    expect(meetingStart).toEqual({
+      type: "meeting:start",
+      data: { meetingId: "meeting-restore-1", mode: "record" },
+    });
+    expect(sessionStart).toEqual({ type: "session:start" });
 
     controller.dispose();
   });

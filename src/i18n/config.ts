@@ -102,6 +102,9 @@ const resources = {
         cameraNotAvailable: "Camera not available",
         screenNotShared: "Screen not shared",
         recIndicator: "REC",
+        sttReconnecting: "Speech-to-text reconnecting (attempt {{attempt}})...",
+        sttDegraded: "Speech-to-text temporarily unavailable. Recording continues.",
+        sttFailed: "Speech-to-text recovery failed. Try restarting recording.",
       },
       summary: {
         title: "Summary",
@@ -244,6 +247,9 @@ const resources = {
         cameraNotAvailable: "カメラを利用できません",
         screenNotShared: "画面共有されていません",
         recIndicator: "録画中",
+        sttReconnecting: "文字起こしを再接続中（{{attempt}}回目）...",
+        sttDegraded: "文字起こしが一時的に停止しています。録音は継続中です。",
+        sttFailed: "文字起こしの自動復旧に失敗しました。録音を再開してください。",
       },
       summary: {
         title: "要約",

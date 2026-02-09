@@ -26,7 +26,6 @@ interface AppShellRecordingViewProps {
 export function AppShellRecordingView({ viewModel }: AppShellRecordingViewProps) {
   const {
     appState,
-    session,
     media,
     localRecording,
     audioDownloadOptions,
@@ -55,6 +54,7 @@ export function AppShellRecordingView({ viewModel }: AppShellRecordingViewProps)
   const meetingIdForReport = appState.meeting.meetingId;
   const isReadOnlyMeeting = appState.meeting.mode === "view";
   const canDownloadAudio = audioDownloadOptions.length > 0;
+  const appActions = appState.actions;
 
   return (
     <PaneContext.Provider value={paneState}>
@@ -66,13 +66,17 @@ export function AppShellRecordingView({ viewModel }: AppShellRecordingViewProps)
               <MeetingHeader
                 title={appState.meeting.meetingTitle}
                 onBackRequested={onBackRequested}
-                onUpdateTitle={isReadOnlyMeeting ? undefined : session.updateMeetingTitle}
+                onUpdateTitle={
+                  isReadOnlyMeeting
+                    ? undefined
+                    : (title) => void appActions.updateMeetingTitle(title)
+                }
               />
-              <TopicIndicator topics={session.topics} />
+              <TopicIndicator topics={appState.session.topics} />
             </div>
             <div className="flex items-center gap-4">
-              <FlowMeter value={session.flow} />
-              <HeatMeter value={session.heat} />
+              <FlowMeter value={appState.session.flow} />
+              <HeatMeter value={appState.session.heat} />
             </div>
           </div>
         }
@@ -92,16 +96,16 @@ export function AppShellRecordingView({ viewModel }: AppShellRecordingViewProps)
                 onPopout={() => onPopout("summary")}
               />
               <SummaryPanel
-                summaryPages={session.summaryPages}
-                transcriptSegments={session.transcriptSegments}
-                interimText={session.interimText}
-                interimSpeaker={session.interimSpeaker}
-                interimStartTime={session.interimStartTime}
-                isAnalyzing={session.isAnalyzing}
+                summaryPages={appState.session.summaryPages}
+                transcriptSegments={appState.session.transcriptSegments}
+                interimText={appState.session.interimText}
+                interimSpeaker={appState.session.interimSpeaker}
+                interimStartTime={appState.session.interimStartTime}
+                isAnalyzing={appState.session.isAnalyzing}
                 className="flex-1 min-h-0"
               />
               <TagList
-                tags={session.tags}
+                tags={appState.session.tags}
                 className="flex-shrink-0 mt-3 pt-3 border-t border-border"
               />
             </div>
@@ -113,30 +117,26 @@ export function AppShellRecordingView({ viewModel }: AppShellRecordingViewProps)
               <div className="flex flex-wrap items-center gap-3">
                 <MediaSourceToggle
                   value={appState.media.sourceType}
-                  onChange={
-                    appState.recording.isRecording
-                      ? media.switchVideoSource
-                      : media.switchSourceType
-                  }
+                  onChange={appActions.changeMediaSource}
                   disabled={appState.media.isSwitching || isReadOnlyMeeting}
                   isLoading={appState.media.isSwitching}
                 />
                 <ImageModelToggle
-                  value={session.imageModel.preset}
-                  model={session.imageModel.model}
-                  onChange={session.setImageModelPreset}
-                  proAvailable={Boolean(session.imageModel.available.pro)}
-                  disabled={session.isGenerating}
+                  value={appState.session.imageModel.preset}
+                  model={appState.session.imageModel.model}
+                  onChange={(preset) => void appActions.setImageModelPreset(preset)}
+                  proAvailable={Boolean(appState.session.imageModel.available.pro)}
+                  disabled={appState.session.isGenerating}
                 />
               </div>
               {appState.media.hasPermission && (
                 <DeviceSelector
-                  audioDevices={media.audioDevices}
-                  videoDevices={media.videoDevices}
-                  selectedAudioDeviceId={media.selectedAudioDeviceId}
-                  selectedVideoDeviceId={media.selectedVideoDeviceId}
-                  onAudioDeviceChange={media.setAudioDevice}
-                  onVideoDeviceChange={media.setVideoDevice}
+                  audioDevices={appState.media.audioDevices}
+                  videoDevices={appState.media.videoDevices}
+                  selectedAudioDeviceId={appState.media.selectedAudioDeviceId}
+                  selectedVideoDeviceId={appState.media.selectedVideoDeviceId}
+                  onAudioDeviceChange={(deviceId) => void appActions.setAudioDevice(deviceId)}
+                  onVideoDeviceChange={(deviceId) => void appActions.setVideoDevice(deviceId)}
                   disabled={appState.media.isSwitching || isReadOnlyMeeting}
                   stream={media.stream}
                   isRecording={appState.recording.isRecording}
@@ -191,9 +191,9 @@ export function AppShellRecordingView({ viewModel }: AppShellRecordingViewProps)
                       onPopout={() => onPopout("graphics")}
                     />
                     <ImageCarousel
-                      images={session.images}
-                      isGenerating={session.isGenerating}
-                      generationPhase={session.generationPhase}
+                      images={appState.session.images}
+                      isGenerating={appState.session.isGenerating}
+                      generationPhase={appState.session.generationPhase}
                       className="flex-1 min-h-0"
                     />
                   </div>
@@ -243,9 +243,9 @@ export function AppShellRecordingView({ viewModel }: AppShellRecordingViewProps)
                 onPopout={() => onPopout("graphics")}
               />
               <ImageCarousel
-                images={session.images}
-                isGenerating={session.isGenerating}
-                generationPhase={session.generationPhase}
+                images={appState.session.images}
+                isGenerating={appState.session.isGenerating}
+                generationPhase={appState.session.generationPhase}
                 className="flex-1 min-h-0"
               />
             </div>
@@ -273,6 +273,7 @@ export function AppShellRecordingView({ viewModel }: AppShellRecordingViewProps)
                 hasPermission={appState.media.hasPermission}
                 isLoading={appState.media.isLoading}
                 error={error}
+                sttStatus={appState.session.sttStatus}
                 sourceType={appState.media.sourceType}
                 elapsedTime={appState.recording.elapsedTime}
                 hasMeeting={appState.derived.hasMeeting}

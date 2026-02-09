@@ -12,6 +12,7 @@ import type {
   ImageModelPreset,
   MeetingMode,
   MeetingHistoryCursor,
+  SttConnectionState,
 } from "../types/messages";
 import type { WebSocketAdapter, WebSocketInstance } from "../adapters/types";
 import { WebSocketReadyState as ReadyState } from "../adapters/types";
@@ -63,6 +64,7 @@ export function createMeetingController(
     reconnectAttempt: 0,
     sessionStatus: "idle",
     generationPhase: "idle",
+    sttStatus: null,
     error: null,
     imageModel: {
       preset: "flash",
@@ -87,6 +89,9 @@ export function createMeetingController(
   let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   let connectTimeoutTimer: ReturnType<typeof setTimeout> | null = null;
   let reconnectAttempt = 0;
+  let shouldRestoreMeetingOnReconnect = false;
+  let shouldRestoreSessionOnReconnect = false;
+  let reconnectMeetingSnapshot: { meetingId: string; mode: MeetingMode } | null = null;
 
   function emit() {
     if (!isDisposed) {
@@ -190,6 +195,45 @@ export function createMeetingController(
     return { transcripts, analyses, images, captures, metaSummaries, speakerAliases };
   }
 
+  function clearReconnectRestoreState(): void {
+    shouldRestoreMeetingOnReconnect = false;
+    shouldRestoreSessionOnReconnect = false;
+    reconnectMeetingSnapshot = null;
+  }
+
+  function scheduleMeetingRestoreAfterReconnect(): void {
+    if (!state.meeting.meetingId || !state.meeting.mode) {
+      clearReconnectRestoreState();
+      return;
+    }
+    shouldRestoreMeetingOnReconnect = true;
+    shouldRestoreSessionOnReconnect = state.sessionStatus === "recording";
+    reconnectMeetingSnapshot = {
+      meetingId: state.meeting.meetingId,
+      mode: state.meeting.mode,
+    };
+  }
+
+  function restoreMeetingContextAfterReconnect(): void {
+    if (!shouldRestoreMeetingOnReconnect || !reconnectMeetingSnapshot) {
+      return;
+    }
+
+    sendMessage({
+      type: "meeting:start",
+      data: {
+        meetingId: reconnectMeetingSnapshot.meetingId,
+        mode: reconnectMeetingSnapshot.mode,
+      },
+    });
+
+    if (shouldRestoreSessionOnReconnect) {
+      sendMessage({ type: "session:start" });
+    }
+
+    clearReconnectRestoreState();
+  }
+
   function handleMessage(data: string | ArrayBuffer): void {
     if (typeof data !== "string") return;
 
@@ -216,6 +260,9 @@ export function createMeetingController(
           if (message.data.error) {
             updates.error = message.data.error;
           }
+          if (message.data.status !== "recording") {
+            updates.sttStatus = null;
+          }
           updateState(updates);
           if (message.data.error) {
             callbacksRef.onError?.(message.data.error);
@@ -234,6 +281,16 @@ export function createMeetingController(
         case "error":
           updateState({ error: message.data.message });
           callbacksRef.onError?.(message.data.message);
+          break;
+
+        case "stt:status":
+          updateState({
+            sttStatus: {
+              state: message.data.state as SttConnectionState,
+              retryAttempt: message.data.retryAttempt,
+              message: message.data.message,
+            },
+          });
           break;
 
         case "image:model:status":
@@ -355,11 +412,17 @@ export function createMeetingController(
           reconnectAttempt: 0,
           error: null,
         });
+        restoreMeetingContextAfterReconnect();
       }
     });
 
     wsInstance.onClose(() => {
       if (!isDisposed) {
+        if (!isManualDisconnect) {
+          scheduleMeetingRestoreAfterReconnect();
+        } else {
+          clearReconnectRestoreState();
+        }
         clearTimers();
         wsInstance = null;
         updateState({
@@ -368,6 +431,7 @@ export function createMeetingController(
           reconnectAttempt,
           sessionStatus: "idle",
           generationPhase: "idle",
+          sttStatus: null,
         });
         scheduleReconnect();
       }
@@ -396,6 +460,7 @@ export function createMeetingController(
 
   function disconnect(): void {
     isManualDisconnect = true;
+    clearReconnectRestoreState();
     clearTimers();
     if (wsInstance) {
       wsInstance.close();
@@ -408,6 +473,7 @@ export function createMeetingController(
       reconnectAttempt: 0,
       sessionStatus: "idle",
       generationPhase: "idle",
+      sttStatus: null,
     });
   }
 
@@ -432,6 +498,7 @@ export function createMeetingController(
 
   function stopMeeting(): void {
     sendMessage({ type: "meeting:stop" });
+    clearReconnectRestoreState();
     updateMeetingState({
       meetingId: null,
       meetingTitle: null,
@@ -439,6 +506,7 @@ export function createMeetingController(
       mode: null,
       meetingList: [],
     });
+    updateState({ sttStatus: null });
   }
 
   function requestMeetingList(): void {
@@ -479,6 +547,7 @@ export function createMeetingController(
 
   function stopSession(): void {
     sendMessage({ type: "session:stop" });
+    updateState({ sttStatus: null });
   }
 
   function sendCameraFrame(data: CameraFrame): void {

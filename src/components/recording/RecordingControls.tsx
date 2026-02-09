@@ -8,7 +8,7 @@
 import { Circle, Square, AlertCircle, Loader2 } from "lucide-react";
 import type { ReactNode } from "react";
 import { Button } from "@/components/ui/button";
-import type { SessionStatus, MediaSourceType } from "@/types/messages";
+import type { SessionStatus, MediaSourceType, SttConnectionState } from "@/types/messages";
 import { useTranslation } from "react-i18next";
 
 interface RecordingControlsProps {
@@ -18,6 +18,11 @@ interface RecordingControlsProps {
   isLoading: boolean;
   error: string | null;
   sourceType?: MediaSourceType;
+  sttStatus?: {
+    state: SttConnectionState;
+    retryAttempt?: number;
+    message?: string;
+  } | null;
   /** Formatted elapsed time to display when recording (e.g., "02:45") */
   elapsedTime?: string;
   /** Whether a meeting is active (required to start recording) */
@@ -38,6 +43,7 @@ export function RecordingControls({
   isLoading,
   error,
   sourceType = "camera",
+  sttStatus = null,
   elapsedTime,
   hasMeeting = true,
   readOnly = false,
@@ -51,6 +57,15 @@ export function RecordingControls({
     sourceType === "camera" ? t("recording.grantCameraMic") : t("recording.shareScreenMic");
 
   const isPermissionDenied = error?.toLowerCase().includes("permission denied");
+  const showSttWarning = isRecording && sttStatus && sttStatus.state !== "connected";
+  const sttMessage = showSttWarning
+    ? (sttStatus.message ??
+      (sttStatus.state === "reconnecting"
+        ? t("recording.sttReconnecting", { attempt: sttStatus.retryAttempt ?? 1 })
+        : sttStatus.state === "degraded"
+          ? t("recording.sttDegraded")
+          : t("recording.sttFailed")))
+    : null;
 
   let primaryControl: ReactNode;
 
@@ -116,6 +131,13 @@ export function RecordingControls({
               {t("recording.permissionDeniedHelp")}
             </span>
           )}
+        </div>
+      )}
+
+      {sttMessage && (
+        <div className="flex items-center gap-2 text-amber-600 text-sm max-w-md text-center">
+          <AlertCircle className="size-4 flex-shrink-0" />
+          <span>{sttMessage}</span>
         </div>
       )}
 

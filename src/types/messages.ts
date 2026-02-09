@@ -205,6 +205,17 @@ export interface UtteranceEndMessage {
   };
 }
 
+export type SttConnectionState = "connected" | "reconnecting" | "degraded" | "failed";
+
+export interface SttStatusMessage {
+  type: "stt:status";
+  data: {
+    state: SttConnectionState;
+    retryAttempt?: number;
+    message?: string;
+  };
+}
+
 // ============================================================================
 // Meeting Messages (Server → Client)
 // ============================================================================
@@ -310,6 +321,7 @@ export type ServerMessage =
   | ImageModelStatusMessage
   | GenerationStatusMessage
   | UtteranceEndMessage
+  | SttStatusMessage
   | MeetingStatusMessage
   | MeetingListMessage
   | SpeakerAliasMessage

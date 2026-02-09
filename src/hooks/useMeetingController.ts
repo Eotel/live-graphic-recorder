@@ -156,6 +156,7 @@ export function useMeetingController(
     reconnectAttempt: 0,
     sessionStatus: "idle",
     generationPhase: "idle",
+    sttStatus: null,
     error: null,
     imageModel: {
       preset: "flash",
@@ -243,6 +244,7 @@ export function useMeetingController(
         reconnectAttempt: 0,
         sessionStatus: "idle",
         generationPhase: "idle",
+        sttStatus: null,
         error: null,
         imageModel: {
           preset: "flash",

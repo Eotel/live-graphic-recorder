@@ -6,7 +6,7 @@ import { send } from "@/server/presentation/ws/sender";
 import type { WSContext } from "@/server/types/context";
 import type { RecordingLockManager } from "@/server/application/ws/recording-lock-manager";
 import { createAnalysisService } from "@/services/server/analysis";
-import { createDeepgramService } from "@/services/server/deepgram";
+import { createDeepgramService, type DeepgramCloseInfo } from "@/services/server/deepgram";
 import {
   createGeminiService,
   resolveGeminiImageModel,
@@ -58,6 +58,16 @@ function readCameraFrame(data: unknown): CameraFrame | null {
 
 export function createSessionWsUsecase(input: CreateSessionWsUsecaseInput): SessionWsUsecase {
   const { persistence, recordingLocks } = input;
+
+  function flushPendingAudioToDeepgram(ctx: WSContext): void {
+    if (!ctx.deepgram?.isConnected()) return;
+    if (ctx.pendingAudio.length === 0) return;
+    for (const audio of ctx.pendingAudio) {
+      ctx.deepgram.sendAudio(audio);
+    }
+    ctx.pendingAudio.length = 0;
+    ctx.pendingAudioBytes = 0;
+  }
 
   function sendReadOnlyError(ws: ServerWebSocket<WSContext>): void {
     send(ws, {
@@ -250,26 +260,47 @@ export function createSessionWsUsecase(input: CreateSessionWsUsecaseInput): Sess
           }
         },
         onError(error: Error) {
-          console.error("[Deepgram] Error:", error);
+          const message = sanitizeErrorMessage(error);
+          console.error(
+            `[Deepgram] Error: session=${ctx.sessionId}, meeting=${ctx.meetingId ?? "n/a"}, message=${message}`,
+          );
           send(ws, {
-            type: "error",
-            data: { message: sanitizeErrorMessage(error) },
+            type: "stt:status",
+            data: { state: "degraded", message },
           });
         },
-        onClose() {
-          console.log("[Deepgram] Connection closed");
+        onClose(info: DeepgramCloseInfo) {
+          const closeBits = [
+            typeof info.code === "number" ? `code=${info.code}` : null,
+            typeof info.reason === "string" && info.reason.length > 0
+              ? `reason=${info.reason}`
+              : null,
+            typeof info.wasClean === "boolean" ? `wasClean=${info.wasClean}` : null,
+          ]
+            .filter(Boolean)
+            .join(", ");
+          console.log(
+            `[Deepgram] Connection closed: session=${ctx.sessionId}, meeting=${ctx.meetingId ?? "n/a"}, mode=${ctx.meetingMode ?? "n/a"}, status=${ctx.session.status}${closeBits ? `, ${closeBits}` : ""}`,
+          );
+        },
+        onStatusChange(status) {
+          if (status.state === "connected") {
+            flushPendingAudioToDeepgram(ctx);
+          }
+          send(ws, {
+            type: "stt:status",
+            data: {
+              state: status.state,
+              retryAttempt: status.retryAttempt,
+              message: status.message,
+            },
+          });
         },
       });
 
       await ctx.deepgram.start();
 
-      if (ctx.pendingAudio.length > 0) {
-        for (const audio of ctx.pendingAudio) {
-          ctx.deepgram.sendAudio(audio);
-        }
-        ctx.pendingAudio.length = 0;
-        ctx.pendingAudioBytes = 0;
-      }
+      flushPendingAudioToDeepgram(ctx);
 
       ctx.session = startSession(ctx.session);
       if (ctx.meetingId) {

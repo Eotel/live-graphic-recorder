@@ -85,4 +85,16 @@ describe("RecordingControls", () => {
     fireEvent.click(button);
     expect(onResumeMeeting).toHaveBeenCalledTimes(1);
   });
+
+  test("shows STT reconnect warning while recording", () => {
+    render(
+      <RecordingControls
+        {...baseProps}
+        isRecording={true}
+        sttStatus={{ state: "reconnecting", retryAttempt: 2 }}
+      />,
+    );
+
+    expect(screen.getByText("Speech-to-text reconnecting (attempt 2)...")).toBeTruthy();
+  });
 });

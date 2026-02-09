@@ -12,6 +12,7 @@ import type {
   ImageModelPreset,
   MeetingMode,
   MeetingHistoryCursor,
+  SttConnectionState,
 } from "../types/messages";
 import type { MediaDevicesAdapter, MediaRecorderAdapter, StreamUtils } from "../adapters/types";
 
@@ -173,6 +174,11 @@ export interface MeetingControllerState {
   reconnectAttempt: number;
   sessionStatus: "idle" | "recording" | "processing" | "error";
   generationPhase: "idle" | "analyzing" | "generating" | "retrying";
+  sttStatus: {
+    state: SttConnectionState;
+    retryAttempt?: number;
+    message?: string;
+  } | null;
   error: string | null;
   imageModel: {
     preset: ImageModelPreset;
