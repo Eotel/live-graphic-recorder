@@ -30,7 +30,7 @@ interface DeferredPromise {
 }
 
 const listeners = new Set<() => void>();
-const AUTH_USER = { id: "user-1", email: "user@example.com" };
+const AUTH_USER = { id: "user-1", email: "user@example.com", role: "user" as const };
 const STABLE_POPOUT_PANES = new Set<PaneId>();
 const STABLE_PANE_STATE = {
   expandedPane: null as PaneId | null,

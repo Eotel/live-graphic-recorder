@@ -6,7 +6,13 @@
  */
 
 import type { Database } from "bun:sqlite";
-import type { TranscriptSegment, AnalysisResult, CameraFrame } from "@/types/messages";
+import type {
+  TranscriptSegment,
+  AnalysisResult,
+  CameraFrame,
+  SessionStatus,
+} from "@/types/messages";
+import type { UserRole } from "@/types/auth";
 import { DB_CONFIG } from "@/config/constants";
 import { getDatabase, closeDatabase } from "./db/database";
 import { runMigrations } from "./db/migrations";
@@ -67,6 +73,8 @@ import {
   createUser as createUserRepo,
   findUserByEmail as findUserByEmailRepo,
   findUserById as findUserByIdRepo,
+  findUsers as findUsersRepo,
+  updateUserRole as updateUserRoleRepo,
   type PersistedUser,
 } from "./db/repository/user";
 import {
@@ -105,6 +113,69 @@ export interface MetaSummaryInput {
   summary: string[];
   themes: string[];
   representativeImageId: string | null;
+}
+
+export interface AdminSessionListQuery {
+  q?: string;
+  status?: SessionStatus;
+  fromTimestamp?: number;
+  toTimestamp?: number;
+  limit: number;
+  offset: number;
+}
+
+export interface AdminSessionListItem {
+  sessionId: string;
+  meetingId: string;
+  meetingTitle: string | null;
+  ownerUserId: string | null;
+  ownerEmail: string | null;
+  status: SessionStatus;
+  startedAt: number | null;
+  endedAt: number | null;
+  meetingCreatedAt: number;
+}
+
+export interface AdminSessionListResult {
+  items: AdminSessionListItem[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
+export interface AdminSessionDetail {
+  sessionId: string;
+  meetingId: string;
+  meetingTitle: string | null;
+  ownerUserId: string | null;
+  ownerEmail: string | null;
+  status: SessionStatus;
+  startedAt: number | null;
+  endedAt: number | null;
+  meetingCreatedAt: number;
+  counts: {
+    transcriptSegments: number;
+    analyses: number;
+    images: number;
+    captures: number;
+    audioRecordings: number;
+  };
+}
+
+interface AdminSessionRow {
+  session_id: string;
+  meeting_id: string;
+  meeting_title: string | null;
+  owner_user_id: string | null;
+  owner_email: string | null;
+  status: SessionStatus;
+  started_at: number | null;
+  ended_at: number | null;
+  meeting_created_at: number;
+}
+
+function escapeSqlLike(value: string): string {
+  return value.replace(/[%_\\]/g, "\\$&");
 }
 
 export type {
@@ -220,8 +291,8 @@ export class PersistenceService {
   // User/Auth Operations
   // ============================================================================
 
-  createUser(email: string, passwordHash: string): PersistedUser {
-    return createUserRepo(this.db, { email, passwordHash });
+  createUser(email: string, passwordHash: string, role: UserRole = "user"): PersistedUser {
+    return createUserRepo(this.db, { email, passwordHash, role });
   }
 
   getUserByEmail(email: string): PersistedUser | null {
@@ -230,6 +301,14 @@ export class PersistenceService {
 
   getUserById(userId: string): PersistedUser | null {
     return findUserByIdRepo(this.db, userId);
+  }
+
+  listUsers(limit?: number): PersistedUser[] {
+    return findUsersRepo(this.db, limit);
+  }
+
+  setUserRole(userId: string, role: UserRole): PersistedUser | null {
+    return updateUserRoleRepo(this.db, userId, role);
   }
 
   createRefreshToken(userId: string, tokenHash: string, expiresAt: number): PersistedRefreshToken {
@@ -284,6 +363,157 @@ export class PersistenceService {
 
   getSessionsByMeeting(meetingId: string): PersistedSession[] {
     return findSessionsByMeetingId(this.db, meetingId);
+  }
+
+  listAdminSessions(query: AdminSessionListQuery): AdminSessionListResult {
+    const whereClauses = ["1=1"];
+    const whereParams: Array<string | number> = [];
+
+    const trimmedQuery = query.q?.trim();
+    if (trimmedQuery) {
+      const like = `%${escapeSqlLike(trimmedQuery)}%`;
+      whereClauses.push(
+        "(s.id LIKE ? ESCAPE '\\' OR s.meeting_id LIKE ? ESCAPE '\\' OR COALESCE(m.title, '') LIKE ? ESCAPE '\\' OR COALESCE(u.email, '') LIKE ? ESCAPE '\\')",
+      );
+      whereParams.push(like, like, like, like);
+    }
+
+    if (query.status) {
+      whereClauses.push("s.status = ?");
+      whereParams.push(query.status);
+    }
+
+    if (typeof query.fromTimestamp === "number") {
+      whereClauses.push("COALESCE(s.started_at, m.created_at) >= ?");
+      whereParams.push(query.fromTimestamp);
+    }
+
+    if (typeof query.toTimestamp === "number") {
+      whereClauses.push("COALESCE(s.started_at, m.created_at) <= ?");
+      whereParams.push(query.toTimestamp);
+    }
+
+    const whereSql = `WHERE ${whereClauses.join(" AND ")}`;
+
+    const rows = this.db
+      .query(
+        `
+          SELECT
+            s.id AS session_id,
+            s.meeting_id AS meeting_id,
+            m.title AS meeting_title,
+            m.owner_user_id AS owner_user_id,
+            u.email AS owner_email,
+            s.status AS status,
+            s.started_at AS started_at,
+            s.ended_at AS ended_at,
+            m.created_at AS meeting_created_at
+          FROM sessions s
+          JOIN meetings m ON m.id = s.meeting_id
+          LEFT JOIN users u ON u.id = m.owner_user_id
+          ${whereSql}
+          ORDER BY COALESCE(s.started_at, m.created_at) DESC, s.id DESC
+          LIMIT ? OFFSET ?
+        `,
+      )
+      .all(...whereParams, query.limit, query.offset) as AdminSessionRow[];
+
+    const countRow = this.db
+      .query(
+        `
+          SELECT COUNT(*) AS total
+          FROM sessions s
+          JOIN meetings m ON m.id = s.meeting_id
+          LEFT JOIN users u ON u.id = m.owner_user_id
+          ${whereSql}
+        `,
+      )
+      .get(...whereParams) as { total: number } | null;
+
+    return {
+      items: rows.map((row) => ({
+        sessionId: row.session_id,
+        meetingId: row.meeting_id,
+        meetingTitle: row.meeting_title,
+        ownerUserId: row.owner_user_id,
+        ownerEmail: row.owner_email,
+        status: row.status,
+        startedAt: row.started_at,
+        endedAt: row.ended_at,
+        meetingCreatedAt: row.meeting_created_at,
+      })),
+      total: countRow?.total ?? 0,
+      limit: query.limit,
+      offset: query.offset,
+    };
+  }
+
+  getAdminSessionDetail(sessionId: string): AdminSessionDetail | null {
+    const row = this.db
+      .query(
+        `
+          SELECT
+            s.id AS session_id,
+            s.meeting_id AS meeting_id,
+            m.title AS meeting_title,
+            m.owner_user_id AS owner_user_id,
+            u.email AS owner_email,
+            s.status AS status,
+            s.started_at AS started_at,
+            s.ended_at AS ended_at,
+            m.created_at AS meeting_created_at
+          FROM sessions s
+          JOIN meetings m ON m.id = s.meeting_id
+          LEFT JOIN users u ON u.id = m.owner_user_id
+          WHERE s.id = ?
+          LIMIT 1
+        `,
+      )
+      .get(sessionId) as AdminSessionRow | null;
+
+    if (!row) {
+      return null;
+    }
+
+    const transcriptSegments = this.countBySession("transcript_segments", sessionId);
+    const analyses = this.countBySession("analyses", sessionId);
+    const images = this.countBySession("generated_images", sessionId);
+    const captures = this.countBySession("camera_captures", sessionId);
+    const audioRecordings = this.countBySession("audio_recordings", sessionId);
+
+    return {
+      sessionId: row.session_id,
+      meetingId: row.meeting_id,
+      meetingTitle: row.meeting_title,
+      ownerUserId: row.owner_user_id,
+      ownerEmail: row.owner_email,
+      status: row.status,
+      startedAt: row.started_at,
+      endedAt: row.ended_at,
+      meetingCreatedAt: row.meeting_created_at,
+      counts: {
+        transcriptSegments,
+        analyses,
+        images,
+        captures,
+        audioRecordings,
+      },
+    };
+  }
+
+  private countBySession(
+    tableName:
+      | "transcript_segments"
+      | "analyses"
+      | "generated_images"
+      | "camera_captures"
+      | "audio_recordings",
+    sessionId: string,
+  ): number {
+    const row = this.db
+      .query(`SELECT COUNT(*) AS total FROM ${tableName} WHERE session_id = ?`)
+      .get(sessionId) as { total: number } | null;
+    return row?.total ?? 0;
   }
 
   startSession(sessionId: string): void {

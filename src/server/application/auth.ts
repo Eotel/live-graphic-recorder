@@ -10,6 +10,7 @@ import {
 } from "@/services/server/auth";
 import type { PersistenceService } from "@/services/server/persistence";
 import type { AuthRequestBody, AuthUser } from "@/server/types/context";
+import type { UserRole } from "@/types/auth";
 
 interface CreateAuthServiceInput {
   persistence: PersistenceService;
@@ -34,7 +35,11 @@ export interface AuthService {
   unauthorizedResponse: (message?: string) => Response;
   clearAuthCookies: (headers: Headers, req: Request) => void;
   issueSessionTokens: (req: Request, userId: string) => Headers;
-  buildAuthUserResponse: (userId: string, email: string) => { user: { id: string; email: string } };
+  buildAuthUserResponse: (
+    userId: string,
+    email: string,
+    role: UserRole,
+  ) => { user: { id: string; email: string; role: UserRole } };
   validatePasswordComplexity: typeof validatePasswordComplexity;
   parseCookies: typeof parseCookies;
   hashToken: typeof hashToken;
@@ -174,8 +179,9 @@ export function createAuthService(input: CreateAuthServiceInput): AuthService {
   function buildAuthUserResponse(
     userId: string,
     email: string,
-  ): { user: { id: string; email: string } } {
-    return { user: { id: userId, email } };
+    role: UserRole,
+  ): { user: { id: string; email: string; role: UserRole } } {
+    return { user: { id: userId, email, role } };
   }
 
   return {

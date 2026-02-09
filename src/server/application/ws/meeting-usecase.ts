@@ -154,6 +154,17 @@ function readMeetingHistoryRequestData(data: unknown): {
   };
 }
 
+function resolveMeetingReadOwnerUserId(
+  persistence: PersistenceService,
+  userId: string,
+): string | undefined {
+  const user = persistence.getUserById(userId);
+  if (user?.role === "admin") {
+    return undefined;
+  }
+  return userId;
+}
+
 function sendSpeakerAliases(
   ws: ServerWebSocket<WSContext>,
   persistence: PersistenceService,
@@ -173,16 +184,16 @@ function sendMeetingHistory(
   ws: ServerWebSocket<WSContext>,
   persistence: PersistenceService,
   meetingId: string,
-  userId: string,
+  ownerUserId?: string,
 ): void {
   try {
     const message = buildMeetingHistoryMessage(meetingId, {
-      transcripts: persistence.loadMeetingTranscript(meetingId, userId),
-      analyses: persistence.loadMeetingAnalyses(meetingId, userId),
-      images: persistence.loadMeetingImages(meetingId, userId),
-      captures: persistence.loadMeetingCaptures(meetingId, userId),
-      metaSummaries: persistence.loadMetaSummaries(meetingId, userId),
-      speakerAliases: persistence.loadSpeakerAliases(meetingId, userId),
+      transcripts: persistence.loadMeetingTranscript(meetingId, ownerUserId),
+      analyses: persistence.loadMeetingAnalyses(meetingId, ownerUserId),
+      images: persistence.loadMeetingImages(meetingId, ownerUserId),
+      captures: persistence.loadMeetingCaptures(meetingId, ownerUserId),
+      metaSummaries: persistence.loadMetaSummaries(meetingId, ownerUserId),
+      speakerAliases: persistence.loadSpeakerAliases(meetingId, ownerUserId),
     });
 
     send(ws, message);
@@ -202,28 +213,28 @@ function sendMeetingHistoryDelta(
   ws: ServerWebSocket<WSContext>,
   persistence: PersistenceService,
   meetingId: string,
-  userId: string,
+  ownerUserId: string | undefined,
   cursor: MeetingHistoryCursor,
 ): void {
   try {
     const transcripts = persistence
-      .loadMeetingTranscript(meetingId, userId)
+      .loadMeetingTranscript(meetingId, ownerUserId)
       .filter(
         (item) => typeof cursor.transcriptTs !== "number" || item.timestamp > cursor.transcriptTs,
       );
     const analyses = persistence
-      .loadMeetingAnalyses(meetingId, userId)
+      .loadMeetingAnalyses(meetingId, ownerUserId)
       .filter(
         (item) => typeof cursor.analysisTs !== "number" || item.timestamp > cursor.analysisTs,
       );
     const images = persistence
-      .loadMeetingImages(meetingId, userId)
+      .loadMeetingImages(meetingId, ownerUserId)
       .filter((item) => typeof cursor.imageTs !== "number" || item.timestamp > cursor.imageTs);
     const captures = persistence
-      .loadMeetingCaptures(meetingId, userId)
+      .loadMeetingCaptures(meetingId, ownerUserId)
       .filter((item) => typeof cursor.captureTs !== "number" || item.timestamp > cursor.captureTs);
     const metaSummaries = persistence
-      .loadMetaSummaries(meetingId, userId)
+      .loadMetaSummaries(meetingId, ownerUserId)
       .filter(
         (item) =>
           typeof cursor.metaSummaryEndTs !== "number" || item.endTime > cursor.metaSummaryEndTs,
@@ -235,7 +246,7 @@ function sendMeetingHistoryDelta(
       images,
       captures,
       metaSummaries,
-      speakerAliases: persistence.loadSpeakerAliases(meetingId, userId),
+      speakerAliases: persistence.loadSpeakerAliases(meetingId, ownerUserId),
     });
 
     send(ws, message);
@@ -292,6 +303,7 @@ export function createMeetingWsUsecase(input: CreateMeetingWsUsecaseInput): Meet
       let meetingId: string;
       let title: string | undefined;
       let isExistingMeeting = false;
+      let readOwnerUserId: string | undefined = ctx.userId;
 
       if (parsedData.meetingId) {
         if (!isValidUUID(parsedData.meetingId)) {
@@ -302,7 +314,8 @@ export function createMeetingWsUsecase(input: CreateMeetingWsUsecaseInput): Meet
           return;
         }
 
-        const existing = persistence.getMeeting(parsedData.meetingId, ctx.userId);
+        readOwnerUserId = resolveMeetingReadOwnerUserId(persistence, ctx.userId);
+        const existing = persistence.getMeeting(parsedData.meetingId, readOwnerUserId);
         if (!existing) {
           send(ws, {
             type: "error",
@@ -344,7 +357,7 @@ export function createMeetingWsUsecase(input: CreateMeetingWsUsecaseInput): Meet
       });
 
       if (isExistingMeeting) {
-        sendMeetingHistory(ws, persistence, meetingId, ctx.userId);
+        sendMeetingHistory(ws, persistence, meetingId, readOwnerUserId);
       }
 
       console.log(`[WS] Meeting started: ${meetingId}, mode: ${mode}, session: ${ctx.sessionId}`);
@@ -368,7 +381,8 @@ export function createMeetingWsUsecase(input: CreateMeetingWsUsecaseInput): Meet
   }
 
   function list(ws: ServerWebSocket<WSContext>): void {
-    const meetings = persistence.listMeetings(50, ws.data.userId);
+    const readOwnerUserId = resolveMeetingReadOwnerUserId(persistence, ws.data.userId);
+    const meetings = persistence.listMeetings(50, readOwnerUserId);
     send(ws, {
       type: "meeting:list",
       data: {
@@ -543,7 +557,8 @@ export function createMeetingWsUsecase(input: CreateMeetingWsUsecaseInput): Meet
       recordingLocks.release(ctx.meetingId, ctx.sessionId);
     }
 
-    const meeting = persistence.getMeeting(ctx.meetingId, ctx.userId);
+    const readOwnerUserId = resolveMeetingReadOwnerUserId(persistence, ctx.userId);
+    const meeting = persistence.getMeeting(ctx.meetingId, readOwnerUserId);
     sendMeetingStatus(ws, {
       meetingId: ctx.meetingId,
       title: meeting?.title ?? undefined,
@@ -588,7 +603,8 @@ export function createMeetingWsUsecase(input: CreateMeetingWsUsecaseInput): Meet
       return;
     }
 
-    if (!persistence.getMeeting(parsedData.meetingId, ctx.userId)) {
+    const readOwnerUserId = resolveMeetingReadOwnerUserId(persistence, ctx.userId);
+    if (!persistence.getMeeting(parsedData.meetingId, readOwnerUserId)) {
       send(ws, {
         type: "error",
         data: { message: "Meeting not found", code: "MEETING_NOT_FOUND" },
@@ -596,7 +612,13 @@ export function createMeetingWsUsecase(input: CreateMeetingWsUsecaseInput): Meet
       return;
     }
 
-    sendMeetingHistoryDelta(ws, persistence, parsedData.meetingId, ctx.userId, parsedData.cursor);
+    sendMeetingHistoryDelta(
+      ws,
+      persistence,
+      parsedData.meetingId,
+      readOwnerUserId,
+      parsedData.cursor,
+    );
   }
 
   function releaseRecordingLock(ctx: WSContext): void {

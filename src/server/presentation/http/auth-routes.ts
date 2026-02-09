@@ -32,7 +32,7 @@ export function createAuthRoutes(input: CreateAuthRoutesInput): Record<string, u
 
           const headers = input.auth.issueSessionTokens(req, user.id);
           return new Response(
-            JSON.stringify(input.auth.buildAuthUserResponse(user.id, user.email)),
+            JSON.stringify(input.auth.buildAuthUserResponse(user.id, user.email, user.role)),
             {
               status: 201,
               headers,
@@ -64,10 +64,13 @@ export function createAuthRoutes(input: CreateAuthRoutesInput): Record<string, u
 
         input.persistence.claimLegacyMeetingsForUser(user.id);
         const headers = input.auth.issueSessionTokens(req, user.id);
-        return new Response(JSON.stringify(input.auth.buildAuthUserResponse(user.id, user.email)), {
-          status: 200,
-          headers,
-        });
+        return new Response(
+          JSON.stringify(input.auth.buildAuthUserResponse(user.id, user.email, user.role)),
+          {
+            status: 200,
+            headers,
+          },
+        );
       },
     },
 
@@ -106,10 +109,13 @@ export function createAuthRoutes(input: CreateAuthRoutesInput): Record<string, u
         }
 
         const headers = input.auth.issueSessionTokens(req, user.id);
-        return new Response(JSON.stringify(input.auth.buildAuthUserResponse(user.id, user.email)), {
-          status: 200,
-          headers,
-        });
+        return new Response(
+          JSON.stringify(input.auth.buildAuthUserResponse(user.id, user.email, user.role)),
+          {
+            status: 200,
+            headers,
+          },
+        );
       },
     },
 
@@ -144,7 +150,7 @@ export function createAuthRoutes(input: CreateAuthRoutesInput): Record<string, u
           return input.auth.unauthorizedResponse();
         }
 
-        return Response.json(input.auth.buildAuthUserResponse(user.id, user.email));
+        return Response.json(input.auth.buildAuthUserResponse(user.id, user.email, user.role));
       },
     },
   };

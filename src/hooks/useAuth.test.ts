@@ -59,7 +59,7 @@ describe("useAuth", () => {
           method: init?.method ?? "GET",
         });
         return jsonResponse({
-          user: { id: "user-1", email: "user1@example.com" },
+          user: { id: "user-1", email: "user1@example.com", role: "user" },
         });
       },
     );
@@ -69,7 +69,7 @@ describe("useAuth", () => {
     await flushAuthEffect();
 
     expect(result.current.status).toBe("authenticated");
-    expect(result.current.user).toEqual({ id: "user-1", email: "user1@example.com" });
+    expect(result.current.user).toEqual({ id: "user-1", email: "user1@example.com", role: "user" });
     expect(calls).toEqual([{ path: "/api/auth/me", method: "GET" }]);
   });
 
@@ -77,8 +77,8 @@ describe("useAuth", () => {
     const calls: FetchCall[] = [];
     const queue: Array<Response> = [
       new Response("Unauthorized", { status: 401 }),
-      jsonResponse({ user: { id: "user-1", email: "user1@example.com" } }),
-      jsonResponse({ user: { id: "user-1", email: "user1@example.com" } }),
+      jsonResponse({ user: { id: "user-1", email: "user1@example.com", role: "user" } }),
+      jsonResponse({ user: { id: "user-1", email: "user1@example.com", role: "user" } }),
     ];
 
     const fetchMock = mock(
@@ -106,7 +106,7 @@ describe("useAuth", () => {
       { path: "/api/auth/me", method: "GET" },
     ]);
     expect(result.current.status).toBe("authenticated");
-    expect(result.current.user).toEqual({ id: "user-1", email: "user1@example.com" });
+    expect(result.current.user).toEqual({ id: "user-1", email: "user1@example.com", role: "user" });
   });
 
   test("becomes unauthenticated when refresh fails", async () => {
@@ -147,7 +147,7 @@ describe("useAuth", () => {
     const calls: FetchCall[] = [];
     const queue: Array<Response> = [
       new Response("Unauthorized", { status: 401 }),
-      jsonResponse({ user: { id: "user-1", email: "user1@example.com" } }),
+      jsonResponse({ user: { id: "user-1", email: "user1@example.com", role: "user" } }),
       new Response("Unauthorized", { status: 401 }),
     ];
 

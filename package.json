@@ -8,6 +8,8 @@
     "dev:tunnel": "tailscale funnel 3000",
     "tunnel": "tailscale funnel 3000",
     "start": "NODE_ENV=production bun src/index.ts",
+    "user:role": "bun scripts/manage-user-role.ts",
+    "createsuperuser": "bun scripts/manage-user-role.ts --role admin",
     "build": "bun run build.ts",
     "build:ts": "tsgo --build",
     "lint": "oxlint .",

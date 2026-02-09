@@ -7,6 +7,7 @@ interface CreateRouteDepsInput {
   authResult: ReturnType<AuthService["requireAuthenticatedUser"]>;
   getMeeting: PersistenceService["getMeeting"];
   listAudioRecordingsByMeeting: PersistenceService["listAudioRecordingsByMeeting"];
+  getUserById?: PersistenceService["getUserById"];
 }
 
 function createAudioRoute(deps: CreateRouteDepsInput): {
@@ -17,6 +18,15 @@ function createAudioRoute(deps: CreateRouteDepsInput): {
   } as unknown as AuthService;
 
   const persistence = {
+    getUserById:
+      deps.getUserById ??
+      (() => ({
+        id: "user-1",
+        email: "user1@example.com",
+        passwordHash: "hash",
+        createdAt: 1,
+        role: "user",
+      })),
     getMeeting: deps.getMeeting,
     listAudioRecordingsByMeeting: deps.listAudioRecordingsByMeeting,
   } as unknown as PersistenceService;
@@ -138,5 +148,43 @@ describe("createMeetingRoutes GET /api/meetings/:meetingId/audio", () => {
       createdAt: 1_000,
       url: `/api/meetings/${meetingId}/audio/10`,
     });
+  });
+
+  test("allows admin to read audio list for other user's meeting", async () => {
+    let capturedOwnerUserIdForMeeting: string | undefined = "uninitialized";
+    let capturedOwnerUserIdForAudioList: string | undefined = "uninitialized";
+    const audioRoute = createAudioRoute({
+      authResult: { userId: "admin-1" },
+      getUserById: () => ({
+        id: "admin-1",
+        email: "admin@example.com",
+        passwordHash: "hash",
+        createdAt: 1,
+        role: "admin",
+      }),
+      getMeeting: (_meetingId, ownerUserId) => {
+        capturedOwnerUserIdForMeeting = ownerUserId;
+        return {
+          id: meetingId,
+          title: "Other Owner Meeting",
+          startedAt: 1,
+          endedAt: 2,
+          createdAt: 1,
+          ownerUserId: "owner-1",
+        };
+      },
+      listAudioRecordingsByMeeting: (_meetingId, ownerUserId) => {
+        capturedOwnerUserIdForAudioList = ownerUserId;
+        return [];
+      },
+    });
+
+    const res = await audioRoute.GET(
+      new Request(`http://localhost/api/meetings/${meetingId}/audio`),
+    );
+
+    expect(res.status).toBe(200);
+    expect(capturedOwnerUserIdForMeeting).toBeUndefined();
+    expect(capturedOwnerUserIdForAudioList).toBeUndefined();
   });
 });

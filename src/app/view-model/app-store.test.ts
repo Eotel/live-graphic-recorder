@@ -88,7 +88,7 @@ describe("createAppStore", () => {
 
     actions.setAuthState({
       status: "authenticated",
-      user: { id: "u1", email: "user@example.com" },
+      user: { id: "u1", email: "user@example.com", role: "user" },
     });
     actions.setMeetingState({ meetingId: "meeting-1", view: "recording" });
     actions.setMediaState({

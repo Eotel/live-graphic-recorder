@@ -7,7 +7,7 @@
 
 import type { Database } from "bun:sqlite";
 
-export const CURRENT_SCHEMA_VERSION = 5;
+export const CURRENT_SCHEMA_VERSION = 6;
 
 /**
  * Get the current schema version from the database.
@@ -49,6 +49,10 @@ export function runMigrations(db: Database): void {
 
   if (currentVersion < 5) {
     migrateToV5(db);
+  }
+
+  if (currentVersion < 6) {
+    migrateToV6(db);
   }
 }
 
@@ -274,4 +278,20 @@ function migrateToV5(db: Database): void {
   );
 
   db.run("INSERT INTO schema_version (version) VALUES (5)");
+}
+
+/**
+ * Migration to schema version 6.
+ * Adds role column to users table.
+ */
+function migrateToV6(db: Database): void {
+  if (!hasColumn(db, "users", "role")) {
+    db.run(`
+      ALTER TABLE users
+      ADD COLUMN role TEXT NOT NULL DEFAULT 'user'
+      CHECK (role IN ('user', 'staff', 'admin'))
+    `);
+  }
+
+  db.run("INSERT INTO schema_version (version) VALUES (6)");
 }

@@ -185,6 +185,16 @@ describe("PersistenceService", () => {
 
       expect(service.getUserById(user.id)?.email).toBe("alice@example.com");
       expect(service.getUserByEmail("alice@example.com")?.id).toBe(user.id);
+      expect(service.getUserByEmail("alice@example.com")?.role).toBe("user");
+    });
+
+    test("updates user role", () => {
+      const user = service.createUser("staff@example.com", "hash-value");
+      const updated = service.setUserRole(user.id, "staff");
+
+      expect(updated).not.toBeNull();
+      expect(updated?.role).toBe("staff");
+      expect(service.getUserById(user.id)?.role).toBe("staff");
     });
 
     test("creates, finds, and revokes refresh token", () => {
@@ -198,6 +208,47 @@ describe("PersistenceService", () => {
 
       const revoked = service.getActiveRefreshTokenByHash("token-hash");
       expect(revoked).toBeNull();
+    });
+  });
+
+  describe("Admin session operations", () => {
+    test("lists sessions across owners and loads detail summary", async () => {
+      const owner = service.createUser("owner@example.com", "hash", "staff");
+      const meeting = service.createMeeting("Admin Meeting", owner.id);
+      const session = service.createSession(meeting.id, "admin-session-1");
+
+      service.persistTranscript(session.id, {
+        text: "hello",
+        timestamp: 100,
+        isFinal: true,
+      });
+      await service.persistAnalysisWithTimestamp(
+        session.id,
+        {
+          summary: ["s"],
+          topics: ["t"],
+          tags: [],
+          flow: 50,
+          heat: 50,
+          imagePrompt: "prompt",
+        },
+        200,
+      );
+
+      const list = service.listAdminSessions({
+        limit: 50,
+        offset: 0,
+      });
+
+      expect(list.total).toBeGreaterThan(0);
+      const item = list.items.find((entry) => entry.sessionId === session.id);
+      expect(item).toBeDefined();
+      expect(item?.ownerEmail).toBe("owner@example.com");
+
+      const detail = service.getAdminSessionDetail(session.id);
+      expect(detail).not.toBeNull();
+      expect(detail?.counts.transcriptSegments).toBe(1);
+      expect(detail?.counts.analyses).toBe(1);
     });
   });
 

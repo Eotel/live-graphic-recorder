@@ -12,6 +12,8 @@ interface AppShellSelectViewProps {
   onNewMeeting: (title?: string) => void;
   onSelectMeeting: (meetingId: string) => void;
   onRefreshMeetings: () => void;
+  canOpenAdmin?: boolean;
+  onOpenAdmin?: () => void;
   onLogout: () => Promise<void>;
 }
 
@@ -23,6 +25,8 @@ export function AppShellSelectView({
   onNewMeeting,
   onSelectMeeting,
   onRefreshMeetings,
+  canOpenAdmin = false,
+  onOpenAdmin,
   onLogout,
 }: AppShellSelectViewProps) {
   const { t } = useTranslation();
@@ -31,6 +35,11 @@ export function AppShellSelectView({
     <div className="relative">
       <div className="absolute right-4 top-4 z-20 flex items-center gap-2">
         <LanguageToggle />
+        {canOpenAdmin && onOpenAdmin ? (
+          <Button variant="outline" size="sm" type="button" onClick={onOpenAdmin}>
+            {t("admin.title")}
+          </Button>
+        ) : null}
         <Button variant="outline" size="sm" type="button" onClick={onLogout}>
           {t("common.logout")}
         </Button>

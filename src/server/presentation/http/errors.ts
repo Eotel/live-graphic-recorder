@@ -6,6 +6,10 @@ export function notFound(message = "Not Found"): Response {
   return new Response(message, { status: 404 });
 }
 
+export function forbidden(message = "Forbidden"): Response {
+  return new Response(message, { status: 403 });
+}
+
 export function unsupportedMediaType(message: string): Response {
   return new Response(message, { status: 415 });
 }

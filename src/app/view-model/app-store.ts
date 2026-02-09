@@ -11,6 +11,7 @@ import type {
   SttConnectionState,
   TranscriptSegment,
 } from "@/types/messages";
+import type { UserRole } from "@/types/auth";
 import { createStore, type StoreApi } from "zustand/vanilla";
 
 export type AppView = "select" | "recording";
@@ -39,7 +40,7 @@ export interface AppStoreDependencies {
 export interface AppStoreState {
   auth: {
     status: "loading" | "authenticated" | "unauthenticated";
-    user: { id: string; email: string } | null;
+    user: { id: string; email: string; role: UserRole } | null;
     error: string | null;
     isSubmitting: boolean;
     isLogoutInProgress: boolean;

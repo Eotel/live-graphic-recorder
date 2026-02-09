@@ -2,6 +2,7 @@ import { type Server } from "bun";
 import { loadServerRuntimeConfig } from "@/server/bootstrap/config";
 import { createServerContainer } from "@/server/bootstrap/container";
 import { generateSessionId } from "@/server/domain/common/id";
+import { createAdminRoutes } from "@/server/presentation/http/admin-routes";
 import { createAuthRoutes } from "@/server/presentation/http/auth-routes";
 import { createMeetingRoutes } from "@/server/presentation/http/meeting-routes";
 import { createWsContext } from "@/server/presentation/ws/context";
@@ -36,6 +37,10 @@ export function createServer(): Server<WSContext> {
         persistence: container.persistence,
         auth: container.auth,
         mediaBasePath: config.mediaBasePath,
+      }),
+      ...createAdminRoutes({
+        persistence: container.persistence,
+        auth: container.auth,
       }),
       "/ws/recording": (req: Request, server: Server<WSContext>) => {
         const originValidationResult = validateWebSocketOrigin(req, config.wsAllowedOrigins);

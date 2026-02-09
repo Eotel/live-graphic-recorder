@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useState } from "react";
+import { isUserRole, type UserRole } from "@/types/auth";
 
 export interface AuthUser {
   id: string;
   email: string;
+  role: UserRole;
 }
 
 export interface UseAuthReturn {
@@ -18,6 +20,26 @@ export interface UseAuthReturn {
 
 interface AuthApiResponse {
   user: AuthUser;
+}
+
+function parseAuthUser(value: unknown): AuthUser | null {
+  if (!value || typeof value !== "object") {
+    return null;
+  }
+
+  const user = (value as { user?: unknown }).user;
+  if (!user || typeof user !== "object") {
+    return null;
+  }
+
+  const id = (user as { id?: unknown }).id;
+  const email = (user as { email?: unknown }).email;
+  const role = (user as { role?: unknown }).role;
+  if (typeof id !== "string" || typeof email !== "string" || !isUserRole(role)) {
+    return null;
+  }
+
+  return { id, email, role };
 }
 
 async function parseErrorMessage(response: Response): Promise<string> {
@@ -54,7 +76,7 @@ export function useAuth(): UseAuthReturn {
         }
 
         const data = (await response.json()) as AuthApiResponse;
-        return data.user;
+        return parseAuthUser(data);
       } catch {
         return null;
       }
@@ -113,7 +135,14 @@ export function useAuth(): UseAuthReturn {
       }
 
       const data = (await response.json()) as AuthApiResponse;
-      setUser(data.user);
+      const parsedUser = parseAuthUser(data);
+      if (!parsedUser) {
+        setStatus("unauthenticated");
+        setUser(null);
+        setError("Login failed");
+        return false;
+      }
+      setUser(parsedUser);
       setStatus("authenticated");
       return true;
     } catch {
@@ -140,7 +169,14 @@ export function useAuth(): UseAuthReturn {
       }
 
       const data = (await response.json()) as AuthApiResponse;
-      setUser(data.user);
+      const parsedUser = parseAuthUser(data);
+      if (!parsedUser) {
+        setStatus("unauthenticated");
+        setUser(null);
+        setError("Signup failed");
+        return false;
+      }
+      setUser(parsedUser);
       setStatus("authenticated");
       return true;
     } catch {
@@ -163,7 +199,13 @@ export function useAuth(): UseAuthReturn {
       }
 
       const data = (await response.json()) as AuthApiResponse;
-      setUser(data.user);
+      const parsedUser = parseAuthUser(data);
+      if (!parsedUser) {
+        setStatus("unauthenticated");
+        setUser(null);
+        return false;
+      }
+      setUser(parsedUser);
       setStatus("authenticated");
       setError(null);
       return true;

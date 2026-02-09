@@ -4,6 +4,7 @@ import { AppShellSelectView } from "./AppShellSelectView";
 import { AppShellRecordingView } from "./AppShellRecordingView";
 import { LanguageToggle } from "@/components/navigation/LanguageToggle";
 import { useTranslation } from "react-i18next";
+import { isStaffOrAdminRole } from "@/types/auth";
 
 interface AppShellViewProps {
   viewModel: AppShellViewModel;
@@ -11,7 +12,15 @@ interface AppShellViewProps {
 
 export function AppShellView({ viewModel }: AppShellViewProps) {
   const { t } = useTranslation();
-  const { auth, appState, onNewMeeting, onSelectMeeting, onRefreshMeetings, onLogout } = viewModel;
+  const {
+    auth,
+    appState,
+    onNewMeeting,
+    onSelectMeeting,
+    onRefreshMeetings,
+    onOpenAdmin,
+    onLogout,
+  } = viewModel;
 
   if (auth.status === "loading") {
     return (
@@ -52,6 +61,8 @@ export function AppShellView({ viewModel }: AppShellViewProps) {
         onNewMeeting={onNewMeeting}
         onSelectMeeting={onSelectMeeting}
         onRefreshMeetings={onRefreshMeetings}
+        canOpenAdmin={auth.userRole ? isStaffOrAdminRole(auth.userRole) : false}
+        onOpenAdmin={onOpenAdmin}
         onLogout={onLogout}
       />
     );

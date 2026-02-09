@@ -34,6 +34,18 @@ WebSocket Origin 制御（CSWSH 対策）:
   - 例: `https://app.example.com,https://admin.example.com`
   - 未設定でも同一 origin（`Origin` とリクエスト先 origin が一致）は許可されます
 
+## 管理ユーザー権限
+
+初期ユーザーの自動昇格はありません。管理権限は管理コマンドで付与します。
+
+```bash
+# admin 付与（Django createsuperuser 相当）
+bun run createsuperuser -- --email admin@example.com
+
+# staff 付与
+bun run user:role -- --email staff@example.com --role staff
+```
+
 ## 本番 (production)
 
 HMR なしで起動（公開用途はこちら推奨）:

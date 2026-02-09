@@ -7,7 +7,11 @@ import {
   payloadTooLarge,
   unsupportedMediaType,
 } from "@/server/presentation/http/errors";
-import { requireAuthUser, requireOwnedMeeting } from "@/server/presentation/http/guards";
+import {
+  requireAuthUser,
+  requireOwnedMeeting,
+  resolveMeetingReadOwnerUserId,
+} from "@/server/presentation/http/guards";
 import { serveMediaFile } from "@/server/presentation/http/media-file";
 import {
   requireIntParam,
@@ -85,6 +89,7 @@ export function createMeetingRoutes(input: CreateMeetingRoutesInput): Record<str
       if (auth instanceof Response) {
         return auth;
       }
+      const readOwnerUserId = resolveMeetingReadOwnerUserId(input.persistence, auth.userId);
 
       const url = new URL(req.url);
       const params = extractMeetingAndNumericId(url.pathname, IMAGE_PATH_PATTERN, "image ID");
@@ -95,7 +100,7 @@ export function createMeetingRoutes(input: CreateMeetingRoutesInput): Record<str
       const image = input.persistence.getImageByIdAndMeetingId(
         params.numericId,
         params.meetingId,
-        auth.userId,
+        readOwnerUserId,
       );
       if (!image) {
         return notFound();
@@ -113,6 +118,7 @@ export function createMeetingRoutes(input: CreateMeetingRoutesInput): Record<str
       if (auth instanceof Response) {
         return auth;
       }
+      const readOwnerUserId = resolveMeetingReadOwnerUserId(input.persistence, auth.userId);
 
       const url = new URL(req.url);
       const params = extractMeetingAndNumericId(url.pathname, CAPTURE_PATH_PATTERN, "capture ID");
@@ -123,7 +129,7 @@ export function createMeetingRoutes(input: CreateMeetingRoutesInput): Record<str
       const capture = input.persistence.getCaptureByIdAndMeetingId(
         params.numericId,
         params.meetingId,
-        auth.userId,
+        readOwnerUserId,
       );
       if (!capture) {
         return notFound();
@@ -142,6 +148,7 @@ export function createMeetingRoutes(input: CreateMeetingRoutesInput): Record<str
         if (auth instanceof Response) {
           return auth;
         }
+        const readOwnerUserId = resolveMeetingReadOwnerUserId(input.persistence, auth.userId);
 
         const url = new URL(req.url);
         const meetingId = extractMeetingId(url.pathname, AUDIO_UPLOAD_PATH_PATTERN);
@@ -149,14 +156,14 @@ export function createMeetingRoutes(input: CreateMeetingRoutesInput): Record<str
           return meetingId;
         }
 
-        const ownedMeeting = requireOwnedMeeting(input.persistence, meetingId, auth.userId);
-        if (ownedMeeting instanceof Response) {
-          return ownedMeeting;
+        const visibleMeeting = requireOwnedMeeting(input.persistence, meetingId, readOwnerUserId);
+        if (visibleMeeting instanceof Response) {
+          return visibleMeeting;
         }
 
         const recordings = input.persistence.listAudioRecordingsByMeeting(
-          ownedMeeting.id,
-          auth.userId,
+          visibleMeeting.id,
+          readOwnerUserId,
         );
 
         return Response.json({
@@ -165,7 +172,7 @@ export function createMeetingRoutes(input: CreateMeetingRoutesInput): Record<str
             sessionId: recording.sessionId,
             fileSizeBytes: recording.fileSizeBytes,
             createdAt: recording.createdAt,
-            url: `/api/meetings/${ownedMeeting.id}/audio/${recording.id}`,
+            url: `/api/meetings/${visibleMeeting.id}/audio/${recording.id}`,
           })),
         });
       },
@@ -253,6 +260,7 @@ export function createMeetingRoutes(input: CreateMeetingRoutesInput): Record<str
       if (auth instanceof Response) {
         return auth;
       }
+      const readOwnerUserId = resolveMeetingReadOwnerUserId(input.persistence, auth.userId);
 
       const url = new URL(req.url);
       const params = extractMeetingAndNumericId(
@@ -267,7 +275,7 @@ export function createMeetingRoutes(input: CreateMeetingRoutesInput): Record<str
       const recording = input.persistence.getAudioRecordingByIdAndMeetingId(
         params.numericId,
         params.meetingId,
-        auth.userId,
+        readOwnerUserId,
       );
       if (!recording) {
         return notFound();
@@ -285,6 +293,7 @@ export function createMeetingRoutes(input: CreateMeetingRoutesInput): Record<str
       if (auth instanceof Response) {
         return auth;
       }
+      const readOwnerUserId = resolveMeetingReadOwnerUserId(input.persistence, auth.userId);
 
       const url = new URL(req.url);
       const meetingId = extractMeetingId(url.pathname, REPORT_PATH_PATTERN);
@@ -292,9 +301,9 @@ export function createMeetingRoutes(input: CreateMeetingRoutesInput): Record<str
         return meetingId;
       }
 
-      const ownedMeeting = requireOwnedMeeting(input.persistence, meetingId, auth.userId);
-      if (ownedMeeting instanceof Response) {
-        return ownedMeeting;
+      const visibleMeeting = requireOwnedMeeting(input.persistence, meetingId, readOwnerUserId);
+      if (visibleMeeting instanceof Response) {
+        return visibleMeeting;
       }
 
       try {
@@ -305,7 +314,7 @@ export function createMeetingRoutes(input: CreateMeetingRoutesInput): Record<str
 
         const { stream, filename, mediaBundle } = await buildMeetingReportZipStream(
           input.persistence,
-          ownedMeeting.id,
+          visibleMeeting.id,
           {
             includeMedia,
             includeCaptures,
@@ -324,7 +333,7 @@ export function createMeetingRoutes(input: CreateMeetingRoutesInput): Record<str
       } catch (error) {
         if (error instanceof ReportSizeLimitError) {
           console.warn(
-            `[API] Report too large for meeting ${ownedMeeting.id}: ${error.totalBytes} > ${error.maxBytes}`,
+            `[API] Report too large for meeting ${visibleMeeting.id}: ${error.totalBytes} > ${error.maxBytes}`,
           );
           return payloadTooLarge("Report too large to bundle media");
         }

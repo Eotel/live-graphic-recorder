@@ -386,11 +386,19 @@ export function useAppShellController(): AppShellViewModel {
     [appState.meeting.meetingId],
   );
 
+  const onOpenAdmin = useCallback(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+    window.location.href = "/admin";
+  }, []);
+
   return {
     auth: {
       status: auth.status,
       isSubmitting: auth.isSubmitting,
       error: auth.error,
+      userRole: auth.user?.role ?? null,
       login: auth.login,
       signup: auth.signup,
     },
@@ -415,6 +423,7 @@ export function useAppShellController(): AppShellViewModel {
     onNewMeeting,
     onSelectMeeting,
     onRefreshMeetings,
+    onOpenAdmin,
     onResumeMeeting,
     onRequestPermission,
     onStartRecording,

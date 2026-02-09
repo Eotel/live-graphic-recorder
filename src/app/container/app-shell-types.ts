@@ -8,6 +8,7 @@ import type { UseAuthReturn } from "@/hooks/useAuth";
 import type { UseMeetingSessionReturn } from "@/hooks/useMeetingSession";
 import type { AppStoreSnapshot } from "@/app/view-model/app-store";
 import type { PaneId } from "@/logic/pane-state-controller";
+import type { UserRole } from "@/types/auth";
 
 export interface AudioDownloadOption {
   id: number;
@@ -21,6 +22,7 @@ export interface AppShellAuthViewModel {
   status: UseAuthReturn["status"];
   isSubmitting: boolean;
   error: string | null;
+  userRole: UserRole | null;
   login: UseAuthReturn["login"];
   signup: UseAuthReturn["signup"];
 }
@@ -48,6 +50,7 @@ export interface AppShellViewModel {
   onNewMeeting: (title?: string) => void;
   onSelectMeeting: (meetingId: string) => void;
   onRefreshMeetings: () => void;
+  onOpenAdmin: () => void;
   onResumeMeeting: () => void;
   onRequestPermission: () => Promise<void>;
   onStartRecording: () => void;

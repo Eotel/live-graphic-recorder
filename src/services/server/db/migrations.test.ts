@@ -215,6 +215,8 @@ describe("migrations", () => {
       expect(columnMap.get("password_hash")!.notnull).toBe(1);
       expect(columnMap.get("created_at")!.type).toBe("INTEGER");
       expect(columnMap.get("created_at")!.notnull).toBe(1);
+      expect(columnMap.get("role")!.type).toBe("TEXT");
+      expect(columnMap.get("role")!.notnull).toBe(1);
     });
 
     test("creates auth_refresh_tokens table with user foreign key", () => {
