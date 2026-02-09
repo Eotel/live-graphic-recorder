@@ -204,6 +204,7 @@ export function useAppShellController(): AppShellViewModel {
   const { onNewMeeting, onSelectMeeting, onRefreshMeetings, clearMeetingListRequestTimeout } =
     useMeetingListFlow({
       authStatus: auth.status,
+      meetingView: appState.meeting.view,
       session,
       appStore,
       appActions,

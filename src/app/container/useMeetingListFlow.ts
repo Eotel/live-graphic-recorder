@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef } from "react";
 import type { MutableRefObject } from "react";
 
 import { createMeetingUsecase, selectMeetingUsecase } from "@/app/usecases";
-import type { AppStore, AppStoreActions } from "@/app/view-model/app-store";
+import type { AppStore, AppStoreActions, AppView } from "@/app/view-model/app-store";
 import type { UseAuthReturn } from "@/hooks/useAuth";
 import type { UseLocalRecordingReturn } from "@/hooks/useLocalRecording";
 import type { UseMeetingSessionReturn } from "@/hooks/useMeetingSession";
@@ -11,6 +11,7 @@ import { useTranslation } from "react-i18next";
 const MEETING_LIST_REQUEST_TIMEOUT_MS = 10000;
 interface UseMeetingListFlowParams {
   authStatus: UseAuthReturn["status"];
+  meetingView: AppView;
   session: UseMeetingSessionReturn;
   appStore: AppStore;
   appActions: AppStoreActions;
@@ -19,6 +20,7 @@ interface UseMeetingListFlowParams {
 
 export function useMeetingListFlow({
   authStatus,
+  meetingView,
   session,
   appStore,
   appActions,
@@ -87,7 +89,7 @@ export function useMeetingListFlow({
       return;
     }
 
-    if (appStore.getState().meeting.view !== "select") return;
+    if (meetingView !== "select") return;
     startMeetingListLoad();
     session.requestMeetingList();
   }, [
@@ -96,6 +98,7 @@ export function useMeetingListFlow({
     authStatus,
     finishMeetingListLoad,
     localRecordingRef,
+    meetingView,
     session.isConnected,
     session.requestMeetingList,
     session.startMeeting,
